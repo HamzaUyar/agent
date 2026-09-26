@@ -17,6 +17,7 @@ class DetectionRules:
 @dataclass(frozen=True)
 class MatchingRules:
     threshold_m: float
+    score_tiebreak: float
 
 
 @dataclass(frozen=True)

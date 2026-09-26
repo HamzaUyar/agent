@@ -29,7 +29,7 @@ KOL A (görüntü)            KOL B (tracks)                 KOL C (raporlar, ö
 detect() → piksel          track_risk(track_id, at_time)  LLM parse → report_claims
   → geo: lat/lon, bölge      hız, yön, rota, duraklama,
                              üsse mesafe trendi
-        └──────► matching: capture_time'da en yakın track (eşik ~15 m) ◄──┘
+        └──────► matching: capture_time'da birebir atama (eşik 5 m)   ◄──┘
                     → risk: hareket riski × tip katsayısı + rapor değerlendirmesi
                     → agent (LLM): gerekçeli brief
 ```
@@ -37,7 +37,7 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
   - `lon = TL_lon + (cx/W)·(TR_lon − TL_lon)`
   - `lat = TL_lat − (cy/H)·(TL_lat − BL_lat)`
   - Kare kuzeye hizalı kabul ediliyor: üst kenar kuzey, sol kenar batı.
-- **Eşleme:** `time == capture_time` olan track noktaları içinde en yakını seçilir. `capture_time` 5 dakikanın katı değilse track konumu interpolasyonla hesaplanır.
+- **Eşleme:** adaylar `time == capture_time` olan ve görüntünün alanında kalan track noktaları. Görüntü başına birebir, toplam mesafeyi en aza indiren atama (Hungarian); eşik 5 m, skor eşiği 0,20, maliyet = mesafe + 0,01 × (1 − skor). Gerçek veride 206 noktanın 191'i eşleşir (ortanca 0,13 m). `capture_time` 5 dakikanın katı değilse track konumu ileri kestirilir.
 - **Eşleşmeyen durumlar da sinyaldir:**
   - tespit var, track yok → kayıt dışı araç
   - track var, tespit yok → tipi bilinmiyor
@@ -51,11 +51,11 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
 
 ## İlkeler
 - **Hesaplar kodla, akıl yürütme LLM ile.** Koordinat, mesafe, hız ve eşleme deterministik Python koduyla yapılır; LLM sayı hesaplamaz; bunun sebebi doğruluk ve tekrarlanabilirlik.
-- **Model seçimi görev bazlı.** Görev → model zinciri `app/llm/models.toml` dosyasında. Her zincir organizatörlerin gateway'indeki `glm-5.3-flash` ile başlar (görev tanımı s4); EVREN ve Claude yedektir. Zincir sırayla denenir (kimlik bilgisi yoksa ya da bütçe dolduysa atla, hata veya şemaya uymayan cevapta sıradakine geç). Gateway'e takım limitleri uygulanır (`app/llm/limits.py`): 4 eşzamanlı istek, 60 istek/dk, 15 USD; 429'da aynı modelde üstel bekleme.
+- **Model seçimi görev bazlı.** Görev → model zinciri `app/llm/models.toml` dosyasında. Metin görevlerinin zinciri organizatörlerin gateway'indeki `glm-5.3-flash` ile başlar (görev tanımı s4); EVREN ve Claude yedektir. VLM zinciri EVREN `qwen3-vl-30b` ile başlar (GLM görüntülü istekte şemaya uymuyor). Zincir sırayla denenir (kimlik bilgisi yoksa ya da bütçe dolduysa atla, hata veya şemaya uymayan cevapta sıradakine geç). Gateway'e takım limitleri uygulanır (`app/llm/limits.py`): 4 eşzamanlı istek, 60 istek/dk, 15 USD; 429'da aynı modelde üstel bekleme.
   - rapor parse etme: hızlı LLM
   - renk ve yük çıkarımı: VLM
   - karar ve brief: en güçlü akıl yürütme modeli
-- **Tespit modeli arayüz arkasında.** `detect(image) → [Detection]` şeklinde tanımlı. `DETECTOR_MODE=mock` sahte tespit, `model` 1. aşama Ultralytics YOLO modeli (`DETECTOR_WEIGHTS_PATH`; `pip install -e '.[model]'`).
+- **Tespit modeli arayüz arkasında.** `detect(image) → [Detection]` şeklinde tanımlı. `USE_INFERENCE=DEMO` modelin kayıtlı çıktısı (Supabase `model_detections`; paket modunda `DETECTIONS_CSV_PATH`), `REAL` EVREN'deki model. Tanımsızsa `DETECTOR_MODE`: `mock` sahte tespit, `evren`, `model` 1. aşama Ultralytics YOLO modeli (`DETECTOR_WEIGHTS_PATH`; `pip install -e '.[model]'`).
 - **Veritabanına sadece backend yazar** (`service_role` anahtarıyla). Pipeline'lar SQL bilmez; sorgular `app/db/repositories.py` içindedir.
 - **İzlenebilirlik.** Her agent adımı `agent_steps` tablosuna yazılır; brief kaynaklarını belirtir.
 
@@ -64,12 +64,13 @@ Python 3.11+ (ortam: `.venv`, Python 3.14, pip), FastAPI (SSE), Pydantic v2, psy
 
 ## Veritabanı (Supabase)
 - Organizasyon **Roketsan**, proje **Roketsan Project** (`akduinmhomalciorwckz`, ap-south-1, Postgres 17).
-- Eklentiler `extensions` şemasında: `postgis`, `vector`. Konumlar `geography(..., 4326)` tipinde. 15 tablonun hepsinde RLS açık, policy yok (backend `service_role` kullanıyor).
+- Eklentiler `extensions` şemasında: `postgis`, `vector`. Konumlar `geography(..., 4326)` tipinde. 16 tablonun hepsinde RLS açık, policy yok (backend `service_role` kullanıyor).
 - Tablolar:
   - **Kaynak:** `bases`, `zones`, `images`, `tracks`, `track_points`, `field_reports`
   - **Zenginleştirilmiş:** `report_claims`, `track_segments`
+  - **Model çıktısı:** `model_detections` (USE_INFERENCE=DEMO; yükleme `python -m scripts.load_detections`)
   - **Analiz:** `analysis_runs`, `detections`, `track_matches`, `motion_analyses`, `report_evaluations`, `risk_assessments`, `agent_steps`
-- Migration'lar: `01_extensions_and_enums` … `09_images_bucket` (`supabase/migrations/`).
+- Migration'lar: `01_extensions_and_enums` … `10_model_detections` (`supabase/migrations/`).
 - **Storage:** görüntü dosyaları özel `drone-images` bucket'ında; `images.file_path` = `drone-images/<id>.jpg`. Yerelde (`DATA_DIR/images`) olmayan görüntü, tespit ve VLM ilk ihtiyaç duyduğunda `service_role` ile indirilip oraya yazılır (`app/storage.py`). Yükleme: `upload-images [klasör]`.
 
 ## Dizin yapısı

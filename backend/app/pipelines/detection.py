@@ -1,9 +1,12 @@
-"""KOL A: tespit arayüzü, sahte gerçekleştirimi ve 1. aşama modeli (Ultralytics YOLO).
+"""KOL A: tespit arayüzü ve gerçekleştirimleri.
 
-Hangisinin kullanılacağı ayarla seçilir (`DETECTOR_MODE`: mock / model). İkisi de aynı
-`Detector` arayüzünü gerçekleştirir: görüntü → sınıf, güven ve piksel kutusu.
+Hangisinin kullanılacağı ayarla seçilir. `USE_INFERENCE=DEMO` modelin önceden alınmış
+çıktısını (Supabase `model_detections` ya da CSV), `USE_INFERENCE=REAL` EVREN'deki modeli
+kullanır; tanımlı değilse `DETECTOR_MODE` (mock / evren / model). Hepsi aynı `Detector`
+arayüzünü gerçekleştirir: görüntü → sınıf, güven ve piksel kutusu.
 """
 
+import csv
 import importlib
 import json
 import logging
@@ -13,6 +16,8 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from app.core.config import Settings
+from app.db.models import fetch_model_detections
+from app.db.session import connect
 from app.schemas.domain import Detection, ImageMeta, VehicleClass
 from app.storage import SupabaseStorage, build_storage, resolve_image_file
 
@@ -20,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Modelden istenen en düşük güven. Değerlendirmedeki eşikler `risk_rules.toml` [detection];
 # bu sabitler varsayılanlarıdır (sentetik üreteç ve tespit bileşenleri kullanır).
-MIN_CONFIDENCE = 0.25
+MIN_CONFIDENCE = 0.20
 STRONG_CONFIDENCE = 0.50
 
 
@@ -80,6 +85,37 @@ def dump_mock_detections(detections: dict[str, list[Detection]], path: Path) -> 
         for image_id, items in detections.items()
     }
     path.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
+
+
+def read_detections_csv(
+    path: Path, min_confidence: float = MIN_CONFIDENCE
+) -> dict[str, list[Detection]]:
+    """Modelin çıktısı: `image_id, cls, score, x, y, w, h` (kutu sol üst köşe + boyut, piksel).
+
+    Modelden canlı istenen alt sınırın (`min_confidence`) altındaki satırlar alınmaz; böylece
+    DEMO ve REAL aynı kutuları görür.
+    """
+    detections: dict[str, list[Detection]] = {}
+    with path.open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            label = CLASS_ALIASES.get(row["cls"].strip().lower())
+            if label is None:
+                logger.warning("%s: tanınmayan sınıf atlandı (%r)", row["image_id"], row["cls"])
+                continue
+            score = float(row["score"])
+            if score < min_confidence:
+                continue
+            detections.setdefault(row["image_id"], []).append(
+                Detection(
+                    label=label,
+                    confidence=score,
+                    x=float(row["x"]),
+                    y=float(row["y"]),
+                    w=float(row["w"]),
+                    h=float(row["h"]),
+                )
+            )
+    return detections
 
 
 class MockDetector:
@@ -254,12 +290,35 @@ class EvrenDetector(_FileModelDetector):
         return detections
 
 
-def build_detector(settings: Settings) -> Detector:
-    """Ayara göre tespit bileşeni: mock, evren (EVREN model platformu) ya da model (yerel YOLO).
+def _demo_detector(settings: Settings) -> Detector:
+    """USE_INFERENCE=DEMO: modelin önceden alınmış çıktısı; veri kaynağıyla aynı yerden okunur."""
+    if settings.data_source == "package":
+        path = settings.resolved_detections_csv_path
+        if not path.is_file():
+            raise ValueError(f"USE_INFERENCE=DEMO için tespit dosyası bulunamadı: {path}")
+        return MockDetector(read_detections_csv(path), version=f"demo:{path.name}")
+    source = settings.detections_source
+    with connect(settings) as conn:
+        detections = fetch_model_detections(conn, source, MIN_CONFIDENCE)
+    if not detections:
+        raise ValueError(
+            f"USE_INFERENCE=DEMO: model_detections tablosunda '{source}' kaynağı boş "
+            "(python -m scripts.load_detections)"
+        )
+    return MockDetector(detections, version=f"demo:{source}")
 
-    Kimlik bilgisi ve ağırlık dosyası açılışta doğrulanır.
+
+def build_detector(settings: Settings) -> Detector:
+    """Ayara göre tespit bileşeni.
+
+    `USE_INFERENCE` tanımlıysa o seçer (DEMO: kayıtlı çıktı, REAL: EVREN); değilse
+    `DETECTOR_MODE` (mock, evren ya da model: yerel YOLO). Kimlik bilgisi ve ağırlık dosyası
+    açılışta doğrulanır.
     """
-    if settings.detector_mode == "mock":
+    if settings.use_inference == "DEMO":
+        return _demo_detector(settings)
+    mode = "evren" if settings.use_inference == "REAL" else settings.detector_mode
+    if mode == "mock":
         mock_path = settings.resolved_mock_path
         if mock_path is not None:
             # Sürüm dosyayı taşır: farklı tespit dosyalarının kayıtları önbellekte karışmasın.
@@ -270,10 +329,10 @@ def build_detector(settings: Settings) -> Detector:
         return MockDetector()
     images_dir = settings.resolved_data_dir / "images"
     storage = build_storage(settings)
-    if settings.detector_mode == "evren":
+    if mode == "evren":
         key = settings.evren_model_api_key.get_secret_value()
         if not key:
-            raise ValueError("DETECTOR_MODE=evren için EVREN_MODEL_API_KEY tanımlanmalı")
+            raise ValueError("EVREN tespit modeli için EVREN_MODEL_API_KEY tanımlanmalı")
         return EvrenDetector(
             settings.evren_detector_model,
             images_dir,

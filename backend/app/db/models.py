@@ -16,12 +16,14 @@ from app.schemas.domain import (
     Base,
     Corners,
     DataPackage,
+    Detection,
     FieldReport,
     GeoPoint,
     ImageMeta,
     ReportSource,
     RiskLevel,
     TrackPoint,
+    VehicleClass,
     Zone,
 )
 from app.schemas.runs import RunStatus, StoredRun
@@ -34,6 +36,47 @@ _LON = "extensions.st_x({0}::extensions.geometry)"
 
 def _latlon(column: str) -> str:
     return f"{_LAT.format(column)}, {_LON.format(column)}"
+
+
+def fetch_model_detections(
+    conn: psycopg.Connection, source: str, min_score: float = 0.0
+) -> dict[str, list[Detection]]:
+    """`model_detections` tablosundan bir kaynağın tespitleri, görüntüye göre, skoru azalan."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """select image_id, label, score, bbox_x, bbox_y, bbox_w, bbox_h
+               from public.model_detections
+               where source = %s and score >= %s
+               order by image_id, score desc, id""",
+            (source, min_score),
+        )
+        rows = cur.fetchall()
+    detections: dict[str, list[Detection]] = {}
+    for image_id, label, score, x, y, w, h in rows:
+        detections.setdefault(image_id, []).append(
+            Detection(label=VehicleClass(label), confidence=score, x=x, y=y, w=w, h=h)
+        )
+    return detections
+
+
+def replace_model_detections(
+    conn: psycopg.Connection, source: str, detections: Mapping[str, list[Detection]]
+) -> int:
+    """Bir kaynağın tespitlerini tek transaction'da baştan yazar; yazılan satır sayısı."""
+    rows = [
+        (image_id, source, d.label.value, d.confidence, d.x, d.y, d.w, d.h)
+        for image_id, items in detections.items()
+        for d in items
+    ]
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute("delete from public.model_detections where source = %s", (source,))
+        cur.executemany(
+            """insert into public.model_detections
+                   (image_id, source, label, score, bbox_x, bbox_y, bbox_w, bbox_h)
+               values (%s, %s, %s, %s, %s, %s, %s, %s)""",
+            rows,
+        )
+    return len(rows)
 
 
 def fetch_package(conn: psycopg.Connection) -> DataPackage:

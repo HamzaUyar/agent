@@ -346,10 +346,10 @@ def test_circling_far_from_the_base_is_not_circling_the_base() -> None:
 
 
 def test_match_and_confidence_thresholds_come_from_the_rules_file() -> None:
-    """Tespit track'ten 10 m uzakta: 15 m eşikte eşleşir, 5 m eşikte kayıt dışı kalır."""
+    """Tespit track'ten 3 m uzakta: 5 m eşikte eşleşir, 2 m eşikte kayıt dışı kalır."""
     points = track("T9000", 2_000, 2_000)
     image = image_on(east_of_base(2_000))
-    box = replace(box_on(image, east_of_base(2_010), VehicleClass.CAR), confidence=0.45)
+    box = replace(box_on(image, east_of_base(2_003), VehicleClass.CAR), confidence=0.45)
     package = replace(PACKAGE, images=[image], track_points=points, reports=[])
     defaults = load_rules()
 
@@ -360,7 +360,7 @@ def test_match_and_confidence_thresholds_come_from_the_rules_file() -> None:
         return [c.kind for c in service.run(image.image_id).contacts]
 
     assert run(defaults) == ["matched"]  # zayıf (0,45) ama eşleşti
-    narrow = replace(defaults, matching=replace(defaults.matching, threshold_m=5.0))
+    narrow = replace(defaults, matching=replace(defaults.matching, threshold_m=2.0))
     assert run(narrow) == ["missed"]  # zayıf kutu eşleşmeyince düşer, track kaçırılmış
     lenient = replace(narrow, detection=replace(defaults.detection, strong_confidence=0.4))
     assert sorted(run(lenient)) == ["missed", "unregistered"]

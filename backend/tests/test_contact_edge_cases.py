@@ -98,7 +98,7 @@ def test_weak_detection_without_a_track_is_ignored() -> None:
 
 
 def test_detection_below_minimum_confidence_is_ignored_even_on_a_track() -> None:
-    brief = evaluate({"img_000860": [det(VehicleClass.TRUCK, 0.20)]})
+    brief = evaluate({"img_000860": [det(VehicleClass.TRUCK, 0.15)]})
 
     assert [c.kind for c in brief.contacts if c.track_id == "T0122"] == ["missed"]
 
@@ -139,7 +139,7 @@ def test_track_outside_the_frame_is_not_a_missed_contact() -> None:
 
 def test_two_tracks_within_the_threshold_make_an_ambiguous_match() -> None:
     package = read_package(FIXTURE)
-    near_truck = GeoPoint(39.925310, 32.871900)  # T0122'nin 14:10 konumuna ~6 m
+    near_truck = GeoPoint(39.925310, 32.871860)  # T0122'nin 14:10 konumuna ~3 m
     package = replace(
         package, track_points=[*package.track_points, TrackPoint("T0500", time(14, 10), near_truck)]
     )
@@ -238,7 +238,7 @@ def test_neighbours_own_track_does_not_make_a_match_ambiguous() -> None:
     """Yan yana iki araç, ikisinin de kendi track'i var: komşunun track'i bir alternatif
     değildir. Gerçek veride bu yüzden tespitlerin %40'ı belirsiz sayılıyordu."""
     package = read_package(FIXTURE)
-    near_truck = GeoPoint(39.925310, 32.871900)  # T0122'nin 14:10 konumuna ~6 m
+    near_truck = GeoPoint(39.925310, 32.871860)  # T0122'nin 14:10 konumuna ~3 m
     package = replace(
         package, track_points=[*package.track_points, TrackPoint("T0500", time(14, 10), near_truck)]
     )

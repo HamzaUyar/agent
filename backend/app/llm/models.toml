@@ -1,8 +1,9 @@
 # Model kataloğu ve görev → model zinciri. Zincir sırayla denenir: kimlik bilgisi
 # olmayan model atlanır, hata veren ya da şemaya uymayan cevapta sıradakine geçilir.
-# Bütün görevler organizatörlerin gateway'indeki glm-5.3-flash ile başlar (görev tanımı s4;
-# görüntü de okur, s7). GLM_API_KEY yoksa ya da bütçe dolduysa EVREN'e geçilir. EVREN'deki
-# glm-5.3 görüntü almadığı için VLM yedekleri başka modellerdir.
+# Metin görevleri organizatörlerin gateway'indeki glm-5.3-flash ile başlar (görev tanımı s4).
+# GLM_API_KEY yoksa ya da bütçe dolduysa EVREN'e geçilir. VLM zincirinde GLM yok: görüntülü
+# istekte şemaya uyan JSON yerine şemanın kendisini döndürüyor (27 Eylül), her çağrıya
+# 10-15 sn boşa bekleme ekliyordu. EVREN'deki glm-5.3 görüntü almıyor.
 
 # --- EVREN (SSB, https://evren-llmapi.ssyz.org.tr/v1) ---------------------------
 [models.glm53]
@@ -51,6 +52,6 @@ model_id = "claude-opus-5-5"
 
 [tasks]
 report_parse = ["glm_org", "glm53", "deepseek", "haiku"]
-vision = ["glm_org", "qwen_vl", "gemma", "deepseek", "sonnet"]
+vision = ["qwen_vl", "gemma", "deepseek", "sonnet"]
 reasoning = ["glm_org", "glm53", "deepseek", "opus"]
 chat = ["glm_org", "glm53", "deepseek", "sonnet"]

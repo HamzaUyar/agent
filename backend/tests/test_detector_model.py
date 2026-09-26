@@ -137,7 +137,7 @@ def test_model_is_asked_for_boxes_down_to_the_ignore_threshold(images_dir: Path)
 
     [(name, kwargs)] = model.calls
     assert name == "img_000860.jpg"
-    assert kwargs["conf"] == 0.25
+    assert kwargs["conf"] == 0.20
     assert kwargs["imgsz"] == 1280
     assert kwargs["verbose"] is False
 
@@ -311,7 +311,7 @@ def test_evren_request_uses_the_model_image_size_and_ignore_threshold(images_dir
 
     [(model, name, kwargs)] = client.calls
     assert (model, name) == (MODEL_ID, "img_000860.jpg")
-    assert kwargs == {"confidence": 0.25, "image_size": 1280}
+    assert kwargs == {"confidence": 0.20, "image_size": 1280}
 
 
 def test_evren_unknown_classes_are_skipped_and_each_image_is_sent_once(images_dir: Path) -> None:

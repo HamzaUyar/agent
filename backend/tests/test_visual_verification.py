@@ -268,13 +268,14 @@ def test_weak_detection_is_checked_and_confirmed_vehicle_becomes_likely() -> Non
     assert c.visual == seen("beyaz")
 
 
-def test_weak_detection_rejected_by_vlm_is_dropped_and_track_becomes_missed() -> None:
+def test_vlm_cannot_drop_a_weak_detection_that_a_track_confirms() -> None:
+    """Track 1 m içinde: orada bir araç var. VLM seçemese de kutu kalır, kesinlik zayıf kalır."""
     brief = evaluate([], FakeVerifier(seen(is_vehicle=False)), [WEAK_TRUCK])
 
     c = contact(brief, "T0122")
-    assert c.kind == "missed"
-    assert c.label is None
-    assert c.bbox is None
+    assert (c.kind, c.label, c.certainty) == ("matched", "truck", "weak")
+    assert c.bbox is not None
+    assert "araç görsel olarak seçilemedi" in brief.text
 
 
 def test_weak_detection_without_a_vlm_answer_stays_weak() -> None:
@@ -378,7 +379,7 @@ def test_vlm_verifier_sends_an_enlarged_crop_of_the_box(tmp_path: Path) -> None:
 
     assert result is not None
     assert (result.is_vehicle, result.color, result.cargo) == (True, "beyaz", None)
-    assert result.model == "glm/glm-5.3-flash"
+    assert result.model == "evren/qwen3-vl-30b"
     [sent] = provider.images
     with Image.open(io.BytesIO(sent)) as crop:
         assert crop.format == "JPEG"

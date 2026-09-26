@@ -443,6 +443,20 @@
 - `app/storage.py`: Storage REST istemcisi (`service_role`). Tespit (EVREN/YOLO) ve VLM, görüntü `DATA_DIR/images`'ta yoksa Storage'dan indirip oraya yazıyor; yerel dosya varsa Storage'a gidilmiyor.
 - `upload-images [klasör]`: dosyaları bucket'a yükleyip `file_path`'i günceller. 40 görüntü Dashboard'dan bucket'a yüklendi (boyutlar paketle aynı); `images.file_path` 40 kayıtta `drone-images/<id>.jpg` yapıldı.
 
+### USE_INFERENCE ve birebir eşleşme (27 Eylül)
+- `.env`'de `USE_INFERENCE`: `DEMO` tespitleri modelin kayıtlı çıktısından (`detections_all.csv`), `REAL` görüntüyü EVREN'deki modele göndererek alır. Tanımlıysa `DETECTOR_MODE`'un yerine geçer; tanımsızsa eski davranış.
+- CSV Supabase'te tablo olarak duruyor (migration `10_model_detections`, 2.889 satır, 40 görüntü): görüntü bazında sorgulanıyor ve `images`'a bağlı, bucket'a göre daha uygun. Yükleme: `python -m scripts.load_detections [csv]` (kaynak adına göre baştan yazar). `DATA_SOURCE=package` iken DEMO CSV'yi `DETECTIONS_CSV_PATH`'ten okur.
+- Eşleşme: açgözlü en-yakın yerine görüntü başına birebir, toplam mesafeyi en aza indiren atama (Hungarian, `scipy`). Adaylar çekim anında görüntünün alanındaki track noktaları; maliyet = mesafe + 0,01 × (1 − skor); mesafe düzlem yaklaşımı (111.320 m/derece). Güçlü ve zayıf tespitler artık tek atamada; eşleşmeyen zayıf tespit yine düşer.
+- Eşikler: `min_confidence` 0,25 → 0,20 (modelden istenen alt sınır da 0,20), `matching.threshold_m` 15 → 5 m.
+- Gerçek veride: 206 track noktasının 191'i eşleşiyor, ortanca 0,13 m, en uzak 1,85 m (`tests/test_matching.py`, paket yerelde varsa). Tam pipeline da (VLM'siz) 191/206 veriyor.
+- img_000860'taki kamyonun CSV'deki skoru 0,037: eşiğin altında kaldığı için T0122 kaçırılmış temas, görüntü kritik yerine yüksek (R5'le aynı).
+- Testler: 12 yeni (eşleşme, USE_INFERENCE, CSV okuma); eşik değişen 5 test güncellendi. Toplam 274; ruff ve mypy temiz.
+
+### VLM zincirinden GLM çıkarıldı (27 Eylül)
+- `models.toml` `vision`: `qwen3-vl-30b → gemma-4-31b → deepseek-v4.1-flash → Sonnet 5`. glm-5.3-flash görüntülü istekte istenen JSON yerine şemanın kendisini döndürüyordu; her VLM çağrısı önce onu deneyip hata alıyor, 10-15 sn kaybediyordu. Claude anahtarı şu an yok; Sonnet anahtar gelene kadar atlanır.
+- VLM artık track'le eşleşmiş zayıf kutuyu düşüremiyor. Önceden "araç değil" cevabı kutuyu düşürüp track'i kaçırılmış temasa çeviriyordu; görülen 3 vakanın 3'ü de gerçek araçtı (ağaç/gölge altında, track < 1 m). Şimdi: araç derse kesinlik "olası", demezse kutu kalır, kesinlik "zayıf", brief'te "araç görsel olarak seçilemedi (hareket kaydı var)". Olay alanı `visually_rejected` → `visually_unconfirmed`.
+- Karşılaştırma seti hazır (ağ kısıtı yüzünden çalıştırılmadı): `stage2/vlm_bench/` (32 kırpma, `bench.py`).
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.
