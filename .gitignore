@@ -28,3 +28,6 @@ htmlcov/
 
 # Sentetik paket (Kaggle görüntüleri içerir; scripts/make_synthetic_data.py yeniden üretir)
 backend/synthetic/
+
+# Aşama 2 ham veri seti (yerel kopya; repoya girmez)
+stage2/
