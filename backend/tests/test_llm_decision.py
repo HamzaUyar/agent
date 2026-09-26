@@ -373,3 +373,57 @@ def test_lowering_citing_a_claim_whose_report_time_does_not_match_is_rejected() 
     assert level_of(brief, "T0122") == ("critical", "critical")
     [c] = [c for c in brief.contacts if c.track_id == "T0122"]
     assert c.adjustment_rejected is not None and "saat" in c.adjustment_rejected
+
+
+T0122_AT_1410 = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
+)
+ABOUT_T0122 = ClaimRecord(
+    claim_id=3,
+    report=FieldReport(time(14, 0), ReportSource.OFFICIAL, "tehdit uyarisi"),
+    claim=CONSISTENT_CLAIM.claim.model_copy(
+        update={"lat": T0122_AT_1410.lat, "lon": T0122_AT_1410.lon, "claim_type": "threat_warning"}
+    ),
+)
+
+
+def test_raise_citing_another_contacts_report_is_rejected() -> None:
+    """Canlı denemede LLM, T0316 hakkındaki raporla T0314'ü yükseltmişti; kanıt o temasa ait
+    olmalı. Buradaki iddia (2) T0032'ye bağlı, yükseltilmek istenen T0122 (K1)."""
+    brief = run(
+        FakeProvider(
+            draft(
+                [
+                    {
+                        "contact": "K2",
+                        "level": "high",
+                        "reason": "raporla uyumlu park",
+                        "evidence_claim_ids": [2],
+                    },
+                ]
+            )
+        ),
+        claims=[CONSISTENT_CLAIM],
+    )
+    assert level_of(brief, "T0032") == ("medium", "high")
+
+    brief = run(
+        FakeProvider(
+            draft(
+                [
+                    {
+                        "contact": "K2",
+                        "level": "high",
+                        "reason": "başka temasın raporu",
+                        "evidence_claim_ids": [3],
+                    },
+                ]
+            )
+        ),
+        claims=[CONSISTENT_CLAIM, ABOUT_T0122],
+    )
+    assert [f.track_id for f in brief.report_findings if f.claim_id == 3] == ["T0122"]
+    [t0032] = [c for c in brief.contacts if c.track_id == "T0032"]
+    assert t0032.final_level == "medium"
+    assert t0032.adjustment_rejected is not None
+    assert "bu temasa ait değil" in t0032.adjustment_rejected

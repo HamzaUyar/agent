@@ -1,7 +1,10 @@
 """LLM karar ayarı (ADR-0002): kodun seviyesini en fazla bir kademe, gerekçesiyle değiştirir.
 
 LLM önerir, kod doğrular. Bir kademeden fazla değişiklik ve kanıtsız düşürme reddedilir.
-Düşürme için kanıt, o temasa bağlı ve kararı "consistent" olan bir rapor iddiasıdır.
+Düşürme için kanıt, o temasa bağlı, kararı "consistent" ve saati tutan (`time_check` ok) bir
+rapor iddiasıdır. Yükseltmede kanıt zorunlu değildir; ama gösterilen rapor o temasa ait ve
+çelişkisiz olmalıdır: başka temasın raporu ya da tespitle çelişen rapor yükseltme
+gerekçesi olamaz (görev tanımı s2: çelişkide tespit esas).
 LLM cevap vermezse ya da süre aşılırsa `DecisionUnavailableError` fırlatılır; servis
 otomatik özete geçer.
 """
@@ -28,7 +31,8 @@ class LevelProposal(BaseModel):
     level: RiskLevel
     reason: str
     evidence_claim_ids: list[int] = Field(
-        description="Düşürme için: bu temasa bağlı, kararı consistent olan iddiaların kimlikleri"
+        description="Dayanılan rapor iddiaları: düşürmede zorunlu (bu temasa bağlı, consistent, "
+        "time_check ok); yükseltmede verilirse bu temasa bağlı ve çelişkisiz olmalı"
     )
 
 
@@ -151,6 +155,17 @@ def _validate(
     step = LEVELS.index(proposal.level) - LEVELS.index(contact.final_level)
     if abs(step) > 1:
         return f"{contact.final_level} → {proposal.level}: bir kademeden fazla değişiklik önerildi"
+    if step > 0 and proposal.evidence_claim_ids:
+        usable = {
+            f.claim_id
+            for f in findings
+            if contact.track_id and f.track_id == contact.track_id and f.verdict != "contradicts"
+        }
+        if not set(proposal.evidence_claim_ids) <= usable:
+            return (
+                f"{contact.final_level} → {proposal.level}: gösterilen rapor bu temasa ait değil "
+                "ya da tespitle çelişiyor"
+            )
     if step < 0:
         linked = [f for f in findings if contact.track_id and f.track_id == contact.track_id]
         if any(f.effect == "raises" for f in linked):
