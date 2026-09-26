@@ -15,7 +15,7 @@ from app.core.rules import RiskRules, default_rules
 from app.data_package import TRACK_STEP_MINUTES, format_hhmm, from_minutes, to_minutes
 from app.db.repositories import DataRepository
 from app.llm.client import LLMRouter
-from app.pipelines.detection import MIN_CONFIDENCE, Detector, ImageFileMissingError, is_weak
+from app.pipelines.detection import Detector, ImageFileMissingError
 from app.pipelines.geo import distance_m, in_footprint, nearest_zone, pixel_to_geo
 from app.pipelines.matching import LocatedDetection, MatchResult, match_detections
 from app.pipelines.motion import Position, analyze_motion, positions_at
@@ -138,7 +138,7 @@ class EvaluationService:
         )
 
         detected = self._detector.detect(image)
-        usable = [d for d in detected if d.confidence >= MIN_CONFIDENCE]
+        usable = self._usable(detected)
         ignored = len(detected) - len(usable)
         yield emit(
             "tespit",
@@ -149,7 +149,7 @@ class EvaluationService:
                     "label": d.label.value,
                     "confidence": d.confidence,
                     "bbox": [d.x, d.y, d.w, d.h],
-                    "weak": is_weak(d),
+                    "weak": self._is_weak(d),
                 }
                 for d in usable
             ],
@@ -179,7 +179,7 @@ class EvaluationService:
                 dict.fromkeys(
                     _bbox(m.located.detection)
                     for m in matches
-                    if m.track and is_weak(m.located.detection)
+                    if m.track and self._is_weak(m.located.detection)
                 )
             )
             if weak:
@@ -191,7 +191,7 @@ class EvaluationService:
             m
             for m in matches
             if m.track
-            and is_weak(m.located.detection)
+            and self._is_weak(m.located.detection)
             and (v := look(_bbox(m.located.detection))) is not None
             and not v.is_vehicle
         ]
@@ -388,6 +388,14 @@ class EvaluationService:
 
     # --- adımlar ----------------------------------------------------------------
 
+    def _usable(self, detected: list[Detection]) -> list[Detection]:
+        """Güveni `min_confidence`'ın altındaki kutular yok sayılır."""
+        return [d for d in detected if d.confidence >= self._rules.detection.min_confidence]
+
+    def _is_weak(self, detection: Detection) -> bool:
+        """Zayıf tespit: yalnızca bir track'le eşleşirse temas sayılır."""
+        return detection.confidence < self._rules.detection.strong_confidence
+
     def _position_at(self, track_id: str, at: time) -> GeoPoint | None:
         """Track'in `at` anındaki ya da en fazla bir adım önceki konumu."""
         since = from_minutes(to_minutes(at) - TRACK_STEP_MINUTES)
@@ -409,11 +417,15 @@ class EvaluationService:
         since = from_minutes(to_minutes(now) - 2 * TRACK_STEP_MINUTES)
         positions = positions_at(self._repo.track_points_between(since, now), now)
         points = [TrackPoint(p.track_id, now, p.location) for p in positions]
-        strong = match_detections([d for d in located if not is_weak(d.detection)], points)
+        threshold = self._rules.matching.threshold_m
+        strong = match_detections(
+            [d for d in located if not self._is_weak(d.detection)], points, threshold
+        )
         taken = {m.track.track_id for m in strong if m.track}
         weak = match_detections(
-            [d for d in located if is_weak(d.detection)],
+            [d for d in located if self._is_weak(d.detection)],
             [p for p in points if p.track_id not in taken],
+            threshold,
         )
         matches = strong + [m for m in weak if m.track is not None]
         return matches, positions
@@ -430,7 +442,7 @@ class EvaluationService:
                 # Önceki karenin dosyası yoksa yalnızca tip geçmişi eksik kalır.
                 logger.warning("Tip geçmişi: %s atlandı, dosya yok", frame.image_id)
                 continue
-            usable = [d for d in detected if d.confidence >= MIN_CONFIDENCE]
+            usable = self._usable(detected)
             matches, _ = self._match(self._locate(frame, usable), frame.capture_time)
             for m in matches:
                 if m.track:
@@ -536,7 +548,7 @@ class EvaluationService:
             confidence=det.confidence,
             bbox=(det.x, det.y, det.w, det.h),
             location=_latlon(location),
-            is_weak=is_weak(det),
+            is_weak=self._is_weak(det),
             is_ambiguous=match.ambiguous,
             position_estimated=position_estimated,
             type_conflict=len(labels) > 1,
@@ -555,7 +567,7 @@ class EvaluationService:
             final_level=decision.level,
             level_reasons=decision.reasons,
             certainty=_certainty(
-                weak=is_weak(det),
+                weak=self._is_weak(det),
                 uncertain=match.ambiguous or position_estimated or track_id is None,
                 confirmed=visual is not None and visual.is_vehicle,
             ),

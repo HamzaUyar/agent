@@ -336,3 +336,24 @@ def test_circling_far_from_the_base_is_not_circling_the_base() -> None:
     [contact] = circling_scenario(radius_m=4_000, arc_m=3_000).contacts
 
     assert contact.base_level == "low"
+
+
+def test_match_and_confidence_thresholds_come_from_the_rules_file() -> None:
+    """Tespit track'ten 10 m uzakta: 15 m eşikte eşleşir, 5 m eşikte kayıt dışı kalır."""
+    points = track("T9000", 2_000, 2_000)
+    image = image_on(east_of_base(2_000))
+    box = replace(box_on(image, east_of_base(2_010), VehicleClass.CAR), confidence=0.45)
+    package = replace(PACKAGE, images=[image], track_points=points, reports=[])
+    defaults = load_rules()
+
+    def run(rules: RiskRules) -> list[str]:
+        service = EvaluationService(
+            InMemoryRepository(package), FakeDetector({image.image_id: [box]}), rules=rules
+        )
+        return [c.kind for c in service.run(image.image_id).contacts]
+
+    assert run(defaults) == ["matched"]  # zayıf (0,45) ama eşleşti
+    narrow = replace(defaults, matching=replace(defaults.matching, threshold_m=5.0))
+    assert run(narrow) == ["missed"]  # zayıf kutu eşleşmeyince düşer, track kaçırılmış
+    lenient = replace(narrow, detection=replace(defaults.detection, strong_confidence=0.4))
+    assert sorted(run(lenient)) == ["missed", "unregistered"]

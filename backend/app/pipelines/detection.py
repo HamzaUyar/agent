@@ -18,13 +18,10 @@ from app.storage import SupabaseStorage, build_storage, resolve_image_file
 
 logger = logging.getLogger(__name__)
 
-# Güven eşikleri: altı yok sayılır; arası zayıf tespittir (yalnızca track'le eşleşirse temas).
+# Modelden istenen en düşük güven. Değerlendirmedeki eşikler `risk_rules.toml` [detection];
+# bu sabitler varsayılanlarıdır (sentetik üreteç ve tespit bileşenleri kullanır).
 MIN_CONFIDENCE = 0.25
 STRONG_CONFIDENCE = 0.50
-
-
-def is_weak(detection: Detection) -> bool:
-    return detection.confidence < STRONG_CONFIDENCE
 
 
 class Detector(Protocol):
