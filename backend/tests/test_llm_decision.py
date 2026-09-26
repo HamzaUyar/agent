@@ -14,8 +14,9 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from app.agent.decision import contact_labels, draft_schema
+from app.agent.decision import DecisionDraft, apply_attention, contact_labels, draft_schema
 from app.agent.service import EvaluationService
+from app.core.rules import load_rules
 from app.data_package import read_package
 from app.db.repositories import InMemoryRepository
 from app.llm.client import LLMRouter, load_model_config
@@ -235,12 +236,13 @@ def test_approach_claimed_for_a_standing_contact_is_rejected_with_its_level_chan
 
 
 def test_verified_reason_allows_a_one_step_raise_with_a_code_written_reason() -> None:
-    brief = run(FakeProvider(draft([item("T0032", "uzun_duraklama", ["stops"], "high")])))
+    # T0032'nin ORTA'sı duraklamadan geliyor; tipinin bilinmemesi kuralların saymadığı bir neden.
+    brief = run(FakeProvider(draft([item("T0032", "kacirilmis_temas", ["kind"], "high")])))
 
     assert level_of(brief, "T0032") == ("medium", "high")
     [a] = attention(brief, "T0032")
     assert (a.accepted, a.level_accepted, a.rejection) == (True, True, None)
-    assert a.text == "üsse 1,6 km'de en az 120 dk'dır duruyor"
+    assert a.text == "karede ama tespit edilmedi (kaçırılmış temas), tipi bilinmiyor"
     assert contact(brief, "T0032").adjustment_reason == a.text
     assert brief.is_fallback is False
     assert brief.model == f"{PRIMARY.provider}/{PRIMARY.model_id}"
@@ -368,7 +370,7 @@ def test_items_about_the_same_contact_are_written_as_one_sentence() -> None:
 
 
 def test_jump_of_more_than_one_level_is_rejected() -> None:
-    brief = run(FakeProvider(draft([item("T0032", "uzun_duraklama", ["stops"], "critical")])))
+    brief = run(FakeProvider(draft([item("T0032", "kacirilmis_temas", ["kind"], "critical")])))
 
     assert level_of(brief, "T0032") == ("medium", "medium")
     [a] = attention(brief, "T0032")
@@ -466,7 +468,7 @@ def test_raise_citing_another_contacts_report_is_rejected() -> None:
 
 
 def test_image_level_and_action_follow_the_final_levels() -> None:
-    brief = run(FakeProvider(draft([item("T0032", "uzun_duraklama", ["stops"], "high")])))
+    brief = run(FakeProvider(draft([item("T0032", "kacirilmis_temas", ["kind"], "high")])))
 
     assert brief.risk_level == "critical"  # T0122 kritik kalıyor
     assert "alarm" in brief.recommended_action
@@ -614,8 +616,8 @@ def test_a_rejected_proposal_does_not_block_a_verified_one_for_the_same_contact(
             draft(
                 [
                     item("T0032", "yaklasma", ["trend"], "high"),
-                    item("T0032", "uzun_duraklama", ["stops"], "high"),
-                    item("T0032", "kacirilmis_temas", ["kind"], "critical"),
+                    item("T0032", "kacirilmis_temas", ["kind"], "high"),
+                    item("T0032", "uzun_duraklama", ["stops"], "critical"),
                 ]
             )
         )
@@ -624,3 +626,122 @@ def test_a_rejected_proposal_does_not_block_a_verified_one_for_the_same_contact(
     assert level_of(brief, "T0032") == ("medium", "high")
     assert [a.level_accepted for a in attention(brief, "T0032")] == [False, True, None]
     assert contact(brief, "T0032").adjustment_rejected is None
+
+
+# --- kuralların zaten saydığı neden ---------------------------------------------------
+
+
+def test_raise_with_the_reason_the_rules_already_counted_is_rejected() -> None:
+    """Canlı denemede ORTA'sı yaklaşmadan gelen temas "yaklaşma" ile YÜKSEK'e çıkıyordu;
+    aynı girdi bir koşuda ORTA, bir koşuda YÜKSEK veriyordu."""
+    brief = run(FakeProvider(draft([item("T0032", "uzun_duraklama", ["stops"], "high")])))
+
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama"]
+    assert level_of(brief, "T0032") == ("medium", "medium")
+    [a] = attention(brief, "T0032")
+    assert (a.accepted, a.level_accepted) == (True, False)
+    assert a.text == "üsse 1,6 km'de en az 120 dk'dır duruyor"
+    assert a.rejection is not None and "zaten sayıldı" in a.rejection
+    assert contact(brief, "T0032").adjustment_rejected == a.rejection
+
+
+def test_a_threat_warning_that_already_raised_the_level_cannot_raise_it_again() -> None:
+    brief = run(
+        FakeProvider(draft([item("T0032", "tehdit_uyarisi", [9], "critical")])),
+        claims=[THREAT_ABOUT_T0032],
+    )
+
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama", "tehdit_uyarisi"]
+    assert level_of(brief, "T0032") == ("medium", "high")
+    [a] = attention(brief, "T0032")
+    assert a.level_accepted is False
+    assert a.rejection is not None and "zaten sayıldı" in a.rejection
+
+
+def test_the_rules_basis_is_given_to_the_llm() -> None:
+    primary = FakeProvider(draft([]))
+    run(primary)
+
+    [schema] = primary.schemas
+    [dayanak] = [
+        prop
+        for definition in schema.model_json_schema()["$defs"].values()
+        for name, prop in definition.get("properties", {}).items()
+        if name == "dayanak"
+    ]
+    assert "level_basis" in str(dayanak)
+
+
+# --- kayıt dışı temas -----------------------------------------------------------------
+
+# PARKED üssün 1 km'sinden uzakta, track'i olmayan araç (ADR-0003: düşük).
+FAR_PARKED = PARKED
+
+
+def near_base_contact() -> ContactFinding:
+    return ContactFinding(
+        kind="unregistered",
+        label="car",
+        effective_label="car",
+        confidence=0.9,
+        bbox=(1, 2, 3, 4),
+        location=LatLon(lat=39.9, lon=32.8),
+        distance_to_base_m=600,
+        base_level="medium",
+        final_level="medium",
+        level_basis=["kayit_disi"],
+        certainty="likely",
+    )
+
+
+def test_unregistered_reason_is_verified_from_the_contact_kind() -> None:
+    brief = run(
+        FakeProvider(
+            draft([item("kayit_disi_1", "kayit_disi", ["kind"]), item("T0122", "kayit_disi")])
+        ),
+        detector=FakeDetector(FAR_PARKED),
+    )
+
+    [parked] = attention(brief, "kayit_disi_1")
+    assert parked.accepted is True
+    assert parked.text is not None and parked.text.startswith("track'i yok (kayıt dışı)")
+    [t0122] = attention(brief, "T0122")
+    assert t0122.accepted is False
+    assert t0122.rejection is not None and "track'i var" in t0122.rejection
+    assert "kayıt dışı temas 1: track'i yok" in brief.text
+
+
+def test_unregistered_reason_alone_cannot_raise_the_level() -> None:
+    """ADR-0003: track'in yokluğu kendi başına risk değildir; kurallar onu zaten sayıyor."""
+    brief = run(
+        FakeProvider(draft([item("kayit_disi_1", "kayit_disi", ["kind"], "medium")])),
+        detector=FakeDetector(FAR_PARKED),
+    )
+
+    [parked] = [c for c in brief.contacts if c.kind == "unregistered"]
+    assert parked.level_basis == ["kayit_disi"]
+    assert (parked.base_level, parked.final_level) == ("low", "low")
+    [a] = attention(brief, "kayit_disi_1")
+    assert (a.accepted, a.level_accepted) == (True, False)
+
+
+def test_far_parked_unregistered_car_may_need_no_attention() -> None:
+    brief = run(
+        FakeProvider(draft([item("kayit_disi_1", "dikkat_gerekmiyor")])),
+        detector=FakeDetector(FAR_PARKED),
+    )
+
+    [a] = attention(brief, "kayit_disi_1")
+    assert a.accepted is True
+
+
+def test_no_attention_is_rejected_for_an_unregistered_contact_near_the_base() -> None:
+    levels = load_rules().levels
+    near = near_base_contact()
+    assert near.distance_to_base_m < levels.unregistered_alert_m
+    proposal = DecisionDraft.model_validate(draft([item("kayit_disi_1", "dikkat_gerekmiyor")]))
+
+    _, [a], _, _ = apply_attention([near], proposal, [], levels)
+
+    assert a.accepted is False
+    assert a.rejection is not None and "kayıt dışı" in a.rejection

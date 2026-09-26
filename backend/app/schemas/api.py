@@ -76,6 +76,19 @@ class VisualFinding(BaseModel):
     """Cevabı veren model (`sağlayıcı/model`)."""
 
 
+AttentionReason = Literal[
+    "yaklasma",
+    "dolasma",
+    "uzun_duraklama",
+    "tehdit_uyarisi",
+    "rapor_celiskisi",
+    "kacirilmis_temas",
+    "kayit_disi",
+    "dikkat_gerekmiyor",
+]
+"""Karar LLM'inin bir temas için seçebileceği dikkat nedenleri; her biri kodla doğrulanır."""
+
+
 class ContactFinding(BaseModel):
     """Temas: bir Tespit ve/veya onu çekim anında karşılayan Track."""
 
@@ -104,6 +117,8 @@ class ContactFinding(BaseModel):
     base_level: RiskLevel
     final_level: RiskLevel
     level_reasons: list[str] = Field(default_factory=list)
+    level_basis: list[AttentionReason] = Field(default_factory=list)
+    """Kuralların seviyede zaten saydığı dikkat nedenleri; LLM bunlarla yükseltemez."""
     adjustment_reason: str | None = None
     """LLM'in kabul edilen ±1 kademe ayarının gerekçesi."""
     adjustment_rejected: str | None = None
@@ -131,18 +146,6 @@ class ReportFinding(BaseModel):
     # Bağlanan temasın rapor saatindeki konumu iddiayla uyuşuyor mu.
     time_check: TimeCheck
     reasoning: str
-
-
-AttentionReason = Literal[
-    "yaklasma",
-    "dolasma",
-    "uzun_duraklama",
-    "tehdit_uyarisi",
-    "rapor_celiskisi",
-    "kacirilmis_temas",
-    "dikkat_gerekmiyor",
-]
-"""Karar LLM'inin bir temas için seçebileceği dikkat nedenleri; her biri kodla doğrulanır."""
 
 
 class AttentionFinding(BaseModel):

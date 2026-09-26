@@ -8,8 +8,9 @@ seviye önerisi seçer. Temas kimlikleri şemada o karenin temaslarından oluşa
 
 Kod her nedeni veriyle doğrular; doğrulanamayan madde reddedilir, sebebi brief'te kalır.
 Seviye en fazla bir kademe ve yalnızca doğrulanmış bir nedenle değişir: yükseltme için
-riski artıran bir neden, düşürme için "dikkat_gerekmiyor" ve o temasa bağlı, kararı
-"consistent", saati tutan (`time_check` ok) bir rapor iddiası gerekir. Raporun yükselttiği
+riski artıran ve kuralların seviyede zaten saymadığı (`level_basis`) bir neden, düşürme
+için "dikkat_gerekmiyor" ve o temasa bağlı, kararı "consistent", saati tutan (`time_check`
+ok) bir rapor iddiası gerekir. Raporun yükselttiği
 temas düşürülemez; gösterilen rapor o temasa ait ve çelişkisiz olmalıdır (görev tanımı s2).
 
 "Değerlendirme" metnini kod yazar: kabul edilen her madde için sabit Türkçe şablon, sayılar
@@ -67,6 +68,7 @@ FactField = Literal[
     "zones_passed",
     "level",
     "level_reasons",
+    "level_basis",
     "verified_friend",
     "visual",
     "notes",
@@ -80,6 +82,7 @@ REASON_TR: dict[AttentionReason, str] = {
     "tehdit_uyarisi": "tehdit uyarısı",
     "rapor_celiskisi": "rapor çelişkisi",
     "kacirilmis_temas": "kaçırılmış temas",
+    "kayit_disi": "kayıt dışı temas",
     "dikkat_gerekmiyor": "dikkat gerekmiyor",
 }
 
@@ -233,6 +236,7 @@ def _contact_facts(label: str, c: ContactFinding, levels: LevelRules) -> dict[st
         "zones_passed": motion.zones_passed if motion else [],
         "level": c.final_level,
         "level_reasons": c.level_reasons,
+        "level_basis": c.level_basis,
         "verified_friend": c.verified_friend,
         "visual": c.visual.model_dump(exclude={"model"}) if c.visual else None,
         "notes": {
@@ -333,6 +337,9 @@ def _reason_problem(
         case "kacirilmis_temas":
             if contact.kind != "missed":
                 return "temas kaçırılmış değil, tespit edildi"
+        case "kayit_disi":
+            if contact.kind != "unregistered":
+                return "temasın track'i var, kayıt dışı değil"
         case "dikkat_gerekmiyor":
             present = _present_reasons(contact, findings, levels)
             if present:
@@ -343,12 +350,18 @@ def _reason_problem(
 def _present_reasons(
     contact: ContactFinding, findings: list[ReportFinding], levels: LevelRules
 ) -> list[AttentionReason]:
-    """Veride doğrulanan bütün dikkat nedenleri."""
+    """Veride doğrulanan ve "dikkat gerekmiyor" demeyi engelleyen dikkat nedenleri.
+
+    Kayıt dışı temas yalnızca üssün hemen yakınındaysa dikkat ister (ADR-0003); uzakta
+    park halindeki araç için "dikkat gerekmiyor" geçerlidir.
+    """
     reasons: tuple[AttentionReason, ...] = get_args(AttentionReason)
     return [
         r
         for r in reasons
-        if r != NO_ATTENTION and _reason_problem(r, contact, findings, levels) is None
+        if r != NO_ATTENTION
+        and _reason_problem(r, contact, findings, levels) is None
+        and (r != "kayit_disi" or contact.distance_to_base_m < levels.unregistered_alert_m)
     ]
 
 
@@ -377,6 +390,9 @@ def _level_problem(
     if reason == "rapor_celiskisi":
         # ADR-0002: çelişkide tespit esas alınır; çelişen rapor seviyeyi değiştirmez.
         return f"{now} → {level}: çelişen rapor seviyeyi değiştirmez"
+    if step > 0 and reason in contact.level_basis:
+        # Aynı olgu iki kez sayılmasın: yükseltme kuralların kullanmadığı bir neden ister.
+        return f"{now} → {level}: {REASON_TR[reason]} kuralların verdiği seviyede zaten sayıldı"
     if step > 0 and reason == NO_ATTENTION:
         return f"{now} → {level}: dikkat gerekmiyorsa seviye yükseltilemez"
     if step < 0 and reason != NO_ATTENTION:
@@ -462,6 +478,11 @@ def reason_text(
             )
         case "kacirilmis_temas":
             return "karede ama tespit edilmedi (kaçırılmış temas), tipi bilinmiyor"
+        case "kayit_disi":
+            return (
+                f"track'i yok (kayıt dışı), hareket geçmişi bilinmiyor, "
+                f"üsse {km(contact.distance_to_base_m)}"
+            )
     text = "dikkat gerektiren bir durum yok"
     if evidence:
         sources = {"resmi" if f.source == "official" else "üçüncü taraf" for f in evidence}

@@ -500,3 +500,10 @@
 - Ölçüm: boş görüntü klasörüyle üç görüntü 200 `image/jpeg` döndü (0,5–1,4 sn). `img_000860` `stage2` kopyasıyla byte düzeyinde aynı. Yerel klasöre bir şey yazılmadı.
 - Testler: `test_data_api.py` içinde bucket'tan sunma (yerel dosya varken bile), olmayan nesne → 404, ulaşılamayan Storage → 502.
 
+### Karar: aynı olgu iki kez sayılmıyor, kayıt dışı temas nedeni (27 Eylül)
+- Sorun: canlı testte `img_003201` aynı girdiyle bir koşuda ORTA, bir koşuda YÜKSEK çıkıyordu. T0213 ve T0156'nın ORTA'sı zaten yaklaşmadan geliyordu; LLM "yaklaşma" ile yükseltiyor, kod nedeni doğru bulup kabul ediyordu.
+- `risk.base_level` seviyeyi belirleyen satırın nedenini de döndürüyor (`LevelDecision.basis`); temas bunu `level_basis` olarak taşıyor. Rapor etkisiyle yükselen temasa `tehdit_uyarisi` ekleniyor. `level_basis`'teki bir nedenle yükseltme reddediliyor ("zaten sayıldı"). Kuralların görmediği bir birleşim (ör. yaklaşan araç + kaçırılmış temas) hâlâ yükseltebilir.
+- Yeni neden `kayit_disi`: temasın `kind`'ı "unregistered" olmalı. Seviye yükseltme gerekçesi olamaz (ADR-0003); üssün `unregistered_alert_m` yakınındaki kayıt dışı temas için "dikkat gerekmiyor" reddediliyor, uzaktaki park halindeki araç için geçerli.
+- Prompt (`prompts/brief.md`): `level_basis` ve `kayit_disi` kuralları; özet bölümü yeniden yazıldı (araç tip ve davranışla tarif edilir, ikinci cümle bağlam verir, niyet yorumu ve olmayanı sıralamak yasak, kod filtresinden geçen iyi/kötü örnekler).
+- Ölçüm: `img_003201` üç kez canlı: üçü de ORTA, hiç yükseltme önerisi yok; üç özet de filtreden geçti.
+- Testler: `level_basis` ile yükseltmenin reddi, tehdit uyarısının ikinci kez yükseltememesi, `kayit_disi` doğrulaması, yakın/uzak kayıt dışı temas; mevcut yükseltme testleri kuralın saymadığı nedene çevrildi. 313 test geçiyor.

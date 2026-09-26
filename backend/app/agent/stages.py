@@ -483,6 +483,7 @@ def _detection_contact(
         base_level=decision.level,
         final_level=decision.level,
         level_reasons=decision.reasons,
+        level_basis=[decision.basis] if decision.basis else [],
         certainty=_certainty(
             weak=weak,
             uncertain=match.ambiguous or position_estimated or track_id is None,
@@ -520,6 +521,7 @@ def _missed_contact(
         base_level=decision.level,
         final_level=decision.level,
         level_reasons=["kaçırılmış temas: karede ama tespit edilmedi", *decision.reasons],
+        level_basis=[decision.basis] if decision.basis else [],
         certainty="likely",
     )
 
@@ -649,16 +651,23 @@ def _apply_report_effects(
     contradicted = any(e.verdict == "contradicts" for e in linked)
     if contradicted:
         reasons.append("rapor tespitle çelişiyor; tespit esas alındı")
+    basis = list(contact.level_basis)
     raised = any(e.effect == "raises" for e in linked)
     if raised:
         level = LEVELS[min(LEVELS.index(level) + 1, len(LEVELS) - 1)]
         reasons.append("tehdit uyarısı")
+        basis.append("tehdit_uyarisi")
     verified_friend = False
     if not raised and not contradicted and any(e.effect == "lowers" for e in linked):
         level, verified_friend = "low", True
         reasons.append("doğrulanmış dost (resmi rapor)")
     return contact.model_copy(
-        update={"final_level": level, "level_reasons": reasons, "verified_friend": verified_friend}
+        update={
+            "final_level": level,
+            "level_reasons": reasons,
+            "level_basis": basis,
+            "verified_friend": verified_friend,
+        }
     )
 
 
