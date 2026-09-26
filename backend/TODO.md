@@ -60,6 +60,9 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] 14,1 m'lik eşleşmeyi kontrol et (15 m eşiğine yakın; yanlış eşleşme olabilir)
 - [ ] Doğrudan EVREN modunda API açılışında tespit önbelleğini ısıt ya da demoda dosyayı kullan
 
+- [ ] **Rapor bağlama (R15, kritik):** iddiayı çekim anındaki temasa bağla; rapor saatindeki konum yalnızca "orada duruyor/bekliyor" iddialarında; hareket iddiasını track eğilimiyle, "uzun süredir yerinde" iddiasını duraklama süresiyle karşılaştır
+- [ ] Brief'te gün boyu geçerli doğrulanamaz iddiaları (tatbikat, söylenti) tek satırda özetle
+
 ## Açık kararlar
 - [ ] Zaman kaydırıcılı risk haritası yapılacak mı (spec'te kapsam dışı, sonraya bırakıldı)?
 - [ ] Embedding modeli ve `report_claims.embedding` boyutu

@@ -338,6 +338,22 @@
 - **Performans bulgusu:** Doğrudan EVREN modunda ilk değerlendirme, tip geçmişi için önceki bütün karelerin tespitini EVREN'den istediğinden ~13 sn sürüyor; dosyadan okunan tespitlerle bu sorun kalkıyor.
 - Testler: `EvrenDetector` (sahte istemci; normalize ve piksel kutular, istek parametreleri, önbellek, eksik dosya, ayarla kurulum) ve dışa aktarma; toplam 188.
 
+### Gerçek veriyle uçtan uca doğrulama (26 Eylül akşam)
+- **Kurulum:** Supabase'te stage2 (40 görüntü, 226 track, 137 rapor), GLM'in ayrıştırdığı 138 iddia, ekibin EVREN modelinin tespitleri (dosyadan), GLM karar ve brief, VLM.
+- **Çalışanlar:**
+  - 40/40 görüntü hatasız; ortanca 8,9 sn, en fazla 45 sn; 39 brief'i GLM yazdı, 1'i otomatik özet (zaman aşımı).
+  - API: yeni değerlendirme 15 sn, önbellek 2 sn, `GET` 9 adım, sohbet 37 sn (doğru araçlar), 500 yok.
+  - Rapor ayrıştırma 137/137: koordinat, tip, tür ve hareket doğru. "Söylenti" (25) savunulabilir: "ihbar incelendi, doğrulanamadı", "dün gece… doğrulanmamış ihbar", "…yönünde ihbar alındı".
+  - Eşleşme: tespitlerin %73'ü track'le eşleşti (ortanca 0,17 m); track'li araçlarda modelin yakalama oranı ~%92. En uzak eşleşme 14,1 m (img_006388, T0057; ikinci aday T0026 6,5 m, yoğun kare).
+  - **R7 kapandı:** 12:35 "ağır araç, hareketleri olağan" raporunun saatinde noktanın 300 m içinde track yok (T0122 5,6 km uzakta); rapor yanıltıcı, sistem "çelişkili" diyor.
+- **Bulgu (kritik) — rapor bağlama yanlış anda yapılıyor:**
+  - Koordinatlı raporların neredeyse tamamı bir görüntüdeki aracın **çekim anındaki** konumuna işaret ediyor: 5 basamaklılar 0–1 m, 4 basamaklılar 2–30 m. Rapor saati çekimden 5–120 dk önce. Görev tanımındaki örnek de 12:40 raporunu 13:25'teki tespitle karşılaştırıyor.
+  - Kod iddiayı rapor saatinde o noktada olan araca bağlıyor. Sonuçlar: 5 "doğrulanmış dost"un 5'i yanlış araca bağlanmış (ilgisiz park halindeki araçların riski düştü). Dost bildirimleri o saatte noktada park eden başka araca bağlanıp "tip uyuşmuyor" çelişkisi üretiyor. Doğru dost bildirimleri ("…konumundan üsse doğru ilerleyen otomobil planlı ikmal aracıdır", "…gelişi önceden bildirilmiştir") "o saatte orada değildi" diye çelişkili sayılıyor.
+  - Rapor etkileri 37 kez riski yükseltiyor; LLM de 24 kez +1 ekliyor. Görüntü seviyeleri: 10 kritik, 24 yüksek, 6 orta, 0 düşük.
+- **Bulgu — hareket iddiası kontrol edilmiyor:** Dost bildirimlerindeki tuzaklar hareketle ayrışıyor: "üsse doğru ilerleyen" ama uzaklaşan (14:50, T0075), "üsse gelen" ama geçen (12:15, T0124). Kod yalnızca tip, renk ve yükü karşılaştırıyor. Tip tuzağı da var: "panelvan" denen T0156 otomobil.
+- **Bulgu — brief'teki rapor gürültüsü:** 273 rapor bulgusunun 209'u doğrulanamaz; gün boyu geçerli "tatbikat" dostluk iddiası 81 kez, söylentiler 60 kez her görüntüde listeleniyor.
+- Model sınıf dağılımı (260 kutu): 206 otomobil, 26 minibüs, 24 kamyon, 4 otobüs.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.
