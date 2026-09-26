@@ -82,6 +82,8 @@ LOCAL_PERIOD_MIN = 40.0
 # İddia, çekim anında noktasına en yakın temasa bağlanır (risk_rules [reports] bind_now_m).
 # Başka bir araç iddia noktasına odak araçtan bu pay kadar yakın olmamalı (yuvarlama payı).
 BIND_MARGIN_M = 2.0
+# Sayı iddiasında sayılan yarıçap (risk_rules [reports] count_radius_m).
+COUNT_RADIUS_M = 30.0
 # Eşleşme eşiği (15 m) + pay.
 STEAL_RADIUS_M = 20.0
 
@@ -96,6 +98,8 @@ ReportKind = Literal[
     "friendly_third_party",
     "friendly_time_mismatch",
     "type_contradiction",
+    "behavior_contradiction",
+    "count_contradiction",
     "after_capture",
     "irrelevant",
     "zone",
@@ -105,8 +109,8 @@ ReportKind = Literal[
 PATTERN: list[tuple[Archetype, ReportKind | None]] = [
     ("heavy_approach", "consistent"),
     ("light_approach", "threat"),
-    ("loiter", None),
-    ("unregistered", None),
+    ("loiter", "behavior_contradiction"),
+    ("unregistered", "count_contradiction"),
     ("quiet", "irrelevant"),
     ("missed_approach", None),
     ("heavy_approach", "friendly_official"),
@@ -506,6 +510,28 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
             _claim(**coord, vehicle_type=_claim_type_of(wrong)),
             "contradicts",
             "raises_high",
+        )
+    if kind == "behavior_contradiction":
+        # Odak araç üsse yakın park halinde; rapor onu üsse doğru ilerliyor gösteriyor.
+        return plan(
+            f"{_coord_text(here)} konumundan usse dogru ilerleyen bir {tr_name} goruldu.",
+            ReportSource.OFFICIAL,
+            _claim(**coord, behavior="approaching"),
+            "contradicts",
+            "raises_high",
+        )
+    if kind == "count_contradiction":
+        # Çevrede görülenin iki katından fazlası: sayı uyuşmaz ama tek başına risk yükseltmez.
+        seen = sum(
+            1
+            for v in scene.vehicles
+            if v.detected and distance_m(v.position, here) <= COUNT_RADIUS_M
+        )
+        return plan(
+            f"{_coord_text(here)} yakininda {2 * seen + 2} aracin durdugu bildirildi.",
+            ReportSource.OFFICIAL,
+            _claim(**coord, vehicle_count=2 * seen + 2),
+            "contradicts",
         )
     if kind == "friendly_time_mismatch":
         # Araç rapor saatinde orada değildi: resmi dostluk iddiası riski düşüremez.

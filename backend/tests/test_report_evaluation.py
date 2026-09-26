@@ -4,6 +4,7 @@
 aynısıdır; senaryolar bunlara yenilerini ekler.
 """
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import time
 from math import cos, radians
@@ -565,3 +566,212 @@ def test_claims_about_an_unregistered_contact_do_not_claim_an_effect_they_cannot
     assert c.verified_friend is False
     assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("contradicts", "none")
     assert (finding(brief, 11).verdict, finding(brief, 11).effect) == ("unverifiable", "none")
+
+
+# --- Hareket ve sayı iddiaları ------------------------------------------------------
+
+SPOT_4KM = east_of_base(4_000)
+
+
+def north_of(point: GeoPoint, distance_m: float) -> GeoPoint:
+    return GeoPoint(point.lat + distance_m / 111_320, point.lon)
+
+
+def moving_scene(
+    position_at: Callable[[int], GeoPoint],
+    *,
+    since: time = time(12, 0),
+    label: VehicleClass = VehicleClass.CAR,
+    extra_boxes: int = 0,
+) -> tuple[DataPackage, dict[str, list[Detection]]]:
+    """T0500 `since`'ten 14:10'a; `position_at(dakika)` çekimden kaç dakika önce nerede.
+
+    14:10'da noktası karenin ortasında (SPOT_4KM). `extra_boxes` track'siz komşu araçlar.
+    """
+    points = [
+        TrackPoint("T0500", time(h, m), position_at(14 * 60 + 10 - (h * 60 + m)))
+        for h in (12, 13, 14)
+        for m in range(0, 60, 5)
+        if (since.hour, since.minute) <= (h, m) <= (14, 10)
+    ]
+    package, _ = parked_scene(parked_since=time(12, 0))
+    package = replace(package, track_points=points)
+    boxes = [Detection(label, 0.9, 470, 260, 20, 20)]
+    boxes += [
+        Detection(VehicleClass.CAR, 0.9, 400 + 40 * i, 150, 20, 20) for i in range(extra_boxes)
+    ]
+    return package, {"img_7000": boxes}
+
+
+def approaching(minutes_before: int) -> GeoPoint:
+    """Son 30 dk'da üsse 2 km yaklaşıyor, öncesinde 6 km'de park halinde."""
+    return east_of_base(4_000 + min(minutes_before, 30) * 2_000 / 30)
+
+
+def receding(minutes_before: int) -> GeoPoint:
+    return east_of_base(4_000 - min(minutes_before, 30) * 2_000 / 30)
+
+
+def parked(minutes_before: int) -> GeoPoint:
+    return SPOT_4KM
+
+
+def test_stationary_claim_about_a_vehicle_approaching_the_base_contradicts() -> None:
+    """Gerçek veride 11:05 "5 kamyonun durdugu bildirildi" → T0112 3 m/s ile yaklaşıyor."""
+    package, detections = moving_scene(approaching, label=VehicleClass.TRUCK)
+    lie = record(
+        10,
+        time(14, 5),
+        OFFICIAL,
+        "1 kamyonun durdugu bildirildi",
+        at(SPOT_4KM, vehicle_type="truck", behavior="stationary"),
+    )
+
+    brief = evaluate([lie], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert (f.track_id, f.verdict, f.effect) == ("T0500", "contradicts", "raises")
+    assert "hareket" in f.reasoning
+    assert contact(brief, "T0500").final_level in ("high", "critical")
+
+
+def friendly_approach(when: time) -> ClaimRecord:
+    return record(
+        10,
+        when,
+        OFFICIAL,
+        "usse dogru ilerleyen otomobil planli ikmal aracidir",
+        at(SPOT_4KM, claim_type="friendly_claim", vehicle_type="car", behavior="approaching"),
+    )
+
+
+def test_friendly_claim_says_approaching_but_the_vehicle_recedes_contradicts() -> None:
+    """Gerçek veride 14:50 dostluk bildirimi: "üsse doğru ilerleyen" T0075 uzaklaşıyor."""
+    package, detections = moving_scene(receding)
+
+    brief = evaluate([friendly_approach(time(14, 10))], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert (f.verdict, f.effect) == ("contradicts", "raises")
+    assert "üsse yaklaşıyor diyor, üsten uzaklaşıyor" in f.reasoning
+    assert contact(brief, "T0500").verified_friend is False
+
+
+def test_friendly_claim_whose_movement_also_matches_verifies_a_friend() -> None:
+    package, detections = moving_scene(approaching)
+
+    brief = evaluate([friendly_approach(time(14, 10))], package, detections, "img_7000")
+
+    assert finding(brief, 10).effect == "lowers"
+    assert contact(brief, "T0500").verified_friend is True
+
+
+def test_transit_claim_about_a_vehicle_approaching_the_base_contradicts() -> None:
+    package, detections = moving_scene(approaching, label=VehicleClass.TRUCK)
+    report = record(10, time(14, 0), THIRD, "transit geciyor", at(SPOT_4KM, behavior="transit"))
+
+    brief = evaluate([report], package, detections, "img_7000")
+
+    assert finding(brief, 10).verdict == "contradicts"
+
+
+def long_stop_claim(time_reference: str) -> ClaimRecord:
+    return record(
+        10,
+        time(14, 0),
+        OFFICIAL,
+        "otomobil uzun suredir yerinden ayrilmadi",
+        at(SPOT_4KM, behavior="stationary", time_reference=time_reference),
+    )
+
+
+def test_stop_long_enough_for_the_claimed_duration_is_consistent() -> None:
+    package, detections = moving_scene(parked)
+
+    brief = evaluate([long_stop_claim("bir saatten uzun suredir")], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert (f.verdict, f.certainty) == ("consistent", "certain")
+
+
+def test_stop_shorter_than_the_claimed_duration_contradicts() -> None:
+    package, detections = moving_scene(lambda m: parked(m) if m <= 20 else east_of_base(6_000))
+
+    brief = evaluate([long_stop_claim("bir saatten uzun suredir")], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert f.verdict == "contradicts"
+    assert "en az 60 dk" in f.reasoning
+
+
+def test_stop_that_began_before_the_record_is_at_least_as_long_as_seen() -> None:
+    """Kayıt 13:50'de başlıyor ve araç o andan beri duruyor: 60 dk olup olmadığı bilinmez."""
+    package, detections = moving_scene(parked, since=time(13, 50))
+
+    brief = evaluate([long_stop_claim("bir saatten uzun suredir")], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert (f.verdict, f.certainty, f.effect) == ("consistent", "likely", "none")
+
+
+def test_movement_of_an_unregistered_contact_cannot_be_checked() -> None:
+    package, detections = moving_scene(parked)
+    package = replace(package, track_points=[])
+
+    brief = evaluate([long_stop_claim("uzun suredir")], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert (f.verdict, f.certainty) == ("consistent", "likely")
+    assert "hareket doğrulanamadı" in f.reasoning
+
+
+def count_claim(n: int) -> ClaimRecord:
+    return record(10, time(14, 0), OFFICIAL, f"{n} kamyon goruldu", at(SPOT_4KM, vehicle_count=n))
+
+
+def test_count_far_above_what_is_seen_contradicts_without_raising_risk() -> None:
+    """Gerçek veride 11:40 "7 kamyon" noktasında 30 m içinde tek araç var."""
+    package, detections = moving_scene(parked)
+
+    brief = evaluate([count_claim(7)], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert (f.verdict, f.certainty, f.effect) == ("contradicts", "likely", "none")
+    assert "sayı" in f.reasoning and "1 araç" in f.reasoning
+    assert contact(brief, "T0500").final_level == contact(brief, "T0500").base_level
+
+
+def test_count_close_to_what_is_seen_is_consistent() -> None:
+    # Hedef araç + 30 m içinde iki komşu: "5 araç" için yarıdan fazlası görülüyor.
+    package, detections = moving_scene(parked, extra_boxes=2)
+
+    brief = evaluate([count_claim(5)], package, detections, "img_7000")
+
+    assert finding(brief, 10).verdict == "consistent"
+
+
+def test_count_mismatch_alongside_a_movement_mismatch_raises() -> None:
+    package, detections = moving_scene(approaching)
+    lie = record(
+        10,
+        time(14, 0),
+        OFFICIAL,
+        "7 kamyon durdu",
+        at(SPOT_4KM, vehicle_count=7, behavior="stationary"),
+    )
+
+    brief = evaluate([lie], package, detections, "img_7000")
+
+    assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("contradicts", "raises")
+
+
+def test_claimed_stop_duration_is_unverified_when_no_stop_is_recorded() -> None:
+    """Araç her adımda 60 m ileri geri gidiyor: eğilim "duruyor", 50 m'lik duraklama kaydı yok."""
+    package, detections = moving_scene(
+        lambda m: SPOT_4KM if (m // 5) % 2 == 0 else north_of(SPOT_4KM, 60)
+    )
+
+    brief = evaluate([long_stop_claim("bir saatten uzun")], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert (f.verdict, f.certainty) == ("consistent", "likely")

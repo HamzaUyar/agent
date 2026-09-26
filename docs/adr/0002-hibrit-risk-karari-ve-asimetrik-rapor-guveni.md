@@ -19,3 +19,9 @@ Saat, tip ve renk gibi bir özelliktir (`time_check`: ok, mismatch, unknown): ba
 - **Tehdit uyarısı** riski yine yükseltir.
 - LLM, saati tutmayan bir raporu seviye düşürmek için kanıt gösteremez.
 - Kayıt dışı temasa bağlanan iddia listelenir ama etkisi seviyeye uygulanmaz (track'i yok, ADR-0003).
+
+## Not: hareket ve sayı iddiaları (27 Eylül)
+
+- **Hareket** (duruyor, yaklaşıyor, uzaklaşıyor, transit, hareket halinde) temasın **çekim anındaki** hareketiyle karşılaştırılır: 30 dakikalık eğilim ve süren duraklama. Rapor saatindeki hareketle karşılaştırılmaz, çünkü gerçek verideki bildirimlerde araç rapor saatinde başka yerdeydi. Süre ifadesi ("bir saatten uzun", "N dakikadır", "uzun süredir") `time_reference`'tan okunur; duraklama track'in ilk noktasından beri sürüyorsa gerçek süre bilinmez ve kontrol "doğrulanamadı" olur. Hareket uyuşmazlığı track verisine dayandığı için tip gibi kesin bir çelişkidir ve riski yükseltir. Dostluk iddiasının riski düşürmesi için hareket de tutmalıdır.
+- **Sayı** (2 ve üstü) noktanın 30 m içindeki bütün temaslarla tipten bağımsız karşılaştırılır; görülen, iddianın yarısından azsa uyuşmaz. Tespit modeline dayandığı için çelişki "olası" kesinliktedir ve **tek başına riski yükseltmez** (model araç kaçırabilir); başka bir özellik de uyuşmuyorsa o özellik yükseltir.
+- "Olağan trafik N araç, yoğunluk var" türü yoğunluk iddiaları henüz ayrı bir iddia olarak ayrıştırılmıyor (TODO).

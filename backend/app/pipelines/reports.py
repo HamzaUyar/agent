@@ -3,11 +3,14 @@
 Kararı kod verir. Bir iddia, **çekim anında** konumuna en yakın temasa bağlanır; organizatör
 rapor koordinatlarını aracın çekim anındaki konumundan üretmiş. Saat ayrı bir doğrulama
 özelliğidir: bağlanan temasın rapor saatindeki konumu iddia noktasıyla karşılaştırılır.
+Hareket iddiası (duruyor, yaklaşıyor, uzaklaşıyor, geçiyor) temasın çekim anındaki hareketiyle
+karşılaştırılır; track verisine dayandığı için tip gibi kesin bir kontroldür.
 Raporlar riski serbestçe yükseltebilir. Düşürebilmeleri için kaynağın resmi olması ve
-iddianın belirttiği her özelliğin (konum, saat, tip, renk, yük) doğrulanması gerekir.
+iddianın belirttiği her özelliğin (konum, saat, tip, hareket, renk, yük) doğrulanması gerekir.
 Renk ve yük, yalnızca iddia bunları belirtiyorsa görsel doğrulamaya (VLM) sorulur.
 """
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import time
@@ -17,8 +20,15 @@ from app.core.rules import ReportRules
 from app.data_package import format_hhmm, to_minutes
 from app.pipelines.geo import distance_m
 from app.pipelines.vision import normalize_color
-from app.schemas.api import Certainty, Effect, TimeCheck, Verdict, VisualFinding
-from app.schemas.claims import ClaimRecord, ClaimVehicleType
+from app.schemas.api import (
+    Certainty,
+    Effect,
+    MotionFinding,
+    TimeCheck,
+    Verdict,
+    VisualFinding,
+)
+from app.schemas.claims import ClaimBehavior, ClaimRecord, ClaimVehicleType
 from app.schemas.domain import CargoState, GeoPoint, ReportSource, VehicleClass
 
 Check = Literal["match", "mismatch", "unverified", "unspecified"]
@@ -41,6 +51,7 @@ class ContactView:
     track_id: str | None
     label: VehicleClass | None
     location: GeoPoint
+    motion: MotionFinding | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +72,10 @@ Observe = Callable[[str], VisualFinding | None]
 """Track'e ait temasın görsel doğrulaması; bakılamıyorsa `None`. Yalnızca gerekince çağrılır."""
 
 VISUAL_CHECKS = frozenset({"renk", "yük"})
+# Tespit modelinin gördüğüne dayanan kontroller: uyuşmazlıkları "olası" kesinlikte.
+DETECTOR_CHECKS = VISUAL_CHECKS | {"sayı"}
+# Tek başına uyuşmadığında riski yükseltmeyen kontroller (model araç kaçırabilir).
+NON_RAISING_CHECKS = frozenset({"sayı"})
 
 
 def _no_visual(track_id: str) -> None:
@@ -90,6 +105,75 @@ def _cargo_check(claimed: CargoState | None, visual: VisualFinding | None) -> Ch
     if visual is None or visual.cargo is None:
         return "unverified"
     return "match" if claimed == visual.cargo else "mismatch"
+
+
+TREND_TR = {
+    "approaching": "üsse yaklaşıyor",
+    "receding": "üsten uzaklaşıyor",
+    "stationary": "yerinde duruyor",
+    "passing": "üsse yaklaşmadan geçiyor",
+    "unknown": "hareketi belirsiz",
+}
+BEHAVIOR_TR: dict[ClaimBehavior, str] = {
+    "approaching": "üsse yaklaşıyor",
+    "receding": "uzaklaşıyor",
+    "transit": "transit geçiyor",
+}
+# Beklenen eğilimler; `stationary` ve `moving` duraklamaya göre ayrıca değerlendirilir.
+BEHAVIOR_TRENDS: dict[ClaimBehavior, frozenset[str]] = {
+    "approaching": frozenset({"approaching"}),
+    "receding": frozenset({"receding"}),
+    "transit": frozenset({"passing", "receding"}),
+}
+
+
+def stop_minutes_claimed(time_reference: str | None, long_stop_minutes: int) -> int | None:
+    """ "40 dakikadir" → 40, "bir saatten uzun" → 60, "uzun suredir" → `long_stop_minutes`."""
+    if not time_reference:
+        return None
+    text = time_reference.lower()
+    if m := re.search(r"(\d+)\s*dakika", text):
+        return int(m.group(1))
+    if m := re.search(r"(\d+|bir)\s*saat", text):
+        return 60 * (1 if m.group(1) == "bir" else int(m.group(1)))
+    if "uzun" in text:
+        return long_stop_minutes
+    return None
+
+
+def _behavior_check(
+    claimed: ClaimBehavior | None, stop_minutes: int | None, motion: MotionFinding | None
+) -> tuple[Check, str]:
+    """Hareket iddiası temasın çekim anındaki hareketiyle; ikinci değer uyuşmazlığın açıklaması."""
+    if claimed is None or claimed not in (*BEHAVIOR_TRENDS, "stationary", "moving"):
+        return "unspecified", ""
+    if motion is None or motion.trend == "unknown":
+        return "unverified", ""
+    stopped = motion.current_stop_minutes is not None or motion.trend == "stationary"
+    actual = f"{TREND_TR[motion.trend]}, son dönem {motion.recent_speed_mps:.1f} m/s"
+    if claimed == "moving":
+        return ("mismatch", "iddia hareket halinde diyor, " + actual) if stopped else ("match", "")
+    if claimed == "stationary":
+        if not stopped:
+            return "mismatch", "iddia duruyor diyor, " + actual
+        minutes = motion.current_stop_minutes
+        if stop_minutes is None or (minutes is not None and minutes >= stop_minutes):
+            return "match", ""
+        if minutes is None or motion.stop_open_ended:
+            # Eğilim "duruyor" ama duraklama kaydı yok, ya da kayıt duraklamanın ortasında
+            # başlıyor: süre bilinmiyor.
+            return "unverified", ""
+        return "mismatch", f"iddia en az {stop_minutes} dk duruyor diyor, duraklama {minutes} dk"
+    if motion.trend in BEHAVIOR_TRENDS[claimed]:
+        return "match", ""
+    return "mismatch", f"iddia {BEHAVIOR_TR[claimed]} diyor, " + actual
+
+
+def _count_check(claimed: int | None, seen: int, rules: ReportRules) -> Check:
+    """İddia edilen sayı, noktanın çevresinde görülen temas sayısıyla (tipten bağımsız)."""
+    if claimed is None or claimed < 2:
+        return "unspecified"  # tek araç: bağlanan temas zaten orada
+    return "match" if seen >= claimed * rules.count_ratio else "mismatch"
 
 
 def evaluate_claims(
@@ -234,8 +318,19 @@ def _evaluate_located(
     who = track_id or "kayıt dışı temas"
     needs_visual = bool(claim.color) or claim.cargo is not None
     visual = observe(track_id) if needs_visual and track_id else None
+    seen = len(
+        {id(c) for c in contacts if distance_m(c.location, point) <= rules.count_radius_m}
+        | {id(linked)}
+    )
+    behavior, behavior_note = _behavior_check(
+        claim.behavior,
+        stop_minutes_claimed(claim.time_reference, rules.long_stop_minutes),
+        linked.motion,
+    )
     checks = {
         "tip": _type_check(claim.vehicle_type, linked.label),
+        "hareket": behavior,
+        "sayı": _count_check(claim.vehicle_count, seen, rules),
         "renk": _color_check(claim.color, visual),
         "yük": _cargo_check(claim.cargo, visual),
     }
@@ -246,13 +341,18 @@ def _evaluate_located(
     time_note = TIME_NOTE[time_check]
 
     if mismatched:
-        # Yalnızca VLM'in gördüğüne dayanan çelişki "olası"; tip çelişkisi kesin.
-        visual_only = set(mismatched) <= VISUAL_CHECKS
+        # Yalnızca VLM'in ya da tespit sayısının dayanağı olan çelişki "olası"; tip ve hareket
+        # çelişkisi kesin. Yalnızca sayı uyuşmuyorsa risk yükselmez.
+        notes = [behavior_note] if behavior == "mismatch" else []
+        if checks["sayı"] == "mismatch":
+            notes.append(f"iddia {claim.vehicle_count} araç diyor, çevrede {seen} araç görülüyor")
         return result(
             "contradicts",
-            "likely" if visual_only else "certain",
-            "raises",
-            f"{who} iddianın konumunda ama {', '.join(mismatched)} uyuşmuyor{time_note}",
+            "likely" if set(mismatched) <= DETECTOR_CHECKS else "certain",
+            "none" if set(mismatched) <= NON_RAISING_CHECKS else "raises",
+            f"{who} iddianın konumunda ama {', '.join(mismatched)} uyuşmuyor"
+            + (f" ({'; '.join(notes)})" if notes else "")
+            + time_note,
         )
     if friendly and unverified:
         return result(

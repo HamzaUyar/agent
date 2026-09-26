@@ -26,6 +26,12 @@ relevance_m = 500
 bind_now_m = 60
 # Bağlanan temasın rapor saatindeki konumu iddia noktasına bu kadar yakınsa saat tutar.
 match_m = 150
+# "Uzun süredir hareketsiz" gibi süresi belirtilmemiş duraklama iddiası için en kısa süre (dk).
+long_stop_minutes = 30
+# Sayı iddiası: noktanın bu yarıçapındaki bütün temaslar sayılır (model tipleri karıştırabildiği
+# için tipten bağımsız). Görülen, iddianın bu oranından azsa sayı uyuşmuyor.
+count_radius_m = 30
+count_ratio = 0.5
 
 [brief]
 # LLM karar ayarı ve brief için süre sınırı (sn); aşılırsa otomatik özete geçilir.

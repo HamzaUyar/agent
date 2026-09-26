@@ -379,6 +379,24 @@
   - Eski 5 "doğrulanmış dost"un hepsi yanlış araca bağlıydı; şimdi 0. Gerçek verideki resmi dostluk bildirimlerinin hepsinde araç rapor saatinde o noktada değil, bu yüzden hiçbiri riski düşürmüyor.
   - img_000860: 12:35 raporu T0122'ye bağlı, "tutarlı, saat tutmuyor"; seviye yüksek (model kamyonu görmüyor, T0122 kaçırılmış temas).
 
+### Hareket ve sayı iddiaları kontrol ediliyor (27 Eylül, R15)
+- **Hareket** (`pipelines/reports.py` `_behavior_check`, ADR-0002 notu): İddia, bağlanan temasın çekim anındaki hareketiyle karşılaştırılıyor. Duruyor → süren duraklama ya da "yerinde duruyor" eğilimi; yaklaşıyor / uzaklaşıyor → 30 dk eğilimi; transit → yaklaşmıyor; hareket halinde → duraklamada değil. Süre `time_reference`'tan okunuyor ("bir saatten uzun" 60 dk, "N dakikadır", "uzun süredir" `long_stop_minutes` = 30). Duraklama track'in başından beri sürüyorsa süre "doğrulanamadı". Uyuşmazlık kesin çelişki, riski yükseltiyor; dostluk iddiası için hareket de tutmalı. Kayıt dışı temasın hareketi doğrulanamıyor.
+- **Sayı** (`_count_check`): 2 ve üstü sayı, noktanın 30 m içindeki bütün temaslarla (tipten bağımsız) karşılaştırılıyor; görülen < iddia × 0,5 ise uyuşmaz. Çelişki "olası" ve tek başına riski yükseltmiyor (kullanıcı kararı); `_apply_report_effects` artık yalnızca etkisi "raises" olan çelişkiyle yükseltiyor.
+- `MotionFinding`'e `current_stop_minutes` ve `stop_open_ended` eklendi (brief ve sohbet aracı da görüyor). Yeni zorunlu alanlar yüzünden önceki kayıtlar önbellekten düşüyor.
+- Eşikler `risk_rules.toml` `[reports]`: `long_stop_minutes`, `count_radius_m`, `count_ratio`.
+- Sentetik üreteç: `behavior_contradiction` (üsse yakın park halindeki araç "üsse doğru ilerliyor") ve `count_contradiction` türleri; pipeline birebir yakalıyor.
+- Testler: `test_report_evaluation.py` 34 senaryo (5 kamyon durdu ama yaklaşıyor, dost "üsse ilerliyor" ama uzaklaşıyor / hareket de tutunca doğrulanmış dost, transit ama yaklaşıyor, süre yeterli / kısa / kaydın başından beri, duraklama kaydı yok, kayıt dışı temas, sayı çok fazla / yakın / hareketle birlikte). Toplam 207; ruff ve `mypy --strict app scripts` temiz. Kod incelemesinde bulgu çıkmadı. "Yoğunluk" iddiaları bu turda yapılmadı (kullanıcı kararı).
+- **Ölçüm (gerçek veri, 40 görüntü, kurallar, LLM'siz):**
+
+  | | Önce | Sonra |
+  |---|---|---|
+  | Bulgular: tutarlı / çelişkili (yükseltir) / çelişkili (etkisiz) / doğrulanamaz | 26 / 16 / 2 / 225 | 22 / 22 / 2 / 223 |
+  | Görüntüler: kritik / yüksek / orta / düşük | 1 / 25 / 13 / 1 | 1 / 28 / 11 / 0 |
+
+  - Yeni yakalanan 6 tuzak, hepsinde araç çekim anında iddianın tersini yapıyor: 10:00 "transit geçiyor" T0147 (üsse yaklaşıyor, 6,6 m/s); 11:40 "7 kamyonun durduğu" T0135 (yaklaşıyor, çevrede 1 araç); 12:15 resmi dost "üsse gelen otomobil" T0124 (yaklaşmadan geçiyor); 13:50 "bölgeden uzaklaşıyor" ve 14:25 "1 kamyonun durduğu" T0078 (8,3 m/s ile yaklaşıyor); 14:50 resmi dost "üsse doğru ilerleyen" T0075 (uzaklaşıyor).
+  - T0112 ("5 kamyon durdu") ve T0093 ("ağır araç bekliyor") zaten tip çelişkisiyle çelişkiliydi; gerekçelerine hareket uyuşmazlığı eklendi. Beklenmeyen yeni çelişki yok.
+  - Seviyesi yükselen 3 görüntü: img_000733 ve img_001147 orta → yüksek, img_006444 düşük → yüksek (sahte dost bildirimi).
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

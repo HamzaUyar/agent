@@ -43,6 +43,10 @@ class MotionFinding(BaseModel):
     heading_deg: float | None
     stops: list[StopFinding] = Field(default_factory=list)
     zones_passed: list[str] = Field(default_factory=list)
+    # Çekim anında süren duraklamanın süresi (dk); duraklamada değilse yok.
+    current_stop_minutes: int | None
+    # Süren duraklama bilinen ilk noktadan beri sürüyor: gerçek süre en az bu kadar.
+    stop_open_ended: bool
 
 
 class LabelObservation(BaseModel):

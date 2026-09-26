@@ -29,6 +29,9 @@ class ReportRules:
     relevance_m: float
     bind_now_m: float
     match_m: float
+    long_stop_minutes: int
+    count_radius_m: float
+    count_ratio: float
 
 
 @dataclass(frozen=True)

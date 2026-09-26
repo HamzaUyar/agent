@@ -251,6 +251,7 @@ class EvaluationService:
                     track_id=c.track_id,
                     label=VehicleClass(c.effective_label) if c.effective_label else None,
                     location=GeoPoint(c.location.lat, c.location.lon),
+                    motion=c.motion,
                 )
                 for c in contacts
             ],
@@ -429,6 +430,7 @@ class EvaluationService:
         since = from_minutes(to_minutes(now) - rules.motion.history_minutes)
         history = self._repo.track_history(track_id, until=now, since=since)
         m = analyze_motion(history, base, now, self._repo.zones(), rules.trend, rules.motion)
+        ongoing = m.stops[-1] if m.stops and m.stops[-1].end == history[-1].time else None
         return MotionFinding(
             distance_to_base_m=m.distance_to_base_m,
             distance_to_base_30min_ago_m=m.distance_to_base_window_ago_m,
@@ -450,6 +452,8 @@ class EvaluationService:
                 for s in m.stops
             ],
             zones_passed=m.zones_passed,
+            current_stop_minutes=ongoing.minutes if ongoing else None,
+            stop_open_ended=ongoing is not None and ongoing.start == history[0].time,
         )
 
     def _loiter_minutes(self, motion: MotionFinding | None) -> int:
@@ -564,7 +568,8 @@ def _apply_report_effects(
     level = contact.final_level
     reasons = list(contact.level_reasons)
     raised = False
-    if any(e.verdict == "contradicts" for e in linked):
+    # Yalnızca sayısı uyuşmayan çelişki riski yükseltmez (effect "none", ADR-0002 notu).
+    if any(e.verdict == "contradicts" and e.effect == "raises" for e in linked):
         level = _raise(level, "high")
         reasons.append("rapor bu temasla çelişiyor (olası yanıltma)")
         raised = True
