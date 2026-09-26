@@ -27,6 +27,7 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] `backend/CLAUDE.md`'deki dizin yapısını güncelle (`data_package.py`, `agent/service.py`, `supabase/migrations/`)
 - [ ] Boş test dosyalarını (`test_geo.py`, `test_motion.py`, `test_matching.py`) kaldır ya da doldur. Onaylanan test noktalarına göre bunlar ayrı test edilmiyor; istisna interpolasyon gibi karmaşık hesaplar.
 - [ ] Ayrıntılı analiz tablolarını (`detections`, `track_matches`, `risk_assessments`) doldur; şu an sonuç yalnızca `brief_json` içinde
+- [ ] 40 görüntüyü `upload-images` ile `drone-images` bucket'ına yükle (`file_path` güncellenir)
 - [ ] `docker-compose.yml`: backend, frontend ve isteğe bağlı yerel Supabase
 - [x] Tip geçmişi için önceki karelerin tespitini önbelleğe al (`UltralyticsDetector` her görüntüyü bir kez çalıştırıyor)
 - [ ] Frontend (Next.js): ayrı spec; API sözleşmesi spec'te tanımlı

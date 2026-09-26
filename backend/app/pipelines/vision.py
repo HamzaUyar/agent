@@ -17,10 +17,10 @@ from typing import Protocol, get_args
 from PIL import Image
 from pydantic import BaseModel, Field
 
-from app.data_package import find_image_file
 from app.llm.client import LLMRouter, LLMUnavailableError
 from app.schemas.api import VisualFinding
 from app.schemas.domain import CargoState, ImageMeta, VehicleColor
+from app.storage import SupabaseStorage, resolve_image_file
 
 logger = logging.getLogger(__name__)
 
@@ -94,14 +94,20 @@ class VlmVerifier:
     """Görev zincirindeki VLM ile doğrulama (`models.toml` → `vision`)."""
 
     def __init__(
-        self, router: LLMRouter, images_dir: Path, *, timeout_s: float = DEFAULT_TIMEOUT_S
+        self,
+        router: LLMRouter,
+        images_dir: Path,
+        *,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
+        storage: SupabaseStorage | None = None,
     ) -> None:
         self._router = router
         self._images_dir = images_dir
+        self._storage = storage
         self._timeout_s = timeout_s
 
     def inspect(self, image: ImageMeta, bbox: BBox) -> VisualFinding | None:
-        path = find_image_file(self._images_dir, image.image_id)
+        path = resolve_image_file(self._images_dir, image, self._storage)
         if path is None:
             logger.warning("Görsel doğrulama atlandı: %s dosyası yok", image.image_id)
             return None
