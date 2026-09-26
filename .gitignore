@@ -1,0 +1,25 @@
+# Gizli anahtarlar (şablon: backend/.env.example)
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Veri ve model ağırlıkları repoya girmez
+data/
+*.pt
+*.onnx
+
+# Node / Next.js (frontend)
+node_modules/
+.next/
+
+# Sistem
+.DS_Store

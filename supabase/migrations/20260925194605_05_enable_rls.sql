@@ -1,0 +1,15 @@
+alter table public.bases              enable row level security;
+alter table public.zones              enable row level security;
+alter table public.images             enable row level security;
+alter table public.tracks             enable row level security;
+alter table public.track_points       enable row level security;
+alter table public.field_reports      enable row level security;
+alter table public.report_claims      enable row level security;
+alter table public.track_segments     enable row level security;
+alter table public.analysis_runs      enable row level security;
+alter table public.detections         enable row level security;
+alter table public.track_matches      enable row level security;
+alter table public.motion_analyses    enable row level security;
+alter table public.report_evaluations enable row level security;
+alter table public.risk_assessments   enable row level security;
+alter table public.agent_steps        enable row level security;

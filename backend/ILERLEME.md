@@ -1,0 +1,272 @@
+# İlerleme
+
+## 25 Eylül 2026 (Cuma)
+
+### Analiz
+- Hackathon dokümanları incelendi (`information/`): katılımcı bilgilendirme dokümanı ve case brief sunumu.
+- 2. aşamanın gereksinimleri, veri formatları ve değerlendirme kriterleri çıkarıldı.
+- Veriler arasındaki bağlantılar belirlendi:
+  - görüntü ↔ meta (`image_id`)
+  - tespit ↔ track (zaman + en yakın konum)
+  - rapor ↔ tespit/track (koordinat, bölge, zaman, tip)
+
+### Kararlar
+- Tech stack: **Python (FastAPI) + Next.js + Supabase** (PostGIS + pgvector).
+- Pipeline üç koldan oluşuyor:
+  - **Kol A:** görüntü → tespit → koordinat
+  - **Kol B:** `track_risk(track_id, at_time)`, görüntüden bağımsız
+  - **Kol C:** raporlar, önceden parse edilir
+- Kol A ve Kol B, **zaman + en yakın konum** eşlemesiyle birleştiriliyor.
+- Track riski istek anında, görüntünün çekim saatine göre hesaplanıyor. Zaman kaydırıcılı harita istenirse önceden hesaplama eklenecek.
+- Hesaplar deterministik kodla yapılıyor; LLM akıl yürütme ve brief için kullanılıyor. Model seçimi görev bazlı, LiteLLM üzerinden.
+- Veritabanına sadece backend yazıyor; RLS açık, policy yok.
+
+### Yapılanlar
+- Supabase'te **Roketsan Project** (`akduinmhomalciorwckz`) içinde şema kuruldu. 5 migration uygulandı:
+  - `01_extensions_and_enums`: postgis, vector ve 11 enum tipi
+  - `02_source_tables`: bases, zones, images, tracks, track_points, field_reports
+  - `03_enriched_tables`: report_claims, track_segments
+  - `04_analysis_tables`: analysis_runs, detections, track_matches, motion_analyses, report_evaluations, risk_assessments, agent_steps
+  - `05_enable_rls`
+- Supabase güvenlik ve performans kontrolleri çalıştırıldı. Sadece beklenen bilgi uyarıları var: "RLS açık ama policy yok" ve "kullanılmayan indeks" (tablolar boş).
+- `app/backend/` iskeleti oluşturuldu. Dosyalar boş, sadece açıklama satırı içeriyor.
+- `CLAUDE.md`, `ILERLEME.md` ve `TODO.md` oluşturuldu.
+
+### Açık sorular
+- 12:35 tarihli rapor ile T0122'nin 12:35'teki konumu uyuşuyor mu? Organizatör demosu bu raporu "uyumlu" sayıyor. Gerçek veride kontrol edilecek.
+- `capture_time` değerleri 5 dakikalık adımlara denk geliyor mu?
+- Track ve rapor sayıları, yani gerçek veri boyutu.
+- Embedding modeli ve boyutu. `report_claims.embedding` şu an boyutsuz.
+
+## 26 Eylül 2026 (Cumartesi)
+
+### Tasarım (skill'lerle)
+- Proje skill'leri `.claude/skills/` altına kuruldu: python-pro, fastapi-expert, nextjs-developer ve mattpocock/skills'in 24 skill'i.
+- `/grill-with-docs` ile agent mimarisi 26 soruda netleştirildi. Çıktılar:
+  - `app/CONTEXT.md`: alan dili (Temas, Kayıt dışı / Kaçırılmış temas, Zayıf tespit, Belirsiz eşleşme, Çekim anı, İddia, Dostluk iddiası, Rapor kararı, Kesinlik, Brief, Önerilen eylem)
+  - `app/docs/adr/0001`: değerlendirme çekim anından sonrasını görmez
+  - `app/docs/adr/0002`: hibrit risk kararı ve asimetrik rapor güveni
+- `/setup-matt-pocock-skills`: yerel Markdown iş takibi (`app/.scratch/`), varsayılan triage etiketleri, tek bağlam. `app/CLAUDE.md` oluşturuldu.
+- `/to-spec`: `app/.scratch/goruntu-degerlendirme-agent/spec.md` (78 kullanıcı hikâyesi). Test noktaları onaylandı: (1) değerlendirme servisi, (2) sohbet agent'ının araçları.
+- `/to-tickets`: 13 iş maddesi, `app/.scratch/goruntu-degerlendirme-agent/issues/`.
+
+### Ticket 01: Proje temeli ve sahte veri ✅
+- `pyproject.toml` (pydantic, pydantic-settings, psycopg; geliştirme için pytest, ruff, mypy strict). Ortam: `.venv`, Python 3.14. uv kurulu olmadığı için pip kullanıldı.
+- `core/config.py`: ayarlar `.env`'den okunuyor; gizli değerler `SecretStr`.
+- `data_package.py`: organizatör formatındaki paketi okuma/yazma ve tutarlılık raporu (dosyası ya da meta'sı eksik görüntü, 5 dakikalık adıma denk gelmeyen çekim saati, adım boşlukları, tekrarlı noktalar, zaman aralıkları).
+- `db/repositories.py`: `DataRepository` arayüzü ve `InMemoryRepository`. Zamana bağlı her okuma üst sınır alıyor (ADR-0001).
+- `scripts/make_mock_data.py`: organizatör örneğinden sahte paket, `tests/fixtures/mock_package/`. İçeriği: img_000860, img_000100, T0122, T0032 (karenin içinde, 41 m), T0200, 5 rapor (14:20 raporu çekim anından sonra).
+- `scripts/load_data.py`: paketi Supabase'e yükler. Tekrar çalıştırılabilir (upsert); `--replace` ve `--check-only` seçenekleri var. Görüntünün kapladığı alan, merkezi ve bölgesi hesaplanıyor.
+- Migration'lar repoda: `app/supabase/migrations/` (01–05 ve yeni 06).
+- `06_spec_additions` Supabase'e uygulandı:
+  - `certainty` enum'u
+  - `analysis_runs.brief_json` ve `is_fallback`
+  - `detections.is_weak`
+  - `track_matches.is_ambiguous`
+  - `risk_assessments`: `risk_level` → `final_level` olarak yeniden adlandırıldı; `base_level`, `adjustment_reason` ve `certainty` eklendi
+  - `report_evaluations.certainty`
+  - `field_reports`'a doğal anahtar
+  - `chat_messages` tablosu
+- Doğrulama: Sahte veri Supabase'e iki kez yüklendi, sayılar değişmedi. PostGIS sorgusuyla kontrol edildi: img_000860'ın bölgesi Doğu Yolu, kapladığı alan 8.064 m²; 14:10'da T0122 0 m, T0032 41 m.
+- Test noktası olmadığı için bu maddede test yazılmadı (tdd skill'i onaylanmamış noktalara test yazılmasını istemiyor).
+
+### Ticket 02: İzci mermi img_000860 uçtan uca ✅
+- `agent/service.py`: `EvaluationService`. Adımlar: görüntü → tespit → konum → eşleşme → hareket → risk → brief. Her adım bir `StepEvent`; son olay yapılandırılmış Brief. Brief LLM'siz, şablondan (otomatik özet).
+- `pipelines/detection.py`: `Detector` arayüzü ve `MockDetector` (img_000860 truck 727, 284, 58, 34).
+- `pipelines/geo.py`: `pixel_to_geo`, `distance_m`, `nearest_zone`.
+- `pipelines/matching.py`: 15 m eşik; her track en fazla bir tespite atanıyor; ikinci aday tutuluyor.
+- `pipelines/motion.py`: son 30 dakikada üsse mesafe 300 m'den fazla azaldıysa "yaklaşıyor".
+- `pipelines/risk.py`: temel seviye tablosu (kritik, yüksek, orta, düşük), görüntü seviyesi = temasların en yükseği, seviyeye bağlı önerilen eylem.
+- API:
+  - `GET /images`: bölge, çekim saati, son seviye
+  - `POST /evaluations`: SSE akışı (`run`, `step`, `brief`, `error` olayları); bilinmeyen görüntüde 404
+  - Açılışta kaynak veri Supabase'ten okunup bellek içi depoya alınıyor.
+- `db/models.py`: `fetch_package` ve `RunRecorder` (`analysis_runs` ve `agent_steps` tablolarına yazar; istemci bağlantıyı koparsa kayıt `failed` olarak işaretlenir).
+- Testler (`tests/test_evaluation.py`, 6 test): img_000860 koordinatı, T0122 eşleşmesi (ikinci aday T0032, 41 m), üsse ~1,6 km, yaklaşıyor, KRİTİK; çekim anı sonrası veri brief'i değiştirmiyor (ADR-0001); olay sırası; önerilen eylem; bilinmeyen görüntü; tespitsiz görüntü.
+- Uçtan uca deneme: API gerçek Supabase'e bağlı çalıştırıldı. SSE akışı ve 404 çalışıyor; kayıt `done` ve 7 adım yazıldı.
+- Kod incelemesi: 4 bulgu çıktı (ticket 01'den 1, ticket 02'den 3), hepsi düzeltildi. Bulgular: gizli dosyaların görüntü sayılması, bağlantı kopunca kaydın `running`'de kalması, aynı track'in iki tespite atanması, tekrarlanan dakika dönüşümü.
+- Tek başıma verdiğim kararlar:
+  - API, veri tabanı işlemlerini senkron psycopg ile yapıyor; akış Starlette'in thread havuzunda yürüyor. fastapi-expert skill'i async veri tabanı işlemi öneriyor; buna gerek olursa sonra geçilir.
+  - Ayrıntılı analiz tabloları (`detections`, `track_matches`, `risk_assessments`) henüz doldurulmuyor; bütün sonuç `brief_json` içinde.
+
+### Ticket 03: Temas kenar durumları ✅
+- **Zayıf tespit:** Güveni < 0,25 olan kutular yok sayılıyor. 0,25–0,50 arası zayıf tespit; ancak bir track'le eşleşirse temas sayılıyor. Güçlü tespitler track'lere önce atanıyor, böylece zayıf bir kopya kutu güçlü tespitin track'ini alamıyor.
+- **Belirsiz eşleşme:** Eşik (15 m) içinde birden fazla track varsa `is_ambiguous` işaretleniyor; ikinci aday brief'te görünüyor.
+- **Kayıt dışı ve kaçırılmış temas:** Karenin alanında olup tespit edilmeyen track'ler `missed` türünde temas olarak çıkıyor; tipleri bilinmediği için risk yalnızca hareketten hesaplanıyor.
+- **Adım dışı çekim saati:** Spec interpolasyon istiyordu, ama bu ADR-0001 ile çelişiyor (sonraki noktayı kullanmak gerekir). Onun yerine son iki noktadan **ileri kestirim** yapılıyor; kestirilen konumlar "olası" kesinliğiyle işaretleniyor. Aynı saatte tekrarlı noktalar olsa da çalışıyor.
+- **Tip çelişkisi:** Çekim anına kadarki karelerdeki gözlemler toplanıyor; çelişki varsa daha riskli tip kullanılıyor (truck > bus > van > car). Brief'te `observed_labels`, `type_conflict` ve `effective_label` alanları var.
+- **Kesinlik:** kesin (güçlü tespit, tek eşleşme), olası (belirsiz eşleşme, kestirilen konum, kayıt dışı ya da kaçırılmış temas), zayıf (zayıf tespit).
+- Veri deposuna `track_points_between` eklendi, artık kullanılmayan `track_points_at` kaldırıldı.
+- Testler: 17'si de geçiyor. `tests/test_contact_edge_cases.py` 11 senaryo içeriyor. Sahte veride T0032 karenin içinde olduğu için img_000860'ta artık bir kaçırılmış temas çıkıyor; img_000100'da T0200 kaçırılmış temas (uzaklaşıyor, düşük).
+- Uçtan uca deneme gerçek Supabase'le yapıldı: img_000860 KRİTİK; T0122 eşleşmiş, T0032 kaçırılmış.
+- Kod incelemesi: 2 bulgu çıktı, ikisi de düzeltildi (tekrarlı noktada sıfıra bölme; zayıf kutunun track çalması).
+- Not: Tip geçmişi için her değerlendirmede önceki karelerin tespiti yeniden çalıştırılıyor. 40 görüntüde sorun değil, ama gerçek modelle yavaşlarsa önbelleğe alınmalı.
+
+### Ticket 04: Tam hareket analizi ve kural tablosu ✅
+- **Eşik dosyası:** `app/core/risk_rules.toml` ([trend], [motion], [levels] bölümleri) ve onu okuyan `app/core/rules.py`. `EvaluationService` farklı eşiklerle de çalıştırılabiliyor.
+- **Hareket özeti (brief'te):** rota, toplam yol, ortalama hız, son 10 dakikadaki hız, yön (kuzey = 0°; yerinde duruyorsa yok), duraklamalar (başlangıç, bitiş, süre, yer, bölge, üsse mesafe), geçilen bölgeler.
+- **Kural tablosuna eklenen satır:** Üsse 3 km'den yakın bir yerde ≥ 30 dk duraklama: orta. Burada "3 km"yi duraklamanın yapıldığı yerin üsse mesafesi olarak yorumladım. Sonucu: sahte verideki T0032 (1,6 km'de 2 saattir park halinde) artık orta.
+- Kaçırılmış temaslar da tipleri bilinmeden aynı tabloyla değerlendiriliyor (ör. üsse 800 m'de yaklaşıyorsa kritik).
+- Otomatik özet metni hız, yön ve duraklamaları gösteriyor.
+- Testler: 34'ü de geçiyor. `tests/test_motion_and_rules.py` şunları kapsıyor: kural tablosunun her satırı, kayıt dışı temas satırları, eşik dosyası (varsayılan, değiştirilmiş, özel yol), görüntü seviyesi = temasların en yükseği, T0122'nin hareket özeti.
+- T0122'nin hareket özeti demo ile uyumlu: son 10 dk 6,4 m/s, 12:10'da 40 dk ve 13:15'te 45 dk duraklama, yön 252°. Sahte rotanın toplam yolu 7,9 km; demo 10,5 km diyor.
+- Uçtan uca deneme gerçek Supabase'le yapıldı. Kod incelemesinde bulgu çıkmadı.
+- Kapsam dışı kalan: Spec'teki "rapor kendi track'iyle çelişiyor → yüksek" satırı rapor değerlendirmesine (ticket 06) bağlı.
+
+### Ticket 05: Model yönlendirme ve rapor ayrıştırma ✅
+- **Mimari değişiklik:** Planlanan LiteLLM yerine Claude modelleri resmi `anthropic` SDK'sıyla (1.8) çağrılıyor. claude-api skill'i başka sağlayıcıların arayüzünü taklit eden ara katmanlara izin vermiyor. GLM yedeği `openai` SDK'sıyla, OpenAI uyumlu uç noktası üzerinden ayrı bir sağlayıcı.
+- `app/llm/models.toml`: model kataloğu ve görev zincirleri. YAML yerine TOML seçildi (ek bağımlılık yok, `risk_rules.toml` ile tutarlı).
+  - report_parse: Haiku 4.5 → GLM
+  - vision: Sonnet 5 → GLM
+  - reasoning: Opus 5.5 → GLM
+  - chat: Sonnet 5 → GLM
+- `app/llm/client.py`: `AnthropicProvider` (`messages.parse` + Pydantic şeması, reddetme kontrolü), `GlmProvider` (JSON modu + şema doğrulama) ve `LLMRouter`. Router kimlik bilgisi olmayan modeli atlıyor, hata veren ya da şemaya uymayan cevapta sıradaki modele geçiyor; hepsi başarısızsa denemelerin listesiyle `LLMUnavailableError` fırlatıyor.
+- `app/schemas/claims.py`: `ReportClaim`. Bu model hem LLM'den istenen şema hem de normalize edilmiş iddianın kendisi.
+- `app/pipelines/report_parser.py`: Prompt `agent/prompts/report_parse.md` dosyasında.
+  - Koordinatlar rapor metninden regex ile okunuyor ve LLM'in verdiğinin yerine geçiyor. Metinde olmayan koordinat atılıyor.
+  - Bölge adları, Türkçe karakter farkı gözetilmeden bilinen bölgelerle eşleniyor; tanınmayan bölge atılıyor.
+  - Sıfır ya da negatif araç sayısı atılıyor.
+- `scripts/parse_reports.py` ve `db/models.py` (`reports_to_parse`, `replace_claims`): Varsayılan olarak yalnızca iddiası olmayan raporlar işleniyor; `--force` hepsini yeniden ayrıştırıyor.
+- Testler (`tests/test_report_parser.py`, 14 test, sahte sağlayıcılarla): koordinat ve bölge normalizasyonu, çok iddialı rapor, yedek modele geçiş (hata, geçersiz çıktı, kimlik bilgisi yok), hepsinin başarısız olması, görev yönlendirmesi. Toplam 48 test.
+- Test noktası notu: Bu, onaylanan iki test noktasının dışında üçüncü bir nokta. Ticket'ın kabul kriteri sahte LLM ile test istediği için eklendi.
+- Doğrulama:
+  - `.env`'de anahtar olmadığı için gerçek LLM çağrısı yapılamadı; komut her raporda anlaşılır bir hatayla 1 koduyla çıktı.
+  - `ant` CLI da yok.
+  - Veritabanına yazma elle hazırlanmış bir iddiayla Supabase'te doğrulandı (koordinat → geography, bölge → `zone_id`), sonra silindi. `report_claims` şu an boş.
+- Kod incelemesi: 1 bulgu çıktı, düzeltildi. LLM tanınmayan bir bölge adı verdiğinde metindeki koordinat kayboluyordu.
+
+### LLM sağlayıcısı: EVREN (SSB) ✅
+- EVREN'in LLM servisi ana sağlayıcı oldu: OpenAI uyumlu, `https://evren-llmapi.ssyz.org.tr/v1`. 1 Kasım 2026'ya kadar ücretsiz; günde 10M token, dakikada 500K token, en fazla 32 paralel istek. Veri Türkiye'de işleniyor.
+- Kullanım şartları v1, kullanıcının açık onayıyla API üzerinden kabul edildi (26 Eylül). Önce metin okunup özetlendi.
+- `GlmProvider`, genel `OpenAICompatibleProvider`'a dönüştü; EVREN ve organizatör GLM'i bununla bağlanıyor. Şema modele `response_format=json_schema` ile veriliyor. `max_tokens` en az 4096, çünkü düşünen modellerde bütçe düşünmeyle paylaşılıyor.
+- `models.toml` zincirleri:
+  - Metin görevleri: EVREN `glm-5.3` → organizatör GLM (`GLM_API_KEY`) → EVREN `deepseek-v4.1-flash` → Claude
+  - VLM: `qwen3-vl-30b` → `gemma-4-31b` → `deepseek-v4.1-flash` → Sonnet 5
+- Router, cevabı veren modeli `sağlayıcı/model` biçiminde döndürüyor (ör. `evren/glm-5.3`), çünkü aynı model iki sağlayıcıda da var.
+- **Gerçek çağrı:** 5 raporun hepsi GLM-5.3 ile ayrıştırıldı ve sonuçlar doğru (dostluk iddiaları, "ağır araç", "mavi araç", belirsiz zaman).
+  - Süre: rapor başına ~30–50 sn.
+  - Bir raporda GLM-5.3 ve DeepSeek anlık olarak 503 ("modele bağlanılamadı") döndü; ikinci çalıştırmada başarılı oldu.
+  - **Canlı demo riski:** Brief yazımı (ticket 07) da GLM-5.3 kullanacak; gecikme ve 503'ler için otomatik özete geçiş kritik.
+
+### Ticket 06: Rapor değerlendirme ✅
+- `app/pipelines/reports.py`: iddialar kodla değerlendiriliyor (ADR-0002).
+  - **Bağlama:** Koordinatlı iddia, **rapor saatinde** konumuna ≤ 150 m olan temasa bağlanıyor.
+  - **Karşılaştırma:** Tip belirtilmişse temasın tipiyle karşılaştırılıyor ("ağır" = truck/bus, "hafif" = car/van). Renk, VLM (ticket 08) gelene kadar doğrulanamıyor.
+  - **Çelişki:** Rapor saatinde orada kimse yoksa ama bir temasın o saatte **başka bir yerde olduğu biliniyorsa** ve şu an oradaysa, iddia çelişkili; temas en az yüksek. O saatte kaydı olmayan track için çelişki sayılmıyor.
+  - **Dostluk iddiası:** Ancak kaynak resmiyse ve belirtilen her özellik doğrulandıysa riski düşürüyor (doğrulanmış dost → düşük). Üçüncü taraf ya da doğrulanamayan özellik varsa etkisi yok.
+  - **Tehdit uyarısı:** seviyeyi +1 kademe artırıyor.
+  - **Çakışma:** Riski artıran etki, düşüreni eziyor.
+  - **Liste dışı kalanlar:** Pencere dışındaki (120 dk), görüntüden uzak (> 500 m) ve çekim anından sonraki raporlar değerlendirilmiyor.
+  - **Belirsiz olanlar:** Konumu olmayan dostluk iddiası, tehdit uyarısı ve söylentiler "doğrulanamaz" olarak listeleniyor. Görüntünün bölgesini anan bölge iddiaları da doğrulanamaz.
+- Eşikler `risk_rules.toml`'da, yeni `[reports]` bölümünde.
+- Veri deposuna `claims_until` eklendi (`ClaimRecord`). API açılışta iddiaları da Supabase'ten okuyor (`fetch_claims`).
+- Brief'e eklenenler: `report_findings` (rapor kararı, kesinlik, etki, gerekçe, bağlanan track) ve temasta `verified_friend`. Rapor etkileri temasın nihai seviyesine uygulanıyor; temel seviye kuralların sonucu olarak kalıyor. Otomatik özet metninde "Raporlar:" bölümü var.
+- Olay akışına "raporlar" adımı eklendi (risk adımından önce).
+- Testler: `tests/test_report_evaluation.py` 16 senaryo; toplam 64 test. Senaryolar: aday seçimi, rapor saatindeki konumla karşılaştırma, asimetrik güven (resmi/üçüncü taraf, doğrulanamayan renk, yanlış tip), çelişki, tehdit uyarısı, çelişkinin doğrulanmış dostluğu ezmesi, kaydı olmayan track.
+- **Gerçek veriyle uçtan uca:** GLM-5.3'ün çıkardığı iddialarla img_000860'ta 4 iddia listelendi (2 tutarlı, 2 doğrulanamaz); seviyeler değişmedi (KRİTİK).
+  - **Önemli bulgu:** 12:35 raporundaki nokta o saatte T0122'ye değil, park halindeki **T0032'ye** (38 m) denk geliyor; rapor T0032 ile tutarlı. Organizatör demosu bu raporu T0122'ye bağlıyor (RISKLER R7).
+- Kod incelemesi: 1 bulgu çıktı, düzeltildi (kaydı olmayan track'in çelişki sayılması).
+- Türkçe ek hatası ("13:40'teki") metin "saat 13:40 konumunda" biçiminde yazılarak giderildi.
+
+### Ticket 07: LLM karar ayarı ve brief yazarı ✅
+- `app/agent/decision.py`: LLM (görev `reasoning`, GLM-5.3) temasları `K1`, `K2` etiketleriyle ve bulgularla birlikte alıyor. Çıktısı temas başına seviye önerisi, gerekçe, kanıt iddia kimlikleri ve değerlendirme paragrafı.
+- **Kod öneriyi doğruluyor ve şunları reddediyor:**
+  - bir kademeden fazla değişiklik
+  - kanıtsız düşürme
+  - başka bir temasa ait ya da "tutarlı" olmayan kanıtla düşürme
+  - bir raporun riskini yükselttiği temasın düşürülmesi (ADR-0002: riski artıran etki kazanır)
+- Kabul edilen ayarın gerekçesi `adjustment_reason`, reddedilen önerinin sebebi `adjustment_rejected` alanında.
+- **Zaman sınırı** (`risk_rules.toml` [brief] `timeout_s = 45`): Süre aşılırsa ya da hiçbir model cevap vermezse otomatik özete geçiliyor; `fallback_reason` alanında sebep yazıyor.
+- Brief'in başlığı, bulgular, raporlar ve önerilen eylem kodla üretiliyor; LLM yalnızca "Değerlendirme" paragrafını yazıyor. Brief'te `model` alanı var (ör. `evren/glm-5.3`).
+- Olay akışına "karar" adımı eklendi: risk → karar → brief.
+- `models.toml`'da model başına `extra_body` alanı var. GLM-5.3 için düşünme kapalı: `chat_template_kwargs.enable_thinking=false`.
+- **Gecikme ölçümleri (img_000860, EVREN):**
+  - Düşünme açıkken: GLM-5.3 4096 token'ın tamamını düşünmeye harcadı ve 86 sn'de boş cevap döndü. Bir çalıştırmada yedek DeepSeek devreye girdi, toplam 29–77 sn sürdü.
+  - Düşünme kapalıyken: doğrudan çağrı 4,1 sn, 153 token, geçerli JSON.
+  - API üzerinden 3 çalıştırma: 19 / 13 / 20 sn, üçünde de `evren/glm-5.3`.
+  - 503 oranı yüksek: tek denemede isteklerin yaklaşık yarısı ilk seferde 503 aldı. SDK'nın 2 yeniden denemesi bunları karşılıyor.
+- **Gerçek çıktı örneği:** GLM-5.3, T0122'yi kanıt göstermeden KRİTİK'ten YÜKSEK'e düşürmek istedi, kod reddetti. Başka bir çalıştırmada DeepSeek T0032'yi gerekçesiyle ORTA'dan YÜKSEK'e çıkardı ve sahte dostluk iddiasını kullanmadı.
+- Prompt düzeltmeleri: temaslar K1/K2 değil track kimliğiyle anılıyor, İngilizce terim kullanılmıyor.
+- **Hata düzeltmesi:** GLM boş değerlendirme döndürdüğünde başlıkta yanlışlıkla "(otomatik özet)" yazıyordu. Artık etiket, brief'i bir LLM'in yazıp yazmadığına bağlı.
+- Testler: `tests/test_llm_decision.py` 14 senaryo; toplam 79 test. Kapsananlar: ±1 kademe, kanıtlı ve kanıtsız düşürme, başka temasın kanıtı, raporun yükselttiği temas, yedek model, hepsinin başarısız olması, zaman aşımı, LLM'siz akış, boş değerlendirme, olay sırası, model ayarının sağlayıcıya iletilmesi.
+- Kod incelemesi: 1 bulgu çıktı, düzeltildi. LLM, raporun yükselttiği bir temasın seviyesini düşürebiliyordu.
+
+### Ticket 09: Önbellek, yeniden hesaplama ve değerlendirme okuma ✅
+- `app/agent/runner.py`: `EvaluationRunner`, `RunStore` arayüzü ve testler için `InMemoryRunStore`. Kayıt, önbellekten tekrar oynatma ve bağlantı kopması mantığı API katmanından buraya taşındı; API ince kaldı.
+- **Önbellek kuralı:** Görüntünün son başarılı değerlendirmesi, adımlarıyla birlikte tekrar oynatılıyor; tespit ve LLM yeniden çalışmıyor. LLM'in yazdığı brief, daha yeni bir otomatik özete tercih ediliyor; demoda 503 yüzünden oluşan bir özet iyi sonucun önüne geçmiyor. Başarısız kayıtlar önbellek sayılmıyor. Güncel şemaya uymayan eski kayıtlar atlanıyor.
+- `db/models.py` `RunRecorder` bu arayüzü karşılıyor: `get` (bütün adımlarla) ve `latest_cached` eklendi; kayıt kimlikleri artık string.
+- `schemas/runs.py`: `StoredRun`. Veritabanı katmanı agent katmanını import etmesin diye ayrı modülde.
+- API:
+  - `POST /evaluations {image_id, recompute}`: `run` olayında `cached` bayrağı var.
+  - `GET /evaluations/{run_id}`: kayıt, bütün adımları ve brief ile; bulunamazsa 404.
+  - İç üreteç, bağlantı kapanmadan kapatılıyor (`contextlib.closing`), böylece kopmada kayıt `failed` işaretlenebiliyor.
+- Testler: `tests/test_runner_cache.py` 8 senaryo; toplam 87 test. Senaryolar: kayıt, önbellekten tekrar oynatma (tespit tekrar çalışmıyor), yeniden hesaplama, LLM brief'inin otomatik özete tercihi, başka seçenek yokken otomatik özetin önbelleklenmesi, başarısız kaydın atlanması, bağlantı kopması, kayıt okuma.
+- **Uçtan uca (Supabase + EVREN):** önbellekten dönüş ~2 sn, yeni değerlendirme ~8 sn (GLM-5.3). Yeniden hesaplamadan sonraki istek yeni kaydı döndürdü. `GET` 9 adımı döndürdü. Bilinmeyen ve geçersiz kimlikte 404.
+- Kod incelemesi: 1 bulgu çıktı, düzeltildi. Eski şemadaki bir kayıt önbellek aramasını çökertiyordu; img_000100'de gerçekten oluyordu.
+
+### Ticket 10: Sohbet agent'ı ✅
+- `app/agent/tools.py`: 5 salt okuma aracı, hepsi aktif değerlendirmenin çekim anıyla sınırlı (ADR-0001):
+  - `temas_gecmisi`: rota, eğilim, hız, yön, duraklamalar
+  - `raporlari_ara`: konum, bölge ya da saat aralığıyla
+  - `rapor_degerlendirmesi`: brief'teki rapor kararı ve gerekçesi
+  - `goruntu_degerlendir`: yalnızca çekim saati daha önce olan görüntüler; önbellek kullanıyor
+  - `track_diger_goruntulerde`
+- Çekim anından sonraki bir iddia, hiç var olmayan bir iddiayla aynı cevabı alıyor ("bulunamadı"); varlığı sızmıyor. Araçlar hata fırlatmıyor, `{"hata": ...}` döndürüyor.
+- `app/agent/chat.py`: `ChatAgent`.
+  - Araç çağırma döngüsü soru başına en fazla 6 tur; sınıra ulaşırsa bunu açıkça söylüyor.
+  - Konuşma geçmişi ve aktif brief modele bağlam olarak veriliyor.
+  - Hiçbir model cevap veremezse `error` olayı yayılıyor.
+- `app/llm/client.py`:
+  - `ToolCall`, `ChatTurn` ve sağlayıcılara `chat` eklendi. OpenAI uyumlu sağlayıcı araç çağırmayı destekliyor; Claude sağlayıcısı "desteklenmiyor" diyor ve zincir sıradaki modele geçiyor.
+  - `complete_json` ve `chat` aynı zincir mantığını (`_run_chain`) paylaşıyor.
+- **Sızan düşünce sorunu:** Düşünmesi kapalı GLM-5.3, İngilizce iç akıl yürütmesini cevabın başına yazıyordu. `<cevap>` etiketi talimatını da dinlemedi. Çözüm:
+  - Etiket varsa etiketin içi kullanılıyor.
+  - Yoksa taslak, kısa bir yapılandırılmış çıktı çağrısıyla temizleniyor (`{"cevap": ...}`).
+  - Bu çağrı da başarısız olursa: "Sonuç:" işaretinden önceki kısım yalnızca İngilizce bir düşünceye benziyorsa atılıyor; Türkçe bir cevap kesilmiyor.
+- Mesajlar `chat_messages` tablosuna yazılıyor (`ChatRecorder`). `schemas/chat.py`'deki `ChatMessage`, katmanlar ters bağlanmasın diye ayrı modülde.
+- API: `POST /evaluations/{run_id}/chat {message}`. SSE ile `tool` (araç adı, argümanlar, sonuç) ve `answer` (içerik, model) ya da `error` olayları akıyor. Tamamlanmamış değerlendirme için 404.
+- Testler: 110 test.
+  - `tests/test_chat_tools.py` (12): ikinci onaylı test noktası, çekim anı sınırı
+  - `tests/test_chat_agent.py` (11): araç döngüsü, geçmiş, bağlam, yedek model, hata, adım sınırı, sızan düşüncenin temizlenmesi
+- **Canlı deneme (EVREN, GLM-5.3), soru başına 11–16 sn:**
+  - "T0122 nereden geldi?" → `temas_gecmisi`
+  - "13:40 dost devriye raporu neden riski düşürmedi?" → iki kez `rapor_degerlendirmesi`
+  - "T0122 başka görüntülerde görünmüş mü?" → `track_diger_goruntulerde`
+  - Model doğru aracı kendi seçti; cevaplar Türkçe ve önce sonucu veriyor.
+  - "14:30'da nerede olacak?" sorusunda "şu anda bilinemez" dedi, kestirimini açıkça tahmin olarak işaretledi.
+- Kod incelemesi: 1 bulgu çıktı, düzeltildi. Yedek temizleme mantığı Türkçe bir cevabı ilk "Sonuç:" ifadesinden kesiyordu.
+
+### Ticket 08: VLM görsel doğrulama ✅
+- `app/pipelines/vision.py`: `VisualVerifier` arayüzü ve `VlmVerifier` (görev `vision`: qwen3-vl-30b → gemma → deepseek → Sonnet 5). Tespit kutusu çevresiyle kırpılıp en az 384 px'e büyütülüyor (Pillow, yeni bağımlılık) ve JPEG olarak gönderiliyor. Cevap: `is_vehicle`, `color` (11 renklik Türkçe palet), `cargo` (loaded / empty). Dosya yoksa, okunamıyorsa, model cevap vermezse ya da 30 sn aşılırsa sonuç yok, özellik "doğrulanamadı" kalıyor.
+- `app/llm/client.py`: `complete_json`'a isteğe bağlı `image` eklendi (OpenAI uyumlu: `image_url` data URL; Claude: base64 image bloğu). Görüntüsüz çağrılar değişmedi.
+- **Yalnızca gerektiğinde ve kutu başına en fazla bir kez:**
+  - Track'le eşleşen zayıf tespit. VLM araç değil derse kutu düşüyor, track kaçırılmış temas olarak kalıyor. Araç derse kesinlik "zayıf"tan "olası"ya çıkıyor.
+  - Temasa bağlanan iddia renk ya da yük belirtiyorsa (`evaluate_claims`'e tembel `observe` geçiliyor). Kaçırılmış temasın kutusu olmadığı için rengi doğrulanamıyor.
+- **Rapor kararına etkisi:** Renk rapordan paletteki renge indirgeniyor ("koyu yeşil" → yesil, "lacivert" → mavi). Renk ya da yük uyuşmazsa iddia çelişkili, temas en az yüksek; yalnızca görsel özelliğe dayalı çelişki "olası" kesinlikte. Renk tutarsa resmi dostluk iddiası artık riski düşürebiliyor.
+- İddiaya `cargo` alanı eklendi; `07_claim_cargo` migration'ı Supabase'e uygulandı, `fetch_claims`/`replace_claims` güncellendi. Rapor ayrıştırma prompt'u yükü soruyor.
+- Brief: temasta `visual` alanı, notlarda "görsel: beyaz, yüklü", kaynaklarda VLM modeli. Olay verisi: `eslesme.visually_rejected`, `raporlar.visual_checks`. Karar LLM'i de görsel bulguyu görüyor.
+- Testler: `tests/test_visual_verification.py` 21 senaryo (sahte VLM); toplam 131 test.
+- Canlı deneme: sentetik bir karede EVREN `qwen3-vl-30b` rengi doğru bildi (mavi), düz dikdörtgeni araç saymadı, 0,4 sn. Gerçek görüntü olmadığı için uçtan uca VLM denemesi yapılamadı (R11).
+- Kod incelemesi: 1 bulgu çıktı, düzeltildi (okunamayan görüntü dosyası bütün değerlendirmeyi düşürüyordu).
+
+### Ticket 11: Gerçek tespit modeli ✅ (ağırlıklar bekleniyor)
+- Model ekibinin teslim biçimi soruldu: **Ultralytics YOLO `.pt`**.
+- `app/pipelines/detection.py`:
+  - `UltralyticsDetector` aynı `Detector` arayüzünü gerçekleştiriyor. Kutular xyxy → (x, y, w, h), güven ve sınıf; sınıf adları `CLASS_ALIASES` ile eşleniyor (car/van/truck/bus ve Türkçe karşılıkları), tanınmayan sınıf uyarıyla atlanıyor.
+  - Model ilk tespitte yükleniyor; ultralytics yalnızca model modunda import ediliyor (isteğe bağlı bağımlılık: `pip install -e '.[model]'`, torch'u da kurar).
+  - Modelden `conf = 0,25` (yok sayma eşiği) ile tahmin isteniyor; isteğe bağlı `DETECTOR_IMGSZ`.
+  - Her görüntü bir kez çalıştırılıyor (önbellek); yükleme ve çıkarım kilitle sıraya alınıyor. Böylece tip geçmişi için önceki karelerin tekrar tespiti ucuz.
+  - Görüntü dosyası yoksa `ImageFileMissingError` (boş kare sayılmıyor). Önceki bir karenin dosyası yoksa yalnızca o karenin tip geçmişi atlanıyor.
+  - `build_detector(settings)`: `DETECTOR_MODE=mock` → `MockDetector`; `model` → `UltralyticsDetector`. Ağırlık yolu tanımsız ya da dosya yoksa açılışta anlaşılır hata. Sürüm `yolo:<dosya adı>` olarak kayda yazılıyor.
+- `Detector` protokolüne `version` eklendi; API artık `MockDetector` yerine protokole bağlı. `find_image_file` `data_package.py`'ye taşındı (VLM ve tespit ortak kullanıyor).
+- Testler: `tests/test_detector_model.py` 13 senaryo (Ultralytics sonuç biçimini taklit eden sahte model; referans örnek T0122 / KRİTİK), toplam 145 test.
+- Kod incelemesi: 2 bulgu çıktı, düzeltildi:
+  - Önbellek tespit bileşeni sürümüne bakmıyordu; model moduna geçince sahte tespitli eski kayıt tekrar oynatılabilirdi. Artık `latest_cached` aynı `detector_version`'la sınırlı (Supabase'te sorgu doğrulandı).
+  - Önceki bir karenin dosyası eksikse bütün değerlendirme düşüyordu.
+- Gerçek ağırlık olmadığı için gerçek modelle deneme yapılmadı; ultralytics/torch kurulmadı.
+
+### Açık konular
+- `app/` git repo'su oldu ve GitHub'a (private) push edildi.
+- Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.
+- Embedding modeli ve boyutu hâlâ belirsiz.
+- EVREN anahtarı çalışıyor; `report_claims` 6 iddiayla dolu. Organizatörlerin GLM anahtarı yarın gelecek, o zaman `GLM_API_KEY`/`GLM_API_BASE` ve model adı doğrulanacak.

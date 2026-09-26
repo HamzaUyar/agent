@@ -1,0 +1,39 @@
+# Temel seviye tablosu ve hareket analizi eşikleri (ADR-0002: temel seviyeyi kurallar verir).
+# Gerçek veri geldiğinde değerlendirme setiyle ayarlanacak (ticket 13).
+
+[trend]
+# Son `window_minutes` içinde üsse mesafe `threshold_m`'den fazla azaldıysa "yaklaşıyor".
+window_minutes = 30
+threshold_m = 300
+# Bu mesafeden az yer değiştirdiyse "yerinde duruyor" (ve yön hesaplanmaz).
+stationary_displacement_m = 100
+
+[motion]
+history_minutes = 120
+recent_window_minutes = 10
+# Ardışık noktalar ilk noktadan bu kadar uzaklaşmadıysa duraklama sayılır.
+stop_displacement_m = 50
+stop_min_minutes = 10
+
+[reports]
+# Çekim anından önceki bu kadar dakikalık raporlar değerlendirilir. Konumu olmayan dostluk
+# iddiası, tehdit uyarısı ve söylentiler pencere dışında da "doğrulanamaz" olarak listelenir.
+window_minutes = 120
+# İddianın konumu görüntüye ya da bir temasa bu kadar yakınsa ilgili sayılır.
+relevance_m = 500
+# Rapor saatinde bir temas iddianın konumuna bu kadar yakınsa iddia o temasa bağlanır.
+match_m = 150
+
+[brief]
+# LLM karar ayarı ve brief için süre sınırı (sn); aşılırsa otomatik özete geçilir.
+timeout_s = 45
+max_tokens = 4096
+
+[levels]
+critical_m = 1000
+critical_heavy_m = 2000
+high_approach_m = 3000
+high_unregistered_m = 2000
+# Üsse `loiter_m`'den yakın bir yerde en az `loiter_minutes` duraklama: orta.
+loiter_minutes = 30
+loiter_m = 3000

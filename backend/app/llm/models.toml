@@ -1,0 +1,50 @@
+# Model kataloğu ve görev → model zinciri. Zincir sırayla denenir: kimlik bilgisi
+# olmayan model atlanır, hata veren ya da şemaya uymayan cevapta sıradakine geçilir.
+# Metin görevleri GLM-5.3 ile başlar. VLM için görüntü destekli bir model gerekir
+# (GLM-5.3 görüntü almıyor).
+
+# --- EVREN (SSB, https://evren-llmapi.ssyz.org.tr/v1) ---------------------------
+[models.glm53]
+provider = "evren"
+model_id = "glm-5.3"
+# Düşünme açıkken 4096 token'lık bütçeyi düşünmeye harcayıp boş cevap döndü (86 sn);
+# kapalıyken aynı görev 4 sn'de geçerli JSON verdi (26 Eylül ölçümü).
+extra_body = { chat_template_kwargs = { enable_thinking = false } }
+
+[models.deepseek]
+# Hızlı yedek: araç çağırma, düşünme, yapılandırılmış çıktı, görüntü.
+provider = "evren"
+model_id = "deepseek-v4.1-flash"
+
+[models.qwen_vl]
+provider = "evren"
+model_id = "qwen3-vl-30b"
+
+[models.gemma]
+provider = "evren"
+model_id = "gemma-4-31b"
+
+# --- Organizatörlerin GLM uç noktası (GLM_API_KEY / GLM_API_BASE) ----------------
+[models.glm_org]
+# Model adı anahtarla birlikte doğrulanacak.
+provider = "glm"
+model_id = "glm-5.3"
+
+# --- Claude (ANTHROPIC_API_KEY tanımlıysa) ---------------------------------------
+[models.haiku]
+provider = "anthropic"
+model_id = "claude-haiku-4-5"
+
+[models.sonnet]
+provider = "anthropic"
+model_id = "claude-sonnet-5"
+
+[models.opus]
+provider = "anthropic"
+model_id = "claude-opus-5-5"
+
+[tasks]
+report_parse = ["glm53", "glm_org", "deepseek", "haiku"]
+vision = ["qwen_vl", "gemma", "deepseek", "sonnet"]
+reasoning = ["glm53", "glm_org", "deepseek", "opus"]
+chat = ["glm53", "glm_org", "deepseek", "sonnet"]
