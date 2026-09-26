@@ -45,7 +45,7 @@ describe("Açılış haritası: Üs, halkalar ve yaklaşık bölge alanları", (
     for (const marker of map.markers.get("bolgeler")!) {
       expect(marker.description).toMatch(/yaklaşık alan, kesin sınır değil/)
     }
-    const legend = screen.getByRole("region", { name: "Lejant" })
+    const legend = screen.getByRole("group", { name: "Lejant" })
     expect(within(legend).getByText("Yaklaşık bölge alanı (kesin sınır değil)")).toBeInTheDocument()
     expect(within(legend).getByText("Üsse 1 km ve 3 km mesafe halkaları")).toBeInTheDocument()
   })

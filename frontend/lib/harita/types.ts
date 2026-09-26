@@ -11,11 +11,18 @@ import type { Bounds, LngLat } from "@/lib/geo"
 export type Basemap = "uydu" | "sokak" | "duz"
 
 /** GeoJSON alan/çizgi katmanları; çizim sırası bu listenin sırasıdır. */
-export const AREA_LAYERS = ["bolge-alanlari", "ayak-izi", "us-halkalari"] as const
+export const AREA_LAYERS = ["bolge-alanlari", "ayak-izi", "us-halkalari", "rotalar"] as const
 export type AreaLayer = (typeof AREA_LAYERS)[number]
 
 /** Etiketli nokta işaretleri (erişilebilir düğmeler); gruplar üst üste bu sırayla çizilir. */
-export const MARKER_GROUPS = ["halka-etiketleri", "bolgeler", "us"] as const
+export const MARKER_GROUPS = [
+  "halka-etiketleri",
+  "bolgeler",
+  "rota-saatleri",
+  "duraklamalar",
+  "us",
+  "temaslar",
+] as const
 export type MarkerGroup = (typeof MARKER_GROUPS)[number]
 
 export type MapMarker = {
@@ -25,6 +32,10 @@ export type MapMarker = {
   label: string
   /** Erişilebilir ad ve tooltip; yoksa etiket. */
   description?: string
+  /** Görünüm değişkenleri (ör. Temas türü ve seviyesi); `harita-isaret--<değişken>` sınıfı olur. */
+  variant?: string[]
+  /** Varsa işaretin yanında bu yöne dönük ok (derece, kuzeyden saat yönünde). */
+  headingDeg?: number
 }
 
 export type MapEvents = {

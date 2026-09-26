@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { useOperasyon } from "@/store/operasyon"
 
 import { Onizleme } from "./onizleme"
+import { TespitKatmani, TespitOzeti } from "./tespit-katmani"
 
 const NOT_EVALUATED = "degerlendirilmedi"
 type LevelFilter = RiskLevel | typeof NOT_EVALUATED | ""
@@ -166,6 +167,7 @@ function SeciliKare() {
   const summary = images.status === "ready" ? images.data.find((i) => i.image_id === selectedImageId) : undefined
   const streaming = evaluation?.status === "streaming"
   const hasResult = evaluation?.status === "done"
+  const brief = hasResult && evaluation.brief?.image_id === selectedImageId ? evaluation.brief : null
   const aspect = detail.status === "ready" ? `${detail.data.width_px} / ${detail.data.height_px}` : "16 / 9"
 
   return (
@@ -176,7 +178,9 @@ function SeciliKare() {
           alt={`${selectedImageId} drone karesi`}
           className="absolute inset-0 h-full w-full object-contain"
         />
+        {brief && detail.status === "ready" && <TespitKatmani brief={brief} image={detail.data} />}
       </div>
+      {brief && <TespitOzeti brief={brief} />}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-mono font-bold">{selectedImageId}</span>
         {summary && (

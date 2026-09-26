@@ -122,6 +122,30 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
           paint: { "line-color": css("--secim"), "line-width": 2 },
         },
       ]
+    case "rotalar":
+      return [
+        casing(5),
+        {
+          id: `${source}-cizgi`,
+          type: "line",
+          source,
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": [
+              "match",
+              ["get", "level"],
+              "critical",
+              css("--risk-kritik"),
+              "high",
+              css("--risk-yuksek"),
+              "medium",
+              css("--risk-orta"),
+              css("--risk-dusuk"),
+            ],
+            "line-width": 2.5,
+          },
+        },
+      ]
     case "us-halkalari":
       return [
         casing(4),
@@ -137,7 +161,7 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
 
 function markerElement(group: MarkerGroup, marker: MapMarker, onClick?: () => void): HTMLElement {
   const el = document.createElement(onClick ? "button" : "div")
-  el.className = `harita-isaret harita-isaret--${group}`
+  el.className = [`harita-isaret`, `harita-isaret--${group}`, ...(marker.variant ?? []).map((v) => `harita-isaret--${v}`)].join(" ")
   el.setAttribute("aria-label", marker.description ?? marker.label)
   el.title = marker.description ?? marker.label
   if (onClick) {
@@ -154,7 +178,41 @@ function markerElement(group: MarkerGroup, marker: MapMarker, onClick?: () => vo
   label.className = "harita-isaret__etiket"
   label.textContent = marker.label
   el.append(icon, label)
+  if (marker.headingDeg !== undefined) {
+    const arrow = document.createElement("span")
+    arrow.className = "harita-isaret__yon"
+    arrow.setAttribute("aria-hidden", "true")
+    arrow.style.transform = `rotate(${marker.headingDeg}deg)`
+    el.append(arrow)
+  }
   return el
+}
+
+const DECLUTTERED: MarkerGroup[] = ["temaslar"]
+const LABEL_GAP_PX = 3
+
+/** Etiketleri verilen sırayla (önce en önemli) yerleştirir; çakışan etiket aşağı kaydırılır. */
+function declutter(map: MapLibreMap, list: Marker[]) {
+  type Box = { left: number; top: number; right: number; bottom: number }
+  const placed: Box[] = []
+  const overlaps = (a: Box) =>
+    placed.some((b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top)
+  for (const marker of list) {
+    const el = marker.getElement()
+    const label = el.querySelector<HTMLElement>(".harita-isaret__etiket")
+    if (!label) continue
+    const { x, y } = map.project(marker.getLngLat())
+    const width = label.offsetWidth || 80
+    const height = label.offsetHeight || 18
+    let shift = 0
+    let box: Box = { left: x + 10, top: y - height / 2, right: x + 10 + width, bottom: y + height / 2 }
+    for (let i = 0; i < 8 && overlaps(box); i++) {
+      shift += height + LABEL_GAP_PX
+      box = { ...box, top: box.top + height + LABEL_GAP_PX, bottom: box.bottom + height + LABEL_GAP_PX }
+    }
+    placed.push(box)
+    el.style.setProperty("--etiket-kayma", `${shift}px`)
+  }
 }
 
 export function createMapLibreAdapter(container: HTMLElement, events: MapEvents): MapAdapter {
@@ -199,6 +257,10 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
     })
   }
 
+  // Temas'lar aynı karede birkaç metre arayla durur: nokta gerçek konumda kalır, etiketler
+  // çakışıyorsa aşağı kaydırılır ve noktaya ince bir çizgiyle bağlanır.
+  map.on("zoom", () => DECLUTTERED.forEach((g) => declutter(map, markers.get(g) ?? [])))
+
   function withStyle(fn: () => void) {
     if (map.isStyleLoaded()) fn()
     else map.once("idle", fn)
@@ -237,6 +299,7 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
         return new Marker({ element: el, anchor: "center" }).setLngLat(marker.lngLat).addTo(map)
       })
       markers.set(group, created)
+      if (DECLUTTERED.includes(group)) declutter(map, created)
     },
 
     fitBounds(bounds: Bounds, paddingPx) {

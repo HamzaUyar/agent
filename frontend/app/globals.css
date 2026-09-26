@@ -223,3 +223,136 @@
     font-size: 10px;
   }
 }
+
+/* Temas işaretleri: nokta gerçek konumda (tür dolgu/çizgiyle), etiket yanında (seviye şekil + kelime).
+   Etiketler çakışırsa adaptör --etiket-kayma ile aşağı kaydırır; kırık çizgi noktaya bağlar. */
+@layer components {
+  .harita-isaret--temaslar {
+    position: relative;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    text-shadow: none;
+  }
+  .harita-isaret--temaslar .harita-isaret__simge {
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    border: 2px solid var(--zemin);
+    background: currentColor;
+  }
+  .harita-isaret--temaslar .harita-isaret__etiket {
+    position: absolute;
+    left: 18px;
+    top: calc(50% + var(--etiket-kayma, 0px));
+    transform: translateY(-50%);
+    padding: 1px 6px;
+    border-radius: 6px;
+    border: 2px solid currentColor;
+    background: color-mix(in srgb, var(--zemin) 85%, transparent);
+    color: var(--metin);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .harita-isaret--temaslar::after {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 7px;
+    width: 11px;
+    height: var(--etiket-kayma, 0px);
+    border-left: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    pointer-events: none;
+  }
+  .harita-isaret--low {
+    color: var(--risk-dusuk);
+  }
+  .harita-isaret--medium {
+    color: var(--risk-orta);
+  }
+  .harita-isaret--high {
+    color: var(--risk-yuksek);
+  }
+  .harita-isaret--critical {
+    color: var(--risk-kritik);
+  }
+  /* Eşleşmiş: dolu nokta · kayıt dışı: içi boş nokta · kaçırılmış: çarpılı nokta, kesikli etiket */
+  .harita-isaret--unregistered .harita-isaret__simge {
+    background: var(--zemin);
+    box-shadow: inset 0 0 0 3px currentColor;
+  }
+  .harita-isaret--missed .harita-isaret__simge {
+    background: linear-gradient(45deg, var(--zemin) 40%, currentColor 40% 60%, var(--zemin) 60%);
+    box-shadow: inset 0 0 0 3px currentColor;
+  }
+  .harita-isaret--missed .harita-isaret__etiket {
+    border-style: dashed;
+  }
+  /* Son yön oku: noktanın çevresinde, yöne dönük. */
+  .harita-isaret__yon {
+    position: absolute;
+    left: 1px;
+    top: -16px;
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-bottom: 11px solid currentColor;
+    filter: drop-shadow(0 0 1px var(--zemin));
+    transform-origin: 6px 23px;
+  }
+  .harita-isaret--duraklamalar .harita-isaret__simge {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--metin);
+    border-left-width: 3px;
+    border-right-width: 3px;
+    border-top: 0;
+    border-bottom: 0;
+  }
+  .harita-isaret--duraklamalar,
+  .harita-isaret--rota-saatleri {
+    flex-direction: row;
+    font-size: 11px;
+    pointer-events: none;
+  }
+  .harita-isaret--rota-saatleri {
+    color: var(--metin-ikincil);
+    font-family: var(--font-mono);
+  }
+  .harita-isaret--rota-saatleri .harita-isaret__simge {
+    display: block;
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    background: var(--metin-ikincil);
+  }
+}
+
+@layer components {
+  .harita-lejant__temas {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    color: var(--metin);
+    background: currentColor;
+  }
+  .harita-lejant__temas.harita-isaret--unregistered {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px currentColor;
+  }
+  .harita-lejant__temas.harita-isaret--missed {
+    background: linear-gradient(45deg, transparent 42%, currentColor 42% 58%, transparent 58%);
+    box-shadow: inset 0 0 0 2px currentColor;
+  }
+  .harita-lejant__duraklama {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-left: 3px solid var(--metin);
+    border-right: 3px solid var(--metin);
+  }
+}

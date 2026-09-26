@@ -5,6 +5,7 @@ import { useMemo } from "react"
 
 import { Button } from "@/components/ui/button"
 import { buildFootprint, buildScene } from "@/lib/harita/sahne"
+import { buildContactLayers } from "@/lib/harita/temaslar"
 import type { Basemap } from "@/lib/harita/types"
 import { cn } from "@/lib/utils"
 import { useOperasyon } from "@/store/operasyon"
@@ -18,7 +19,6 @@ const BASEMAPS: { id: Exclude<Basemap, "duz">; label: string }[] = [
 ]
 
 const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] }
-const NO_MARKERS = {}
 
 /** Çerçeveli harita paneli: zemin seçimi, lejant ve sahne katmanları (Üs, halkalar, Bölge'ler). */
 export function HaritaPaneli() {
@@ -37,9 +37,26 @@ export function HaritaPaneli() {
     () => (imageDetail.status === "ready" ? buildFootprint(imageDetail.data) : null),
     [imageDetail],
   )
+  const brief = useOperasyon((s) => (s.evaluation?.status === "done" ? s.evaluation.brief : null))
+  const contactLayers = useMemo(() => (brief ? buildContactLayers(brief) : null), [brief])
+
+  // Her katman her zaman verilir: değerlendirme temizlenince eski Temas'lar da silinsin.
   const areas = useMemo(
-    () => ({ ...scene?.areas, "ayak-izi": footprint?.area ?? EMPTY }),
-    [scene, footprint],
+    () => ({
+      ...scene?.areas,
+      "ayak-izi": footprint?.area ?? EMPTY,
+      rotalar: contactLayers?.routes ?? EMPTY,
+    }),
+    [scene, footprint, contactLayers],
+  )
+  const markers = useMemo(
+    () => ({
+      ...scene?.markers,
+      temaslar: contactLayers?.contacts ?? [],
+      duraklamalar: contactLayers?.stops ?? [],
+      "rota-saatleri": contactLayers?.routeTimes ?? [],
+    }),
+    [scene, contactLayers],
   )
 
   return (
@@ -50,7 +67,7 @@ export function HaritaPaneli() {
       <Harita
         basemap={basemap}
         areas={areas}
-        markers={scene?.markers ?? NO_MARKERS}
+        markers={markers}
         // Kare seçiliyken ayak izine yaklaşır; ayrıntısı yüklenirken görünüm yerinde kalır.
         fitTo={selectedImageId ? (footprint?.bounds ?? null) : (scene?.bounds ?? null)}
         onBasemapError={basemapError}
@@ -80,7 +97,7 @@ export function HaritaPaneli() {
         )}
       </div>
 
-      {zones.status === "ready" && <Lejant />}
+      {zones.status === "ready" && <Lejant withContacts={brief !== null} />}
 
       {zones.status === "error" && (
         <div className="absolute inset-0 z-10 flex items-center justify-center">
