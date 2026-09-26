@@ -12,7 +12,7 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.llm.client import LLMRouter, LLMUnavailableError
 from app.pipelines.risk import LEVELS
@@ -32,9 +32,30 @@ class LevelProposal(BaseModel):
     )
 
 
+# Bu kadar kelimeden kısa paragraf gerçek bir değerlendirme sayılmaz. GLM-5.3 zaman zaman
+# boş ya da "..." döndürüyor; şemaya uymayan cevap zincirde sıradaki modele geçer.
+MIN_ASSESSMENT_WORDS = 3
+
+
 class DecisionDraft(BaseModel):
     adjustments: list[LevelProposal]
-    assessment: str = Field(description="Operatör için kısa Türkçe değerlendirme")
+    assessment: str = Field(
+        min_length=20,
+        description="Operatör için kısa Türkçe değerlendirme; en az bir tam cümle",
+    )
+
+    @field_validator("assessment", mode="before")
+    @classmethod
+    def _real_paragraph(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        if text.lower().startswith("değerlendirme:"):
+            text = text.split(":", 1)[1].strip()
+        words = [w for w in text.split() if any(ch.isalpha() for ch in w)]
+        if len(words) < MIN_ASSESSMENT_WORDS:
+            raise ValueError(f"değerlendirme paragrafı boş ya da yer tutucu: {value!r}")
+        return text
 
 
 class DecisionUnavailableError(RuntimeError):

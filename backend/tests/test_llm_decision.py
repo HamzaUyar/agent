@@ -9,6 +9,7 @@ from datetime import time
 from pathlib import Path
 from typing import Any
 
+import pytest
 from pydantic import BaseModel
 
 from app.agent.service import EvaluationService
@@ -288,12 +289,27 @@ def test_decision_step_is_streamed_between_risk_and_brief() -> None:
     assert names[-3:] == ["risk", "karar", "brief"]
 
 
-def test_empty_assessment_from_the_llm_is_not_labelled_as_automatic_summary() -> None:
-    brief = run(FakeProvider(draft([], assessment="")))
+PLACEHOLDERS = ["", "   ", "...", "…", "-", "Değerlendirme:", "T0122."]
 
-    assert brief.is_fallback is False
-    assert "otomatik özet" not in brief.text
-    assert not any(line.startswith("Değerlendirme") for line in brief.text.splitlines())
+
+@pytest.mark.parametrize("empty", PLACEHOLDERS)
+def test_empty_or_placeholder_assessment_falls_through_to_the_next_model(empty: str) -> None:
+    primary = FakeProvider(draft([], assessment=empty))
+    fallback = FakeProvider(draft([], assessment="T0122 üsse yaklaşan kamyon; kritik."))
+
+    brief = run(primary, fallback)
+
+    assert brief.model == f"{FALLBACK.provider}/{FALLBACK.model_id}"
+    assert "Değerlendirme: T0122 üsse yaklaşan kamyon; kritik." in brief.text
+
+
+def test_no_model_writing_a_real_assessment_gives_the_automatic_summary() -> None:
+    brief = run(FakeProvider(draft([], assessment="...")), FakeProvider(draft([], assessment="")))
+
+    assert brief.is_fallback is True
+    assert brief.model is None
+    assert brief.fallback_reason == "kullanılabilir model yok"
+    assert "(otomatik özet)" in brief.text
 
 
 def test_llm_cannot_lower_a_contact_that_a_report_has_raised() -> None:

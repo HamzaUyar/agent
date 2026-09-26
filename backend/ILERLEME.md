@@ -280,6 +280,13 @@
 - **Gerçek çalıştırma (Supabase, GLM-5.3'ün çıkardığı iddialar):** Kurallarla 2/2 seviye, 1/1 eşleşme, 5/5 rapor kararı. LLM ile de aynı sonuç, 13 sn, iki brief'i de GLM-5.3 yazdı. Sahte veride çelişkili rapor olmadığı için yakalama oranı ölçülemedi (0/0); o senaryo testlerde var.
 - Kod incelemesinde bulgu çıkmadı.
 
+### Proje incelemesi ve boş değerlendirme düzeltmesi
+- **İnceleme:** API gerçek Supabase ve EVREN ile uçtan uca çalıştırıldı: yeni değerlendirme 8 sn, önbellekten 1,7 sn, sohbet 23 sn (doğru araç seçimi), 404'ler doğru, 500 yok. Mantık katmanının test kapsamı %95–100; API, veritabanı ve script'ler (spec gereği) birim testi dışında, elle doğrulandı.
+- **Bulgu (düzeltildi):** GLM-5.3 değerlendirme paragrafını zaman zaman boş ya da "..." döndürüyordu (6 denemede 3); brief yine de "LLM yazdı" diye işaretleniyordu. Artık `DecisionDraft.assessment` en az 3 kelimelik gerçek bir paragraf istiyor (şemada `min_length=20`). Uymayan cevap zincirde sıradaki modele geçiyor, hiçbiri uymazsa otomatik özete düşülüyor. Canlı denemede 6/6 brief paragraflı.
+- **Bulgu (açık, R12):** Kaggle eğitim görüntülerinde görüntü başına ortanca 21 araç var. Track'i olmayan her araç en az orta, üsse < 2 km'de yüksek sayıldığı için kalabalık karelerde "kayıt dışı temas seli" oluşuyor. img_000860'a 25 sahte kutuyla denendi: 19 kayıt dışı temas yüksek, brief 29 satır.
+- **Bulgu (açık):** Paragraf metninde hâlâ olgu ve üslup hataları var: kaçırılmış temas T0200'e "kayıt dışı" deniyor, temas etiketleri (K1, K2) metne sızıyor, "muhtemel düzeyinde" gibi çeviri ifadeleri kullanılıyor. Brief'te mesafeler "1.6 km" diye yazılıyor ("1,6 km" olmalı).
+- **Karar:** Sıradaki iş, Kaggle eğitim görüntülerinden sentetik bir 2. aşama paketi üretmek (40 görüntü, track'ler, bilerek yanlış raporlar, otomatik etiketler) ve bütün pipeline'ı onunla koşturmak.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

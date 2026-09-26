@@ -38,6 +38,11 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 
 - [ ] Model ağırlıkları gelince: `pip install -e '.[model]'`, `.env`'de `DETECTOR_MODE=model` + `DETECTOR_WEIGHTS_PATH` (+ eğitim boyutu `DETECTOR_IMGSZ`), img_000860'ta kutunun (727, 284, 58, 34) civarında truck çıktığını doğrula; sınıf adları `CLASS_ALIASES`'ta yoksa ekle
 
+- [x] LLM'in boş ya da "..." değerlendirme paragrafı geçersiz sayılıyor, sıradaki modele geçiliyor
+- [ ] Sentetik 2. aşama paketi (Kaggle eğitim görüntülerinden 40 kare, track'ler, bilerek yanlış raporlar, otomatik etiketler) ve bütün pipeline'ın onunla koşturulması
+- [ ] Kayıt dışı temasların brief'te gruplanması ve kural ayarı (R12; sentetik paketin sonucuna göre karar)
+- [ ] Brief prompt'u: kaçırılmış ve kayıt dışı temas ayrımı, K1/K2 sızıntısı, "muhtemel" gibi çeviri ifadeleri; mesafelerde ondalık virgül
+
 ## Açık kararlar
 - [ ] Zaman kaydırıcılı risk haritası yapılacak mı (spec'te kapsam dışı, sonraya bırakıldı)?
 - [ ] Embedding modeli ve `report_claims.embedding` boyutu

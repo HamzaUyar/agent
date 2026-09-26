@@ -55,7 +55,9 @@ class SwitchableLLM:
         self.calls += 1
         if not self.working:
             raise RuntimeError("503")
-        return schema.model_validate({"adjustments": [], "assessment": "T0122 yaklaşıyor."})
+        return schema.model_validate(
+            {"adjustments": [], "assessment": "T0122 üsse yaklaşan kamyon."}
+        )
 
 
 def setup(
