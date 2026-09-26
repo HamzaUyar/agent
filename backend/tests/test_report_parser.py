@@ -261,12 +261,12 @@ def test_task_routing_comes_from_the_models_file() -> None:
         for task, names in CONFIG.tasks.items()
     }
 
-    # Metin görevleri GLM-5.3 ile başlar; VLM görüntü destekli bir modelle.
-    assert chains["report_parse"][0] == "glm-5.3"
-    assert chains["reasoning"][0] == "glm-5.3"
-    assert chains["chat"][0] == "glm-5.3"
-    assert chains["vision"][0] == "qwen3-vl-30b"
-    assert CONFIG.models[CONFIG.tasks["report_parse"][0]].provider == "evren"
+    # Görev tanımı s4: bütün görevler organizatör gateway'inin glm-5.3-flash'ıyla başlar
+    # (görüntü de okur, s7); EVREN yedektir.
+    for task, chain in chains.items():
+        assert chain[0] == "glm-5.3-flash", task
+        assert CONFIG.models[CONFIG.tasks[task][0]].provider == "glm", task
+        assert CONFIG.models[CONFIG.tasks[task][1]].provider == "evren", task
 
 
 def test_text_coordinates_are_kept_when_the_named_zone_is_unknown() -> None:
@@ -285,4 +285,32 @@ def test_model_specific_request_options_reach_the_provider() -> None:
     parser(llm).parse(report(TRUCK_TEXT))
 
     assert llm.extra_bodies == [PRIMARY.extra_body or None]
-    assert PRIMARY.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+    # Gateway'de düşünme kapatılamaz ve `thinking` hata verir (görev tanımı s11).
+    assert PRIMARY.extra_body == {"reasoning_effort": "low"}
+
+
+def test_negated_heavy_vehicle_claim_becomes_light() -> None:
+    """Gerçek veri: GLM "agir arac hareketi yok, yalnizca binek" raporunu "heavy" ayrıştırdı."""
+    llm = FakeProvider(
+        {
+            MODEL: {
+                "claims": [
+                    claim(location_type="zone", zone="Guneybati Yolu", vehicle_type="heavy"),
+                    claim(location_type="zone", zone="Guneybati Yolu", vehicle_type="car"),
+                ]
+            }
+        }
+    )
+    text = "Guneybati Yolu bolgesinde agir arac hareketi yok, yalnizca binek araclar goruluyor."
+
+    claims = parser(llm).parse(report(text)).claims
+
+    assert [c.vehicle_type for c in claims] == ["light", "light"]
+
+
+def test_affirmative_heavy_vehicle_claim_is_kept() -> None:
+    llm = FakeProvider({MODEL: {"claims": [claim(vehicle_type="heavy")]}})
+
+    [c] = parser(llm).parse(report("39.9253N 32.8718E cevresinde 1 agir arac bulunuyor.")).claims
+
+    assert c.vehicle_type == "heavy"

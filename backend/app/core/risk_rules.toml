@@ -1,6 +1,18 @@
 # Temel seviye tablosu ve hareket analizi eşikleri (ADR-0002: temel seviyeyi kurallar verir).
 # Gerçek veri geldiğinde değerlendirme setiyle ayarlanacak (ticket 13).
 
+[detection]
+# Altı yok sayılır; arası zayıf tespittir (yalnızca bir track'le eşleşirse temas sayılır).
+# Tespit bileşenleri modelden `app.pipelines.detection.MIN_CONFIDENCE` (0,25) ve üstünü ister;
+# daha düşük bir eşik o değer düşürülmeden işe yaramaz.
+min_confidence = 0.25
+strong_confidence = 0.50
+
+[matching]
+# Tespit, çekim anında en fazla bu kadar uzaktaki en yakın track'le eşleşir (görev tanımı s3:
+# "makul bir mesafe sınırı"). Gerçek veride eşleşmelerin ortancası 0,2 m, %90'ı 2,5 m altında.
+threshold_m = 15.0
+
 [trend]
 # Son `window_minutes` içinde üsse mesafe `threshold_m`'den fazla azaldıysa "yaklaşıyor".
 window_minutes = 30
@@ -10,7 +22,8 @@ stationary_displacement_m = 100
 
 [motion]
 history_minutes = 120
-recent_window_minutes = 10
+# Hız ve yön bu pencereden okunur; eğilimle aynı (görev tanımı s3: tek adımdan değil).
+recent_window_minutes = 30
 # Ardışık noktalar ilk noktadan bu kadar uzaklaşmadıysa duraklama sayılır.
 stop_displacement_m = 50
 stop_min_minutes = 10
@@ -21,8 +34,18 @@ stop_min_minutes = 10
 window_minutes = 120
 # İddianın konumu görüntüye ya da bir temasa bu kadar yakınsa ilgili sayılır.
 relevance_m = 500
-# Rapor saatinde bir temas iddianın konumuna bu kadar yakınsa iddia o temasa bağlanır.
+# İddia, çekim anında konumu iddia noktasına bu kadar yakın olan en yakın temasa bağlanır.
+# Gerçek veride koordinatlı raporların hepsi çekim anında bir temasa ≤ 54 m. Bu eşiğe ve
+# `match_m`'ye koordinatın yuvarlama payı eklenir (3 ondalıkta ~70 m, 5 ondalıkta < 1 m).
+bind_now_m = 60
+# Bağlanan temasın rapor saatindeki konumu iddia noktasına bu kadar yakınsa saat tutar.
 match_m = 150
+# "Uzun süredir hareketsiz" gibi süresi belirtilmemiş duraklama iddiası için en kısa süre (dk).
+long_stop_minutes = 30
+# Sayı iddiası: noktanın bu yarıçapındaki bütün temaslar sayılır (model tipleri karıştırabildiği
+# için tipten bağımsız). Görülen, iddianın bu oranından azsa sayı uyuşmuyor.
+count_radius_m = 30
+count_ratio = 0.5
 
 [brief]
 # LLM karar ayarı ve brief için süre sınırı (sn); aşılırsa otomatik özete geçilir.
@@ -39,3 +62,10 @@ unregistered_alert_m = 1000
 # Üsse `loiter_m`'den yakın bir yerde en az `loiter_minutes` duraklama: orta.
 loiter_minutes = 30
 loiter_m = 3000
+# Üs çevresinde dolaşma (görev tanımı s3): üsse mesafesi kayıt boyunca `circle_band_m` içinde
+# kalan, `loiter_m`'den yakın, en az `circle_min_extent_m` genişliğinde bir yay çizen ve en az
+# `circle_min_path_m` yol yapan araç: orta. Gerçek veride 6 track 1,6-2,6 km'de, mesafesi
+# 20 m'den az oynayarak 16-29 km yol yapıyor (yay 3,2-4,5 km); yerel trafik 600 m içinde kalır.
+circle_band_m = 300
+circle_min_path_m = 3000
+circle_min_extent_m = 1500

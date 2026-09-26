@@ -55,6 +55,8 @@ def image_at(image_id: str, at: time, center: GeoPoint) -> ImageMeta:
 
 
 class FakeDetector:
+    version = "test"
+
     def __init__(self, detections: dict[str, list[Detection]]) -> None:
         self._detections = detections
 
@@ -230,3 +232,25 @@ def test_frames_after_the_capture_time_are_not_used_for_type_history() -> None:
     assert contact.type_conflict is False
     assert contact.effective_label == "car"
     assert contact.base_level == "high"
+
+
+def test_neighbours_own_track_does_not_make_a_match_ambiguous() -> None:
+    """Yan yana iki araç, ikisinin de kendi track'i var: komşunun track'i bir alternatif
+    değildir. Gerçek veride bu yüzden tespitlerin %40'ı belirsiz sayılıyordu."""
+    package = read_package(FIXTURE)
+    near_truck = GeoPoint(39.925310, 32.871900)  # T0122'nin 14:10 konumuna ~6 m
+    package = replace(
+        package, track_points=[*package.track_points, TrackPoint("T0500", time(14, 10), near_truck)]
+    )
+    [image] = [m for m in package.images if m.image_id == "img_000860"]
+    c = image.corners
+    x = (near_truck.lon - c.top_left.lon) / (c.top_right.lon - c.top_left.lon) * image.width_px
+    y = (c.top_left.lat - near_truck.lat) / (c.top_left.lat - c.bottom_left.lat) * image.height_px
+    neighbour = det(VehicleClass.CAR, 0.9, x=x - 5, y=y - 5, w=10, h=10)
+
+    brief = evaluate({"img_000860": [det(VehicleClass.TRUCK, 0.9), neighbour]}, package)
+
+    tracks = {c.track_id: c for c in brief.contacts if c.kind == "matched"}
+    assert set(tracks) >= {"T0122", "T0500"}
+    assert tracks["T0122"].is_ambiguous is False
+    assert tracks["T0122"].certainty == "certain"

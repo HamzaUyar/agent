@@ -12,10 +12,11 @@ from pathlib import Path
 import psycopg
 
 from app.core.config import get_settings
-from app.data_package import IMAGES_DIR, check_consistency, read_package
+from app.data_package import check_consistency, read_package
 from app.db.session import connect
 from app.pipelines.geo import nearest_zone
 from app.schemas.domain import DataPackage, GeoPoint
+from app.storage import storage_path
 
 SOURCE_TABLES = ("field_reports", "track_points", "tracks", "images", "zones", "bases")
 
@@ -27,8 +28,14 @@ def _polygon_wkt(ring: list[GeoPoint]) -> str:
     return f"SRID=4326;POLYGON(({coords}))"
 
 
-def load(conn: psycopg.Connection, package: DataPackage, *, replace: bool = False) -> None:
-    """Paketi tek bir transaction içinde yazar."""
+def load(
+    conn: psycopg.Connection,
+    package: DataPackage,
+    *,
+    bucket: str,
+    replace: bool = False,
+) -> None:
+    """Paketi tek bir transaction içinde yazar; `file_path` Storage'daki yoldur (`bucket`)."""
     with conn.transaction(), conn.cursor() as cur:
         if replace:
             cur.execute(f"truncate {', '.join(f'public.{t}' for t in SOURCE_TABLES)} cascade")
@@ -73,7 +80,7 @@ def load(conn: psycopg.Connection, package: DataPackage, *, replace: bool = Fals
                         zone_id = excluded.zone_id""",
                 (
                     m.image_id,
-                    f"{IMAGES_DIR}/{m.image_id}.jpg",
+                    storage_path(bucket, f"{m.image_id}.jpg"),
                     m.width_px,
                     m.height_px,
                     m.capture_time,
@@ -150,7 +157,7 @@ def main() -> None:
         return
 
     with connect() as conn:
-        load(conn, package, replace=args.replace)
+        load(conn, package, bucket=get_settings().storage_bucket, replace=args.replace)
         counts = table_counts(conn)
     print("Yüklendi · " + " · ".join(f"{t}: {n}" for t, n in counts.items()))
 

@@ -13,4 +13,4 @@ Sebep: 2. aşama görev tanımı açıkça "park halindeki araçların hareket k
 ## Consequences
 
 - LLM karar prompt'u, bir aracı yalnızca track'i yok diye yükseltmemesini söylüyor. LLM yine de gerekçesiyle ±1 kademe değiştirebilir (ADR-0002).
-- Raporlar şu an kayıt dışı temaslara bağlanamıyor: bağlama, aracın rapor saatindeki track konumuna dayanıyor. Hakkında bir rapor olan kayıt dışı aracın riskini yükseltebilmek için bağlamanın genişletilmesi gerekiyor (TODO).
+- Raporlar artık kayıt dışı temaslara da bağlanıyor (ADR-0002 notu, çekim anındaki konum), ama etkileri seviyeye uygulanmıyor: rapor etkileri temasa track kimliğiyle işleniyor. Hakkında çelişkili bir rapor olan kayıt dışı aracın riskini yükseltmek için etkinin temasa track'siz de uygulanması gerekiyor (TODO).

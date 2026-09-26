@@ -153,7 +153,8 @@ def _print_event(t: Tracer, name: str, data: dict[str, Any], state: dict[str, An
             change = f" (30 dk önce {_km(then)})" if then is not None else ""
             t.line(
                 f"{tid}: {TREND_TR[mo['trend']]}, üsse {_km(mo['distance_to_base_m'])}{change}, "
-                f"son 10 dk {mo['recent_speed_mps']:.1f} m/s, {heading}"
+                f"son 30 dk {mo['recent_speed_mps']:.1f} m/s, ort. {mo['avg_speed_mps']:.1f} m/s, "
+                f"{heading}"
             )
             for st in mo["stops"]:
                 t.line(

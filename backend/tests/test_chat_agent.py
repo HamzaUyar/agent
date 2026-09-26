@@ -23,6 +23,8 @@ PRIMARY, FALLBACK = CHAIN[0], CHAIN[1]
 
 
 class FakeDetector:
+    version = "test"
+
     def detect(self, image: ImageMeta) -> list[Detection]:
         return [TRUCK] if image.image_id == "img_000860" else []
 
@@ -195,22 +197,34 @@ def test_answer_without_tags_is_used_as_is() -> None:
     assert list(chat.ask("Durum?"))[-1][1]["content"] == "Kritik durum."
 
 
+LEAKED = "The user asks X. I should answer in Turkish.**Sonuç:** Kritik."
+
+
 def test_leaked_reasoning_without_tags_is_cleaned_by_a_structured_call() -> None:
-    leaked = "The user asks X. I should answer in Turkish.**Sonuç:** Kritik."
-    llm = ScriptedLLM([answer(leaked)], cleaned="**Sonuç:** Kritik.")
-    chat, store = agent(llm)
+    """Yedek model (EVREN glm-5.3, düşünme kapalı) düşüncesini cevaba yazabiliyor."""
+    fallback = ScriptedLLM([answer(LEAKED)], cleaned="**Sonuç:** Kritik.")
+    chat, store = agent(ScriptedLLM([RuntimeError("503")]), fallback)
 
     events = list(chat.ask("Durum?"))
 
     assert events[-1][1]["content"] == "**Sonuç:** Kritik."
-    assert llm.cleaning_inputs == [leaked]
+    assert fallback.cleaning_inputs == [LEAKED]
 
 
 def test_when_cleaning_fails_the_answer_starts_at_the_result_marker() -> None:
-    leaked = "The user asks X. I should answer in Turkish.**Sonuç:** Kritik."
-    chat, _ = agent(ScriptedLLM([answer(leaked)]))
+    chat, _ = agent(ScriptedLLM([RuntimeError("503")]), ScriptedLLM([answer(LEAKED)]))
 
     assert list(chat.ask("Durum?"))[-1][1]["content"] == "**Sonuç:** Kritik."
+
+
+def test_gateway_answer_is_not_sent_to_a_second_cleaning_call() -> None:
+    """glm-5.3-flash düşüncesini `reasoning_content`'te ayrı verir (s11): cevap temizdir."""
+    assert PRIMARY.separate_reasoning
+    llm = ScriptedLLM([answer("**Sonuç:** Kritik.")], cleaned="başka")
+    chat, _ = agent(llm)
+
+    assert list(chat.ask("Durum?"))[-1][1]["content"] == "**Sonuç:** Kritik."
+    assert llm.cleaning_inputs == []
 
 
 def test_fallback_keeps_a_turkish_answer_that_mentions_the_result_marker_later() -> None:

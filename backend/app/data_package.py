@@ -12,6 +12,7 @@ from datetime import time
 from pathlib import Path
 from typing import Any
 
+from app.schemas.claims import ClaimRecord, ReportClaim
 from app.schemas.domain import (
     Base,
     Corners,
@@ -304,3 +305,38 @@ def check_consistency(package: DataPackage) -> ConsistencyReport:
         track_time_range=_time_range([p.time for p in package.track_points]),
         report_time_range=_time_range([r.time for r in package.reports]),
     )
+
+
+# --- Ayrıştırılmış iddialar (report_claims) ------------------------------------------
+
+
+def dump_claims(claims: list[ClaimRecord], path: Path) -> None:
+    """İddiaları JSON'a yazar; Supabase'siz çalışmak için (`scripts/export_claims.py`)."""
+    payload = [
+        {
+            "claim_id": c.claim_id,
+            "report": {
+                "time": format_hhmm(c.report.time),
+                "source": c.report.source.value,
+                "text": c.report.text,
+            },
+            "claim": c.claim.model_dump(),
+        }
+        for c in claims
+    ]
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+
+def load_claims(path: Path) -> list[ClaimRecord]:
+    return [
+        ClaimRecord(
+            int(item["claim_id"]),
+            FieldReport(
+                parse_hhmm(item["report"]["time"]),
+                ReportSource(item["report"]["source"]),
+                item["report"]["text"],
+            ),
+            ReportClaim.model_validate(item["claim"]),
+        )
+        for item in json.loads(path.read_text(encoding="utf-8"))
+    ]

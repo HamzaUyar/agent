@@ -50,7 +50,7 @@ def fetch_package(conn: psycopg.Connection) -> DataPackage:
 
         cur.execute(
             """select id, width_px, height_px, capture_time,
-                      tl_lat, tl_lon, tr_lat, tr_lon, bl_lat, bl_lon, br_lat, br_lon
+                      tl_lat, tl_lon, tr_lat, tr_lon, bl_lat, bl_lon, br_lat, br_lon, file_path
                from public.images order by id"""
         )
         images = [
@@ -65,6 +65,7 @@ def fetch_package(conn: psycopg.Connection) -> DataPackage:
                     bottom_left=GeoPoint(r[8], r[9]),
                     bottom_right=GeoPoint(r[10], r[11]),
                 ),
+                file_path=r[12],
             )
             for r in cur.fetchall()
         ]
@@ -144,14 +145,19 @@ class RunRecorder:
         steps = self._conn.execute(
             "select output from public.agent_steps where run_id = %s order by step_no", (uid,)
         ).fetchall()
-        return StoredRun(
-            run_id=str(row[0]),
-            image_id=row[1],
-            status=cast(RunStatus, row[2]),
-            steps=[StepEvent.model_validate(s[0]) for s in steps],
-            brief=Brief.model_validate(row[3]) if row[3] else None,
-            error=row[4],
-        )
+        try:
+            return StoredRun(
+                run_id=str(row[0]),
+                image_id=row[1],
+                status=cast(RunStatus, row[2]),
+                steps=[StepEvent.model_validate(s[0]) for s in steps],
+                brief=Brief.model_validate(row[3]) if row[3] else None,
+                error=row[4],
+            )
+        except ValidationError:
+            # Eski bir kod sürümünün kaydı; güncel şemaya uymuyor, yokmuş gibi davranılır.
+            logger.info("Kayıt atlandı, şema eski: %s", run_id)
+            return None
 
     def latest_cached(self, image_id: str, detector_version: str) -> StoredRun | None:
         """Aynı tespit bileşeniyle yapılmış son başarılı değerlendirme; LLM'in yazdığı brief
@@ -164,11 +170,9 @@ class RunRecorder:
             (image_id, detector_version),
         ).fetchall()
         for (run_id,) in rows:
-            try:
-                return self.get(str(run_id))
-            except ValidationError:
-                # Eski bir kod sürümünün kaydı; güncel şemaya uymuyor, önbellek sayılmaz.
-                logger.info("Önbellek atlandı, şema eski: %s", run_id)
+            # Güncel şemaya uymayan eski kayıtlar `get`'te None döner, önbellek sayılmaz.
+            if (run := self.get(str(run_id))) is not None:
+                return run
         return None
 
     def latest_levels(self) -> dict[str, RiskLevel]:
@@ -232,6 +236,15 @@ def replace_claims(
                     model_id,
                 ),
             )
+
+
+def update_claim_vehicle_type(conn: psycopg.Connection, claim_id: int, vehicle_type: str) -> None:
+    """Saklanmış bir iddianın araç tipini düzeltir (`parse_reports --renormalize`)."""
+    with conn.transaction():
+        conn.execute(
+            "update public.report_claims set vehicle_type = %s where id = %s",
+            (vehicle_type, claim_id),
+        )
 
 
 def fetch_claims(conn: psycopg.Connection) -> list[ClaimRecord]:

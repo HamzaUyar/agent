@@ -6,11 +6,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import FileResponse
 
+from app.api.stores import Stores
 from app.core.config import get_settings
 from app.data_package import IMAGES_DIR, find_image_file, format_hhmm
-from app.db.models import RunRecorder
 from app.db.repositories import DataRepository
-from app.db.session import connect
 from app.pipelines.geo import nearest_zone
 from app.schemas.api import (
     BaseInfo,
@@ -42,9 +41,14 @@ RepoDep = Annotated[DataRepository, Depends(get_repository)]
 ImagesDirDep = Annotated[Path, Depends(get_images_dir)]
 
 
-def _latest_levels() -> dict[str, RiskLevel]:
-    with connect() as conn:
-        return RunRecorder(conn).latest_levels()
+def get_stores(request: Request) -> Stores:
+    stores: Stores = request.app.state.stores
+    return stores
+
+
+def _latest_levels(stores: Stores) -> dict[str, RiskLevel]:
+    with stores.open() as (runs, _):
+        return runs.latest_levels()
 
 
 def _pair(p: GeoPoint) -> Pair:
@@ -69,9 +73,9 @@ def get_zones(repo: RepoDep) -> ZonesResponse:
 
 
 @router.get("/images", response_model=list[ImageSummary])
-def list_images(repo: RepoDep) -> list[ImageSummary]:
+def list_images(repo: RepoDep, request: Request) -> list[ImageSummary]:
     """Veri setindeki görüntüler: bölge, çekim saati ve varsa son değerlendirmenin seviyesi."""
-    levels = _latest_levels()
+    levels = _latest_levels(get_stores(request))
     zones = repo.zones()
     return [
         ImageSummary(

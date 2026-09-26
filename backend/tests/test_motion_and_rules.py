@@ -4,17 +4,20 @@ Senaryolar üssün doğusunda, bilinen mesafelerde kurulan track'lerle yazılır
 görüntünün ortasındaki tek bir temastan oluşur.
 """
 
+import json
 from dataclasses import replace
 from datetime import time
-from math import cos, radians
+from math import cos, radians, sin
 from pathlib import Path
 
 import pytest
 
+from app.agent.decision import build_input
 from app.agent.service import EvaluationService
 from app.core.rules import DEFAULT_RULES_PATH, LevelRules, RiskRules, load_rules
 from app.data_package import from_minutes, read_package, to_minutes
 from app.db.repositories import InMemoryRepository
+from app.formatting import km, mps
 from app.schemas.api import Brief
 from app.schemas.domain import (
     Corners,
@@ -75,6 +78,8 @@ def box_on(image: ImageMeta, point: GeoPoint, label: VehicleClass) -> Detection:
 
 
 class FakeDetector:
+    version = "test"
+
     def __init__(self, detections: dict[str, list[Detection]]) -> None:
         self._detections = detections
 
@@ -225,8 +230,12 @@ def test_t0122_motion_summary_matches_the_reference_example() -> None:
     [contact] = [c for c in brief.contacts if c.track_id == "T0122"]
     motion = contact.motion
     assert motion is not None
-    # Organizatör örneği: son 10 dakikada ~6 m/s, 13:15'te 45 dk ve 12:10'da 40 dk bekleme.
-    assert motion.recent_speed_mps == pytest.approx(6.4, abs=0.3)
+    # Organizatör örneği: 13:15'te 45 dk ve 12:10'da 40 dk bekleme. Hız son 30 dakikadan
+    # okunur (görev tanımı s3: tek adımdan değil): 20 dk'sı 13:15 duraklamasının sonu, bu
+    # yüzden yalnızca son 10 dakikaya bakan eski ölçümün ~6,4 m/s'si yerine ~2,1 m/s.
+    assert motion.recent_speed_mps == pytest.approx(2.1, abs=0.2)
+    assert motion.distance_to_base_30min_ago_m is not None
+    assert motion.distance_to_base_30min_ago_m > motion.distance_to_base_m  # yaklaşıyor
     stops = {(s.start, s.minutes) for s in motion.stops}
     assert ("12:10", 40) in stops
     assert ("13:15", 45) in stops
@@ -245,3 +254,113 @@ def test_stationary_contact_has_no_heading_and_one_long_stop() -> None:
     assert contact.motion.heading_deg is None
     assert [s.minutes for s in contact.motion.stops] == [120]
     assert contact.motion.recent_speed_mps == pytest.approx(0, abs=0.01)
+
+
+def test_llm_input_and_brief_carry_the_whole_track_motion_not_a_single_step() -> None:
+    """Görev tanımı s3: hız ve yön tek adımdan değil, kaydın tamamından okunur."""
+    truck = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
+    brief = EvaluationService(
+        InMemoryRepository(PACKAGE), FakeDetector({"img_000860": [truck]})
+    ).run("img_000860")
+    [contact] = [c for c in brief.contacts if c.track_id == "T0122"]
+    motion = contact.motion
+    assert motion is not None and motion.distance_to_base_30min_ago_m is not None
+
+    payload = json.loads(
+        build_input(brief.image_id, brief.zone, brief.capture_time, brief.contacts, [])
+    )
+    [facts] = [c for c in payload["contacts"] if c["track_id"] == "T0122"]
+    assert facts["avg_speed_mps"] == round(motion.avg_speed_mps, 1)
+    assert facts["distance_to_base_30min_ago_km"] == round(
+        motion.distance_to_base_30min_ago_m / 1000, 2
+    )
+    assert facts["heading_deg"] == round(motion.heading_deg or 0)
+
+    assert f"2 saatlik ortalama {mps(motion.avg_speed_mps)}" in brief.text
+    assert f"30 dk önce {km(motion.distance_to_base_30min_ago_m)}" in brief.text
+    # Görev tanımı s2 örneği yaklaşmayı bir saatlik farkla anlatır (12:25 → 13:25).
+    assert motion.distance_to_base_60min_ago_m is not None
+    assert facts["distance_to_base_60min_ago_km"] == round(
+        motion.distance_to_base_60min_ago_m / 1000, 2
+    )
+    assert f"1 saat önce {km(motion.distance_to_base_60min_ago_m)}" in brief.text
+
+
+# --- Üs çevresinde dolaşma (görev tanımı s3) -------------------------------------
+
+
+def around_base(radius_m: float, arc_m: float) -> list[TrackPoint]:
+    """12:10–14:10 arası, üssü `radius_m` uzaklıkta, `arc_m` uzunluğunda bir yay üzerinde
+    gidip gelen track: üsse mesafesi hiç değişmez."""
+    first, last = to_minutes(START), to_minutes(NOW)
+    points = []
+    for i, m in enumerate(range(first, last + 1, 5)):
+        # 0 → arc → 0 → arc ... her 6 adımda bir yön değiştirir.
+        leg, step = divmod(i, 6)
+        along = (step if leg % 2 == 0 else 6 - step) / 6 * arc_m
+        angle = along / radius_m
+        points.append(
+            TrackPoint(
+                "T9000",
+                from_minutes(m),
+                east_of_base(radius_m * cos(angle), radius_m * sin(angle)),
+            )
+        )
+    return points
+
+
+def circling_scenario(radius_m: float, arc_m: float) -> Brief:
+    points = around_base(radius_m, arc_m)
+    now = points[-1].location
+    image = image_on(now)
+    package = replace(PACKAGE, images=[image], track_points=points, reports=[])
+    service = EvaluationService(
+        InMemoryRepository(package),
+        FakeDetector({image.image_id: [box_on(image, now, VehicleClass.CAR)]}),
+    )
+    return service.run(image.image_id)
+
+
+def test_vehicle_circling_the_base_at_a_steady_distance_is_medium() -> None:
+    """Gerçek veride T0035, T0146, T0181: üsse ~1,7 km'de, mesafesi 20 m oynayarak 20 km yol."""
+    [contact] = circling_scenario(radius_m=1_800, arc_m=3_000).contacts
+
+    assert contact.motion is not None
+    assert contact.motion.trend != "approaching"
+    assert contact.motion.base_distance_max_m - contact.motion.base_distance_min_m < 50
+    assert contact.base_level == "medium"
+    assert "üs çevresinde sabit mesafede dolaşıyor" in contact.level_reasons[0]
+
+
+def test_local_back_and_forth_traffic_is_not_circling() -> None:
+    """Yerinde gidip gelen yerel trafik (600 m içinde) üssü dolaşmıyor."""
+    [contact] = circling_scenario(radius_m=1_800, arc_m=500).contacts
+
+    assert contact.base_level == "low"
+
+
+def test_circling_far_from_the_base_is_not_circling_the_base() -> None:
+    [contact] = circling_scenario(radius_m=4_000, arc_m=3_000).contacts
+
+    assert contact.base_level == "low"
+
+
+def test_match_and_confidence_thresholds_come_from_the_rules_file() -> None:
+    """Tespit track'ten 10 m uzakta: 15 m eşikte eşleşir, 5 m eşikte kayıt dışı kalır."""
+    points = track("T9000", 2_000, 2_000)
+    image = image_on(east_of_base(2_000))
+    box = replace(box_on(image, east_of_base(2_010), VehicleClass.CAR), confidence=0.45)
+    package = replace(PACKAGE, images=[image], track_points=points, reports=[])
+    defaults = load_rules()
+
+    def run(rules: RiskRules) -> list[str]:
+        service = EvaluationService(
+            InMemoryRepository(package), FakeDetector({image.image_id: [box]}), rules=rules
+        )
+        return [c.kind for c in service.run(image.image_id).contacts]
+
+    assert run(defaults) == ["matched"]  # zayıf (0,45) ama eşleşti
+    narrow = replace(defaults, matching=replace(defaults.matching, threshold_m=5.0))
+    assert run(narrow) == ["missed"]  # zayıf kutu eşleşmeyince düşer, track kaçırılmış
+    lenient = replace(narrow, detection=replace(defaults.detection, strong_confidence=0.4))
+    assert sorted(run(lenient)) == ["missed", "unregistered"]

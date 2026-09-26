@@ -1,14 +1,15 @@
 """LLM katmanı: görev → model zinciri, sağlayıcılar ve yedek modele geçiş.
 
-Ana sağlayıcı EVREN (SSB, OpenAI uyumlu uç nokta). Organizatörlerin GLM uç noktası
-da OpenAI uyumlu ayrı bir sağlayıcıdır. Claude modelleri, anahtar tanımlıysa, resmi
-`anthropic` SDK'sıyla çağrılır. Hangi görevde hangi modelin kullanılacağı
-`models.toml` dosyasındadır.
+Ana sağlayıcı organizatörlerin GLM gateway'i (OpenAI uyumlu, `glm-5.3-flash`); takım
+limitleri (`limits.py`) bu sağlayıcıya uygulanır. EVREN (SSB) OpenAI uyumlu yedek
+sağlayıcıdır. Claude modelleri, anahtar tanımlıysa, resmi `anthropic` SDK'sıyla çağrılır.
+Hangi görevde hangi modelin kullanılacağı `models.toml` dosyasındadır.
 """
 
 import base64
 import json
 import logging
+import re
 import time
 import tomllib
 from collections.abc import Callable, Mapping
@@ -17,10 +18,12 @@ from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 import anthropic
+import httpx
 import openai
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
+from app.llm.limits import GatewayLimits
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,13 @@ class ModelEntry:
     model_id: str
     extra_body: dict[str, Any] = field(default_factory=dict)
     """Sağlayıcıya olduğu gibi iletilen ek istek alanları (ör. düşünmeyi kapatmak)."""
+    separate_reasoning: bool = False
+    """Düşünce `reasoning_content`'te ayrı gelir; `content` doğrudan cevaptır (s11)."""
+
+    @property
+    def ref(self) -> str:
+        """Cevabı veren modelin adı: `sağlayıcı/model_id`."""
+        return f"{self.provider}/{self.model_id}"
 
 
 @dataclass(frozen=True)
@@ -54,6 +64,7 @@ def load_model_config(path: Path | None = None) -> ModelConfig:
             provider=m["provider"],
             model_id=m["model_id"],
             extra_body=dict(m.get("extra_body", {})),
+            separate_reasoning=bool(m.get("separate_reasoning", False)),
         )
         for name, m in raw["models"].items()
     }
@@ -176,16 +187,65 @@ class AnthropicProvider:
 MIN_OPENAI_COMPAT_TOKENS = 4096
 
 
+CODE_FENCE = re.compile(r"^\s*```[a-zA-Z]*\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)
+
+
+def strip_code_fence(text: str) -> str:
+    """glm-5.3-flash JSON'u json_schema istense de ```json ... ``` içinde döndürebiliyor."""
+    match = CODE_FENCE.match(text)
+    return match.group(1) if match else text
+
+
+# Karar ve VLM çağrıları 45 / 30 sn'de bırakılır, ama istek arka planda sürer ve gateway'in
+# 4 eşzamanlı yerinden birini tutar; SDK varsayılanı (600 sn) yerine bu sürede kesilir.
+REQUEST_TIMEOUT_S = 60.0
+
+
+UsageHook = Callable[[int, int], None]
+"""Cevaptaki girdi ve çıktı (düşünme dahil) token sayıları."""
+
+
 class OpenAICompatibleProvider:
     """OpenAI uyumlu uç nokta (EVREN, organizatör GLM'i); şema `json_schema` ile istenir."""
 
-    def __init__(self, api_key: str, base_url: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        *,
+        max_retries: int = openai.DEFAULT_MAX_RETRIES,
+        timeout_s: float = REQUEST_TIMEOUT_S,
+        on_usage: UsageHook | None = None,
+    ) -> None:
         self._api_key = api_key
         self._base_url = base_url
+        self._max_retries = max_retries
+        self._timeout_s = timeout_s
+        self._on_usage = on_usage
         self._client: openai.OpenAI | None = None
 
     def is_available(self) -> bool:
         return bool(self._api_key and self._base_url)
+
+    def _get_client(self) -> openai.OpenAI:
+        if self._client is None:
+            self._client = openai.OpenAI(
+                api_key=self._api_key,
+                base_url=self._base_url,
+                max_retries=self._max_retries,
+                timeout=self._timeout_s,
+            )
+        return self._client
+
+    def _message(self, response: Any, model_id: str) -> Any:
+        """Kullanımı bildirir; `max_tokens`'ta kesilmiş cevabı reddeder."""
+        if self._on_usage is not None and response.usage is not None:
+            self._on_usage(response.usage.prompt_tokens, response.usage.completion_tokens)
+        choice = response.choices[0]
+        if choice.finish_reason == "length":
+            # Düşünme de max_tokens'tan harcar; kesik JSON ya da yarım cevap kabul edilmez.
+            raise ValueError(f"{model_id} cevabı max_tokens sınırında kesildi")
+        return choice.message
 
     def complete_json(
         self,
@@ -197,8 +257,6 @@ class OpenAICompatibleProvider:
         extra_body: Mapping[str, Any] | None = None,
         image: bytes | None = None,
     ) -> BaseModel:
-        if self._client is None:
-            self._client = openai.OpenAI(api_key=self._api_key, base_url=self._base_url)
         json_schema = schema.model_json_schema()
         schema_text = json.dumps(json_schema, ensure_ascii=False)
         content: Any = user
@@ -210,7 +268,7 @@ class OpenAICompatibleProvider:
                     "image_url": {"url": f"data:image/jpeg;base64,{_b64(image)}"},
                 },
             ]
-        response = self._client.chat.completions.create(
+        response = self._get_client().chat.completions.create(
             model=model_id,
             max_tokens=max(max_tokens, MIN_OPENAI_COMPAT_TOKENS),
             response_format={
@@ -227,10 +285,11 @@ class OpenAICompatibleProvider:
                 {"role": "user", "content": content},
             ],
         )
-        text = response.choices[0].message.content
+        # Düşünce metni `reasoning_content`'te ayrı gelir; cevap yalnızca `content`'tir.
+        text = self._message(response, model_id).content
         if not text:
             raise ValueError(f"{model_id} boş cevap döndürdü")
-        return schema.model_validate_json(text)
+        return schema.model_validate_json(strip_code_fence(text))
 
     def chat(
         self,
@@ -240,11 +299,9 @@ class OpenAICompatibleProvider:
         max_tokens: int,
         extra_body: Mapping[str, Any] | None = None,
     ) -> ChatTurn:
-        if self._client is None:
-            self._client = openai.OpenAI(api_key=self._api_key, base_url=self._base_url)
         # Mesaj ve araç listeleri dinamik (dict) üretiliyor; SDK'nın aşırı yüklemeleri
         # TypedDict beklediği için bu çağrıda tip denetimini gevşetiyoruz.
-        completions: Any = self._client.chat.completions
+        completions: Any = self._get_client().chat.completions
         response = completions.create(
             model=model_id,
             max_tokens=max(max_tokens, MIN_OPENAI_COMPAT_TOKENS),
@@ -253,7 +310,7 @@ class OpenAICompatibleProvider:
             tool_choice="auto",
             extra_body=dict(extra_body) if extra_body else None,
         )
-        message = response.choices[0].message
+        message = self._message(response, model_id)
         calls = [
             ToolCall(id=c.id, name=c.function.name, arguments=c.function.arguments or "{}")
             for c in message.tool_calls or []
@@ -262,6 +319,113 @@ class OpenAICompatibleProvider:
         if not calls and not message.content:
             raise ValueError(f"{model_id} boş cevap döndürdü")
         return ChatTurn(content=message.content, tool_calls=calls)
+
+
+RATE_LIMIT_RETRIES = 4
+RATE_LIMIT_BACKOFF_S = 2.0
+
+# Geçici hatalar (görev tanımı s10): 429, 5xx, bağlantı ve zaman aşımı. Aynı modelde
+# beklenip yeniden denenir.
+TRANSIENT_ERRORS = (openai.RateLimitError, openai.InternalServerError, openai.APIConnectionError)
+
+
+def permanent_failure(exc: Exception) -> str | None:
+    """Süreç boyunca düzelmeyecek gateway hatasıysa sebebi (görev tanımı s10).
+
+    400 "Budget has been exceeded", 400 "key not allowed to access model" ve 401 (geçersiz
+    anahtar): bunlardan sonra her çağrı aynı hatayı alır.
+    """
+    if isinstance(exc, openai.AuthenticationError):
+        return "anahtar geçersiz (401)"
+    if isinstance(exc, openai.BadRequestError):
+        text = str(exc).lower()
+        if "budget" in text:
+            return "bütçe tükendi (400)"
+        if "not allowed to access model" in text:
+            return "model adına izin yok (400)"
+    return None
+
+
+class LimitedProvider:
+    """Sağlayıcıyı gateway limitleriyle sarar.
+
+    Geçici hatalarda (429, 5xx, bağlantı) aynı modelde üstel beklemeyle yeniden dener. Kalıcı
+    bir hatada (bütçe bitti, geçersiz anahtar, izinsiz model) sağlayıcıyı süreç boyunca kapatır;
+    zincir sıradaki modele geçer ve gateway'e boşuna istek gitmez.
+    İçteki SDK'nın kendi yeniden denemesi kapalı olmalı (`max_retries=0`); böylece her deneme
+    dakikalık sayaca girer. Beklerken eşzamanlılık yeri bırakılır.
+    """
+
+    def __init__(
+        self,
+        inner: Provider,
+        limits: GatewayLimits,
+        *,
+        retries: int = RATE_LIMIT_RETRIES,
+        backoff_s: float = RATE_LIMIT_BACKOFF_S,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._inner = inner
+        self._limits = limits
+        self._retries = retries
+        self._backoff_s = backoff_s
+        self._sleep = sleep
+        self.disabled_reason: str | None = None
+
+    def is_available(self) -> bool:
+        return self.disabled_reason is None and self._inner.is_available()
+
+    def disable(self, reason: str) -> None:
+        if self.disabled_reason is None:
+            logger.error("gateway devre dışı: %s", reason)
+        self.disabled_reason = reason
+
+    def _call(self, fn: Callable[[], R]) -> R:
+        for attempt in range(self._retries + 1):
+            try:
+                with self._limits.slot():
+                    return fn()
+            except TRANSIENT_ERRORS as exc:
+                if attempt == self._retries:
+                    raise
+                wait = self._backoff_s * 2**attempt
+                logger.warning("%s: %.0f sn sonra yeniden denenecek", type(exc).__name__, wait)
+                self._sleep(wait)
+            except openai.APIStatusError as exc:
+                if reason := permanent_failure(exc):
+                    self.disable(reason)
+                raise
+        raise AssertionError("unreachable")
+
+    def complete_json(
+        self,
+        model_id: str,
+        system: str,
+        user: str,
+        schema: type[BaseModel],
+        max_tokens: int,
+        extra_body: Mapping[str, Any] | None = None,
+        image: bytes | None = None,
+    ) -> BaseModel:
+        # Görüntüsüz çağrıda `image` iletilmez; sarılan sağlayıcının imzası değişmez.
+        extra: dict[str, Any] = {"image": image} if image is not None else {}
+        return self._call(
+            lambda: self._inner.complete_json(
+                model_id, system, user, schema, max_tokens, extra_body, **extra
+            )
+        )
+
+    def chat(
+        self,
+        model_id: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int,
+        extra_body: Mapping[str, Any] | None = None,
+    ) -> ChatTurn:
+        return self._call(
+            lambda: self._inner.chat(model_id, messages, tools, max_tokens, extra_body)
+        )
 
 
 class LLMUnavailableError(RuntimeError):
@@ -306,8 +470,12 @@ class LLMRouter:
                 task,
                 time.monotonic() - started,
             )
-            return result, f"{entry.provider}/{entry.model_id}"
+            return result, entry.ref
         raise LLMUnavailableError(task, attempts)
+
+    def separates_reasoning(self, model: str) -> bool:
+        """`model` (`sağlayıcı/model_id`) düşüncesini cevaptan ayrı mı veriyor."""
+        return any(e.separate_reasoning for e in self._config.models.values() if e.ref == model)
 
     def complete_json(
         self,
@@ -347,11 +515,54 @@ class LLMRouter:
         return self._run_chain(task, call)
 
 
-def build_router(settings: Settings | None = None, config: ModelConfig | None = None) -> LLMRouter:
+def fetch_gateway_budget(base_url: str, api_key: str) -> tuple[float, float] | None:
+    """Gateway'in gerçek harcaması ve bütçesi (`/key/info`, görev tanımı s4); okunamazsa `None`."""
+    root = base_url.rstrip("/").removesuffix("/v1")
+    try:
+        response = httpx.get(
+            f"{root}/key/info", headers={"Authorization": f"Bearer {api_key}"}, timeout=10
+        )
+        response.raise_for_status()
+        info = response.json().get("info", response.json())
+        return float(info["spend"]), float(info["max_budget"])
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        logger.warning("gateway bütçesi okunamadı: %s", exc)
+        return None
+
+
+def build_router(
+    settings: Settings | None = None,
+    config: ModelConfig | None = None,
+    *,
+    check_budget: bool = False,
+) -> LLMRouter:
+    """`check_budget`: gateway'in gerçek harcaması açılışta bir kez `/key/info`'dan okunur."""
     s = settings or get_settings()
+    glm_limits = GatewayLimits(
+        max_concurrent=s.glm_max_concurrent,
+        per_minute=s.glm_requests_per_minute,
+        tokens_per_minute=s.glm_tokens_per_minute,
+        budget_usd=s.glm_budget_usd,
+        price_input_per_mtok=s.glm_price_input_per_mtok,
+        price_output_per_mtok=s.glm_price_output_per_mtok,
+    )
+    glm = OpenAICompatibleProvider(
+        s.glm_api_key.get_secret_value(),
+        s.glm_api_base,
+        max_retries=0,
+        on_usage=glm_limits.record_usage,
+    )
+    gateway = LimitedProvider(glm, glm_limits)
+    if glm.is_available() and check_budget:
+        budget = fetch_gateway_budget(s.glm_api_base, s.glm_api_key.get_secret_value())
+        if budget is not None:
+            spend, max_budget = budget
+            logger.info("gateway bütçesi: %.2f / %.2f USD harcandı", spend, max_budget)
+            if spend >= max_budget:
+                gateway.disable(f"bütçe tükendi ({spend:.2f} / {max_budget:.2f} USD)")
     providers: dict[str, Provider] = {
         "evren": OpenAICompatibleProvider(s.evren_api_key.get_secret_value(), s.evren_api_base),
-        "glm": OpenAICompatibleProvider(s.glm_api_key.get_secret_value(), s.glm_api_base),
+        "glm": gateway,
         "anthropic": AnthropicProvider(s.anthropic_api_key.get_secret_value()),
     }
     return LLMRouter(config or load_model_config(), providers)

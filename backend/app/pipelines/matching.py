@@ -28,7 +28,7 @@ class MatchResult:
     second: Candidate | None
     """En yakın ikinci track (eşikten bağımsız), brief'te aday olarak gösterilir."""
     ambiguous: bool = False
-    """Eşik içinde birden fazla track vardı (belirsiz eşleşme)."""
+    """Eşik içinde başka tespite atanmamış birden fazla track vardı (belirsiz eşleşme)."""
 
 
 def match_detections(
@@ -72,6 +72,13 @@ def match_detections(
             second = next((c for c in ranked if c.track_id != track.track_id), None)
         else:
             second = ranked[1] if len(ranked) > 1 else None
-        within = sum(1 for c in ranked if c.distance_m <= threshold_m)
+        # Belirsizlik: eşik içinde, başka bir tespite atanmamış birden fazla aday. Komşu aracın
+        # kendi track'i bu tespit için bir alternatif değildir.
+        free = {track.track_id} if track else set()
+        within = sum(
+            1
+            for c in ranked
+            if c.distance_m <= threshold_m and (c.track_id not in taken or c.track_id in free)
+        )
         results.append(MatchResult(located=item, track=track, second=second, ambiguous=within > 1))
     return results

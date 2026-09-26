@@ -1,7 +1,10 @@
 """LLM karar ayarı (ADR-0002): kodun seviyesini en fazla bir kademe, gerekçesiyle değiştirir.
 
 LLM önerir, kod doğrular. Bir kademeden fazla değişiklik ve kanıtsız düşürme reddedilir.
-Düşürme için kanıt, o temasa bağlı ve kararı "consistent" olan bir rapor iddiasıdır.
+Düşürme için kanıt, o temasa bağlı, kararı "consistent" ve saati tutan (`time_check` ok) bir
+rapor iddiasıdır. Yükseltmede kanıt zorunlu değildir; ama gösterilen rapor o temasa ait ve
+çelişkisiz olmalıdır: başka temasın raporu ya da tespitle çelişen rapor yükseltme
+gerekçesi olamaz (görev tanımı s2: çelişkide tespit esas).
 LLM cevap vermezse ya da süre aşılırsa `DecisionUnavailableError` fırlatılır; servis
 otomatik özete geçer.
 """
@@ -14,6 +17,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.formatting import km
 from app.llm.client import LLMRouter, LLMUnavailableError
 from app.pipelines.risk import LEVELS
 from app.schemas.api import ContactFinding, ReportFinding
@@ -28,7 +32,8 @@ class LevelProposal(BaseModel):
     level: RiskLevel
     reason: str
     evidence_claim_ids: list[int] = Field(
-        description="Düşürme için: bu temasa bağlı, kararı consistent olan iddiaların kimlikleri"
+        description="Dayanılan rapor iddiaları: düşürmede zorunlu (bu temasa bağlı, consistent, "
+        "time_check ok); yükseltmede verilirse bu temasa bağlı ve çelişkisiz olmalı"
     )
 
 
@@ -85,13 +90,33 @@ def _contact_facts(i: int, c: ContactFinding) -> dict[str, object]:
         "certainty": c.certainty,
         "distance_to_base_km": round(c.distance_to_base_m / 1000, 2),
         "trend": motion.trend if motion else None,
+        "distance_to_base_60min_ago_km": (
+            round(motion.distance_to_base_60min_ago_m / 1000, 2)
+            if motion and motion.distance_to_base_60min_ago_m is not None
+            else None
+        ),
+        "distance_to_base_30min_ago_km": (
+            round(motion.distance_to_base_30min_ago_m / 1000, 2)
+            if motion and motion.distance_to_base_30min_ago_m is not None
+            else None
+        ),
         "recent_speed_mps": round(motion.recent_speed_mps, 1) if motion else None,
+        "avg_speed_mps": round(motion.avg_speed_mps, 1) if motion else None,
+        "heading_deg": round(motion.heading_deg)
+        if motion and motion.heading_deg is not None
+        else None,
         "stops": [
-            f"{s.start} ({s.minutes} dk, üsse {s.distance_to_base_m / 1000:.1f} km)"
-            for s in motion.stops
+            f"{s.start} ({s.minutes} dk, üsse {km(s.distance_to_base_m)})" for s in motion.stops
         ]
         if motion
         else [],
+        "base_distance_range_km": [
+            round(motion.base_distance_min_m / 1000, 2),
+            round(motion.base_distance_max_m / 1000, 2),
+        ]
+        if motion
+        else None,
+        "zones_passed": motion.zones_passed if motion else [],
         "level": c.final_level,
         "level_reasons": c.level_reasons,
         "verified_friend": c.verified_friend,
@@ -119,6 +144,7 @@ def build_input(
                 "claim_type": f.claim_type,
                 "track_id": f.track_id,
                 "verdict": f.verdict,
+                "time_check": f.time_check,
                 "reasoning": f.reasoning,
             }
             for f in findings
@@ -134,6 +160,17 @@ def _validate(
     step = LEVELS.index(proposal.level) - LEVELS.index(contact.final_level)
     if abs(step) > 1:
         return f"{contact.final_level} → {proposal.level}: bir kademeden fazla değişiklik önerildi"
+    if step > 0 and proposal.evidence_claim_ids:
+        usable = {
+            f.claim_id
+            for f in findings
+            if contact.track_id and f.track_id == contact.track_id and f.verdict != "contradicts"
+        }
+        if not set(proposal.evidence_claim_ids) <= usable:
+            return (
+                f"{contact.final_level} → {proposal.level}: gösterilen rapor bu temasa ait değil "
+                "ya da tespitle çelişiyor"
+            )
     if step < 0:
         linked = [f for f in findings if contact.track_id and f.track_id == contact.track_id]
         if any(f.effect == "raises" for f in linked):
@@ -142,17 +179,23 @@ def _validate(
                 f"{contact.final_level} → {proposal.level}: raporlar bu temasın riskini "
                 "yükseltti, düşürülemez"
             )
-        usable = {
-            f.claim_id
+        about = {
+            f.claim_id: f
             for f in findings
             if f.verdict == "consistent" and contact.track_id and f.track_id == contact.track_id
         }
         if not proposal.evidence_claim_ids:
             return f"{contact.final_level} → {proposal.level}: düşürme için kanıt gösterilmedi"
-        if not set(proposal.evidence_claim_ids) <= usable:
+        if not set(proposal.evidence_claim_ids) <= about.keys():
             return (
                 f"{contact.final_level} → {proposal.level}: gösterilen kanıt bu temasa bağlı "
                 "tutarlı bir rapor değil"
+            )
+        if any(about[i].time_check != "ok" for i in proposal.evidence_claim_ids):
+            # Rapor saatinde araç orada değilse ya da bilinmiyorsa iddia bu araca ait olmayabilir.
+            return (
+                f"{contact.final_level} → {proposal.level}: gösterilen raporun saati temasın "
+                "o saatteki konumuyla doğrulanamadı"
             )
     return None
 

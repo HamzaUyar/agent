@@ -40,6 +40,7 @@ class StopFinding(BaseModel):
 class MotionFinding(BaseModel):
     distance_to_base_m: float
     distance_to_base_30min_ago_m: float | None
+    distance_to_base_60min_ago_m: float | None
     trend: Trend
     route: list[RoutePoint] = Field(default_factory=list)
     """Çekim anına kadarki kayıtlı noktalar, zamana göre sıralı (ADR-0001)."""
@@ -49,6 +50,15 @@ class MotionFinding(BaseModel):
     heading_deg: float | None
     stops: list[StopFinding] = Field(default_factory=list)
     zones_passed: list[str] = Field(default_factory=list)
+    # Çekim anında süren duraklamanın süresi (dk); duraklamada değilse yok.
+    current_stop_minutes: int | None
+    # Süren duraklama bilinen ilk noktadan beri sürüyor: gerçek süre en az bu kadar.
+    stop_open_ended: bool
+    # Kaydın tamamında üsse en yakın ve en uzak mesafe (m).
+    base_distance_min_m: float
+    base_distance_max_m: float
+    # Kaydın kapsadığı alan: birbirine en uzak iki noktanın arası (m).
+    extent_m: float
 
 
 class LabelObservation(BaseModel):
@@ -103,6 +113,7 @@ class ContactFinding(BaseModel):
 
 Verdict = Literal["consistent", "contradicts", "unverifiable", "irrelevant"]
 Effect = Literal["raises", "lowers", "none"]
+TimeCheck = Literal["ok", "mismatch", "unknown"]
 
 
 class ReportFinding(BaseModel):
@@ -117,6 +128,8 @@ class ReportFinding(BaseModel):
     verdict: Verdict
     certainty: Certainty
     effect: Effect
+    # Bağlanan temasın rapor saatindeki konumu iddiayla uyuşuyor mu.
+    time_check: TimeCheck
     reasoning: str
 
 

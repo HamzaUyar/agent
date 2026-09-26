@@ -9,6 +9,17 @@ DEFAULT_RULES_PATH = Path(__file__).with_name("risk_rules.toml")
 
 
 @dataclass(frozen=True)
+class DetectionRules:
+    min_confidence: float
+    strong_confidence: float
+
+
+@dataclass(frozen=True)
+class MatchingRules:
+    threshold_m: float
+
+
+@dataclass(frozen=True)
 class TrendRules:
     window_minutes: int
     threshold_m: float
@@ -27,7 +38,11 @@ class MotionRules:
 class ReportRules:
     window_minutes: int
     relevance_m: float
+    bind_now_m: float
     match_m: float
+    long_stop_minutes: int
+    count_radius_m: float
+    count_ratio: float
 
 
 @dataclass(frozen=True)
@@ -44,10 +59,15 @@ class LevelRules:
     unregistered_alert_m: float
     loiter_minutes: int
     loiter_m: float
+    circle_band_m: float
+    circle_min_path_m: float
+    circle_min_extent_m: float
 
 
 @dataclass(frozen=True)
 class RiskRules:
+    detection: DetectionRules
+    matching: MatchingRules
     trend: TrendRules
     motion: MotionRules
     reports: ReportRules
@@ -60,6 +80,8 @@ def load_rules(path: Path | None = None) -> RiskRules:
     with (path or DEFAULT_RULES_PATH).open("rb") as f:
         raw = tomllib.load(f)
     return RiskRules(
+        detection=DetectionRules(**raw["detection"]),
+        matching=MatchingRules(**raw["matching"]),
         trend=TrendRules(**raw["trend"]),
         motion=MotionRules(**raw["motion"]),
         reports=ReportRules(**raw["reports"]),

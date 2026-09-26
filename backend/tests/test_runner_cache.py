@@ -23,6 +23,8 @@ PRIMARY = CONFIG.models[CONFIG.tasks["reasoning"][0]]
 
 
 class CountingDetector:
+    version = "test"
+
     version = "fake-1"
 
     def __init__(self) -> None:

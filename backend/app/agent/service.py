@@ -7,14 +7,16 @@ olay yapılandırılmış Brief'i taşır. Çekim anından sonraki veri okunmaz 
 import logging
 from collections import defaultdict
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import time
 
 from app.agent.decision import DecisionUnavailableError, decide
 from app.core.rules import RiskRules, default_rules
 from app.data_package import TRACK_STEP_MINUTES, format_hhmm, from_minutes, to_minutes
 from app.db.repositories import DataRepository
+from app.formatting import km, mps
 from app.llm.client import LLMRouter
-from app.pipelines.detection import MIN_CONFIDENCE, Detector, ImageFileMissingError, is_weak
+from app.pipelines.detection import Detector, ImageFileMissingError
 from app.pipelines.geo import distance_m, in_footprint, nearest_zone, pixel_to_geo
 from app.pipelines.matching import LocatedDetection, MatchResult, match_detections
 from app.pipelines.motion import Position, analyze_motion, positions_at
@@ -48,6 +50,8 @@ from app.schemas.domain import (
 logger = logging.getLogger(__name__)
 
 BRIEF_STEP = "brief"
+# Aynı anda en fazla bu kadar görsel doğrulama; gateway de 4 eşzamanlı istek kabul ediyor.
+VISUAL_WORKERS = 4
 
 LEVEL_TR = {"low": "DÜŞÜK", "medium": "ORTA", "high": "YÜKSEK", "critical": "KRİTİK"}
 TREND_TR = {
@@ -136,7 +140,7 @@ class EvaluationService:
         )
 
         detected = self._detector.detect(image)
-        usable = [d for d in detected if d.confidence >= MIN_CONFIDENCE]
+        usable = self._usable(detected)
         ignored = len(detected) - len(usable)
         yield emit(
             "tespit",
@@ -147,7 +151,7 @@ class EvaluationService:
                     "label": d.label.value,
                     "confidence": d.confidence,
                     "bbox": [d.x, d.y, d.w, d.h],
-                    "weak": is_weak(d),
+                    "weak": self._is_weak(d),
                 }
                 for d in usable
             ],
@@ -171,12 +175,25 @@ class EvaluationService:
 
         matches, positions = self._match(located, now)
         # Track'le eşleşen zayıf tespit VLM'e sorulur; araç değilse kutu düşer ve track
-        # kaçırılmış temas olarak kalır.
+        # kaçırılmış temas olarak kalır. Kutular paralel sorulur: her çağrı ~10 sn sürer.
+        if self._verifier is not None:
+            weak = list(
+                dict.fromkeys(
+                    _bbox(m.located.detection)
+                    for m in matches
+                    if m.track and self._is_weak(m.located.detection)
+                )
+            )
+            if weak:
+                verifier = self._verifier
+                with ThreadPoolExecutor(max_workers=VISUAL_WORKERS) as pool:
+                    found = pool.map(lambda box: verifier.inspect(image, box), weak)
+                    visuals.update(zip(weak, found, strict=True))
         not_vehicles = [
             m
             for m in matches
             if m.track
-            and is_weak(m.located.detection)
+            and self._is_weak(m.located.detection)
             and (v := look(_bbox(m.located.detection))) is not None
             and not v.is_vehicle
         ]
@@ -218,8 +235,7 @@ class EvaluationService:
         yield emit(
             "hareket",
             "; ".join(
-                f"{c.track_id}: {TREND_TR[c.motion.trend]}, "
-                f"üsse {c.motion.distance_to_base_m / 1000:.1f} km"
+                f"{c.track_id}: {TREND_TR[c.motion.trend]}, üsse {km(c.motion.distance_to_base_m)}"
                 for c in contacts
                 if c.motion and c.track_id
             )
@@ -252,6 +268,7 @@ class EvaluationService:
                     track_id=c.track_id,
                     label=VehicleClass(c.effective_label) if c.effective_label else None,
                     location=GeoPoint(c.location.lat, c.location.lon),
+                    motion=c.motion,
                 )
                 for c in contacts
             ],
@@ -261,6 +278,7 @@ class EvaluationService:
             rules=self._rules.reports,
             position_at=self._position_at,
             observe=lambda track_id: look(boxes[track_id]) if track_id in boxes else None,
+            in_frame=lambda point: in_footprint(image, point),
         )
         contacts = [
             _apply_report_effects(
@@ -366,11 +384,19 @@ class EvaluationService:
                 assessment,
                 automatic=model is None,
             ),
-            sources=_sources(contacts, findings),
+            sources=_sources(self._detector.version, contacts, findings),
         )
         yield emit(BRIEF_STEP, f"Risk: {LEVEL_TR[level]} · {action}", **brief.model_dump())
 
     # --- adımlar ----------------------------------------------------------------
+
+    def _usable(self, detected: list[Detection]) -> list[Detection]:
+        """Güveni `min_confidence`'ın altındaki kutular yok sayılır."""
+        return [d for d in detected if d.confidence >= self._rules.detection.min_confidence]
+
+    def _is_weak(self, detection: Detection) -> bool:
+        """Zayıf tespit: yalnızca bir track'le eşleşirse temas sayılır."""
+        return detection.confidence < self._rules.detection.strong_confidence
 
     def _position_at(self, track_id: str, at: time) -> GeoPoint | None:
         """Track'in `at` anındaki ya da en fazla bir adım önceki konumu."""
@@ -393,11 +419,15 @@ class EvaluationService:
         since = from_minutes(to_minutes(now) - 2 * TRACK_STEP_MINUTES)
         positions = positions_at(self._repo.track_points_between(since, now), now)
         points = [TrackPoint(p.track_id, now, p.location) for p in positions]
-        strong = match_detections([d for d in located if not is_weak(d.detection)], points)
+        threshold = self._rules.matching.threshold_m
+        strong = match_detections(
+            [d for d in located if not self._is_weak(d.detection)], points, threshold
+        )
         taken = {m.track.track_id for m in strong if m.track}
         weak = match_detections(
-            [d for d in located if is_weak(d.detection)],
+            [d for d in located if self._is_weak(d.detection)],
             [p for p in points if p.track_id not in taken],
+            threshold,
         )
         matches = strong + [m for m in weak if m.track is not None]
         return matches, positions
@@ -414,7 +444,7 @@ class EvaluationService:
                 # Önceki karenin dosyası yoksa yalnızca tip geçmişi eksik kalır.
                 logger.warning("Tip geçmişi: %s atlandı, dosya yok", frame.image_id)
                 continue
-            usable = [d for d in detected if d.confidence >= MIN_CONFIDENCE]
+            usable = self._usable(detected)
             matches, _ = self._match(self._locate(frame, usable), frame.capture_time)
             for m in matches:
                 if m.track:
@@ -430,9 +460,11 @@ class EvaluationService:
         since = from_minutes(to_minutes(now) - rules.motion.history_minutes)
         history = self._repo.track_history(track_id, until=now, since=since)
         m = analyze_motion(history, base, now, self._repo.zones(), rules.trend, rules.motion)
+        ongoing = m.stops[-1] if m.stops and m.stops[-1].end == history[-1].time else None
         return MotionFinding(
             distance_to_base_m=m.distance_to_base_m,
             distance_to_base_30min_ago_m=m.distance_to_base_window_ago_m,
+            distance_to_base_60min_ago_m=m.distance_to_base_hour_ago_m,
             trend=m.trend,
             route=[
                 RoutePoint(lat=p.location.lat, lon=p.location.lon, time=format_hhmm(p.time))
@@ -454,6 +486,11 @@ class EvaluationService:
                 for s in m.stops
             ],
             zones_passed=m.zones_passed,
+            current_stop_minutes=ongoing.minutes if ongoing else None,
+            stop_open_ended=ongoing is not None and ongoing.start == history[0].time,
+            base_distance_min_m=m.base_distance_min_m,
+            base_distance_max_m=m.base_distance_max_m,
+            extent_m=m.extent_m,
         )
 
     def _loiter_minutes(self, motion: MotionFinding | None) -> int:
@@ -464,6 +501,23 @@ class EvaluationService:
             s.minutes for s in motion.stops if s.distance_to_base_m < self._rules.levels.loiter_m
         ]
         return max(near, default=0)
+
+    def _circling_path_m(self, motion: MotionFinding | None) -> float:
+        """Üssün çevresinde dar bir mesafe bandında kalarak gidilen yol; dolaşmıyorsa 0.
+
+        Görev tanımı s3: araçlar üs çevresinde dolaşır. Üsse mesafesi kayıt boyunca
+        `circle_band_m` içinde kalan, `loiter_m`'den yakın ve en az `circle_min_extent_m`
+        genişliğinde bir yay çizen araç dolaşıyordur; yerinde gidip gelen yerel trafik değil.
+        """
+        t = self._rules.levels
+        if (
+            motion is None
+            or motion.base_distance_max_m >= t.loiter_m
+            or motion.base_distance_max_m - motion.base_distance_min_m > t.circle_band_m
+            or motion.extent_m < t.circle_min_extent_m
+        ):
+            return 0.0
+        return motion.total_distance_m
 
     def _detection_contact(
         self,
@@ -489,6 +543,7 @@ class EvaluationService:
             motion.trend if motion else None,
             registered=track_id is not None,
             loiter_minutes_near_base=self._loiter_minutes(motion),
+            circling_path_m=self._circling_path_m(motion),
             rules=self._rules.levels,
         )
         position_estimated = track_id in estimated
@@ -499,7 +554,7 @@ class EvaluationService:
             confidence=det.confidence,
             bbox=(det.x, det.y, det.w, det.h),
             location=_latlon(location),
-            is_weak=is_weak(det),
+            is_weak=self._is_weak(det),
             is_ambiguous=match.ambiguous,
             position_estimated=position_estimated,
             type_conflict=len(labels) > 1,
@@ -518,7 +573,7 @@ class EvaluationService:
             final_level=decision.level,
             level_reasons=decision.reasons,
             certainty=_certainty(
-                weak=is_weak(det),
+                weak=self._is_weak(det),
                 uncertain=match.ambiguous or position_estimated or track_id is None,
                 confirmed=visual is not None and visual.is_vehicle,
             ),
@@ -534,6 +589,7 @@ class EvaluationService:
             motion.trend,
             registered=True,
             loiter_minutes_near_base=self._loiter_minutes(motion),
+            circling_path_m=self._circling_path_m(motion),
             rules=self._rules.levels,
         )
         return ContactFinding(
@@ -554,30 +610,28 @@ class EvaluationService:
         )
 
 
-def _raise(level: RiskLevel, floor: RiskLevel) -> RiskLevel:
-    return max(level, floor, key=LEVELS.index)
-
-
 def _apply_report_effects(
     contact: ContactFinding, evaluations: list[ClaimEvaluation]
 ) -> ContactFinding:
-    """Rapor etkilerini temasın seviyesine uygular; riski artıran etki düşüreni ezer."""
+    """Rapor etkilerini temasın seviyesine uygular; riski artıran etki düşüreni ezer.
+
+    Çelişen rapor seviyeyi değiştirmez (görev tanımı s2: tespit esas alınır), ama aynı temas
+    hakkındaki başka bir raporun riski düşürmesini engeller.
+    """
     linked = [e for e in evaluations if contact.track_id and e.track_id == contact.track_id]
     if not linked:
         return contact
     level = contact.final_level
     reasons = list(contact.level_reasons)
-    raised = False
-    if any(e.verdict == "contradicts" for e in linked):
-        level = _raise(level, "high")
-        reasons.append("rapor bu temasla çelişiyor (olası yanıltma)")
-        raised = True
-    if any(e.effect == "raises" and e.verdict != "contradicts" for e in linked):
+    contradicted = any(e.verdict == "contradicts" for e in linked)
+    if contradicted:
+        reasons.append("rapor tespitle çelişiyor; tespit esas alındı")
+    raised = any(e.effect == "raises" for e in linked)
+    if raised:
         level = LEVELS[min(LEVELS.index(level) + 1, len(LEVELS) - 1)]
         reasons.append("tehdit uyarısı")
-        raised = True
     verified_friend = False
-    if not raised and any(e.effect == "lowers" for e in linked):
+    if not raised and not contradicted and any(e.effect == "lowers" for e in linked):
         level, verified_friend = "low", True
         reasons.append("doğrulanmış dost (resmi rapor)")
     return contact.model_copy(
@@ -596,6 +650,7 @@ def _finding(e: ClaimEvaluation) -> ReportFinding:
         verdict=e.verdict,
         certainty=e.certainty,
         effect=e.effect,
+        time_check=e.time_check,
         reasoning=e.reasoning,
     )
 
@@ -606,6 +661,18 @@ VERDICT_TR = {
     "unverifiable": "doğrulanamaz",
     "irrelevant": "ilgisiz",
 }
+
+
+TIME_TR = {
+    "ok": "saat tutuyor",
+    "mismatch": "araç rapor saatinde başka yerdeydi",
+    "unknown": "saat bilinmiyor",
+}
+
+
+def _time_tag(f: ReportFinding) -> str:
+    """Bir temasa bağlanmış iddianın rapor saatindeki konum kontrolü."""
+    return f", {TIME_TR[f.time_check]}" if f.track_id else ""
 
 
 def _reports_summary(findings: list[ReportFinding]) -> str:
@@ -649,7 +716,18 @@ def _contact_notes(c: ContactFinding) -> list[str]:
 
 
 def _movement_text(m: MotionFinding) -> str:
-    parts = [TREND_TR[m.trend], f"son dönem {m.recent_speed_mps:.1f} m/s"]
+    parts = [TREND_TR[m.trend]]
+    if m.distance_to_base_30min_ago_m is not None:
+        hour = (
+            f"1 saat önce {km(m.distance_to_base_60min_ago_m)}, "
+            if m.distance_to_base_60min_ago_m is not None
+            else ""
+        )
+        parts.append(
+            f"üsse uzaklık {hour}30 dk önce {km(m.distance_to_base_30min_ago_m)}, "
+            f"şimdi {km(m.distance_to_base_m)}"
+        )
+    parts.append(f"son 30 dk {mps(m.recent_speed_mps)}, 2 saatlik ortalama {mps(m.avg_speed_mps)}")
     if m.heading_deg is not None:
         parts.append(f"yön {m.heading_deg:.0f}°")
     if m.stops:
@@ -686,7 +764,7 @@ def _brief_text(
         if c.adjustment_reason:
             notes.append(f"LLM ayarı: {c.adjustment_reason.rstrip('. ')}")
         lines.append(
-            f"- {who} ({label}): üsse {c.distance_to_base_m / 1000:.1f} km, {movement}; "
+            f"- {who} ({label}): üsse {km(c.distance_to_base_m)}, {movement}; "
             f"seviye {LEVEL_TR[c.final_level]} ({'; '.join(c.level_reasons)})."
             + (f" Not: {'; '.join(notes)}." if notes else "")
         )
@@ -694,15 +772,17 @@ def _brief_text(
         lines.append("Raporlar:")
         lines += [
             f"- {f.report_time} ({'resmi' if f.source == 'official' else 'üçüncü taraf'}): "
-            f"{VERDICT_TR[f.verdict]}; {f.reasoning}."
+            f"{VERDICT_TR[f.verdict]}{_time_tag(f)}; {f.reasoning}."
             for f in findings
         ]
     lines.append(f"Önerilen eylem: {action}")
     return "\n".join(lines)
 
 
-def _sources(contacts: list[ContactFinding], findings: list[ReportFinding]) -> list[str]:
-    sources = ["tespit: tespit modeli", "konum: köşe koordinatları"]
+def _sources(
+    detector: str, contacts: list[ContactFinding], findings: list[ReportFinding]
+) -> list[str]:
+    sources = [f"tespit: {detector}", "konum: köşe koordinatları"]
     sources += [f"hareket: {c.track_id}" for c in contacts if c.track_id]
     sources += sorted({f"görsel: {c.visual.model}" for c in contacts if c.visual})
     sources += sorted({f"rapor: {f.report_time}" for f in findings})

@@ -29,8 +29,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 PACKAGE = read_package(FIXTURE)
 MOCK_LABELS = Path(__file__).parents[1] / "eval" / "mock_labels.toml"
 TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
-T0122_AT_1405 = next(
-    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 5)
+T0122_AT_1410 = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
 )
 T0032_AT_1235 = next(
     p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(12, 35)
@@ -38,6 +38,8 @@ T0032_AT_1235 = next(
 
 
 class FakeDetector:
+    version = "test"
+
     def detect(self, image: ImageMeta) -> list[Detection]:
         return [TRUCK] if image.image_id == "img_000860" else []
 
@@ -66,24 +68,24 @@ CLAIMS = [
         FieldReport(time(12, 35), ReportSource.OFFICIAL, "1 agir arac"),
         claim_at(T0032_AT_1235.lat, T0032_AT_1235.lon, vehicle_type="heavy"),
     ),
-    # 14:05 üçüncü taraf: "binek araç" diyor, T0122 truck → çelişkili.
+    # 14:10 üçüncü taraf: "binek araç" diyor, T0122 truck → çelişkili.
     ClaimRecord(
         2,
-        FieldReport(time(14, 5), ReportSource.THIRD_PARTY, "binek arac, dost"),
-        claim_at(T0122_AT_1405.lat, T0122_AT_1405.lon, vehicle_type="car"),
+        FieldReport(time(14, 10), ReportSource.THIRD_PARTY, "binek arac, dost"),
+        claim_at(T0122_AT_1410.lat, T0122_AT_1410.lon, vehicle_type="car"),
     ),
     ClaimRecord(
         3,
-        FieldReport(time(14, 5), ReportSource.THIRD_PARTY, "binek arac, dost"),
+        FieldReport(time(14, 10), ReportSource.THIRD_PARTY, "binek arac, dost"),
         claim_at(
-            T0122_AT_1405.lat, T0122_AT_1405.lon, vehicle_type="car", claim_type="friendly_claim"
+            T0122_AT_1410.lat, T0122_AT_1410.lon, vehicle_type="car", claim_type="friendly_claim"
         ),
     ),
     # 14:20: çekim anından sonra, değerlendirmeye girmemeli.
     ClaimRecord(
         4,
         FieldReport(time(14, 20), ReportSource.OFFICIAL, "kamyon"),
-        claim_at(T0122_AT_1405.lat, T0122_AT_1405.lon, vehicle_type="truck"),
+        claim_at(T0122_AT_1410.lat, T0122_AT_1410.lon, vehicle_type="truck"),
     ),
 ]
 
@@ -110,7 +112,7 @@ matched_tracks = ["T0122"]
   verdict = "consistent"
 
   [[images.reports]]
-  time = "14:05"
+  time = "14:10"
   source = "third_party"
   verdict = "contradicts"
 
@@ -138,7 +140,7 @@ def test_label_file_is_read(tmp_path: Path) -> None:
     assert first.matched_tracks == ["T0122"]
     assert [(r.time, r.verdict) for r in first.reports] == [
         ("12:35", "consistent"),
-        ("14:05", "contradicts"),
+        ("14:10", "contradicts"),
         ("14:20", "ignored"),
     ]
 
@@ -210,8 +212,8 @@ def test_uncaught_contradiction_and_false_alarm(tmp_path: Path) -> None:
         'time = "12:35"\n  source = "official"\n  verdict = "consistent"',
         'time = "12:35"\n  source = "official"\n  verdict = "contradicts"',
     ).replace(
-        'time = "14:05"\n  source = "third_party"\n  verdict = "contradicts"',
-        'time = "14:05"\n  source = "third_party"\n  verdict = "unverifiable"',
+        'time = "14:10"\n  source = "third_party"\n  verdict = "contradicts"',
+        'time = "14:10"\n  source = "third_party"\n  verdict = "unverifiable"',
     )
 
     result = run_eval_set(service(), labels(text, tmp_path))
@@ -225,7 +227,7 @@ def test_report_with_several_claims_contradicts_if_any_claim_does(tmp_path: Path
     result = run_eval_set(service(), labels(CORRECT, tmp_path))
 
     row = next(r for r in result.images if r.image_id == "img_000860")
-    check = next(c for c in row.reports if c.time == "14:05")
+    check = next(c for c in row.reports if c.time == "14:10")
     assert (check.expected, check.actual, check.ok) == ("contradicts", "contradicts", True)
 
 
@@ -236,7 +238,7 @@ image_id = "img_000860"
 level = "critical"
 
   [[images.reports]]
-  time = "14:05"
+  time = "14:10"
   source = "third_party"
   claim_type = "friendly_claim"
   verdict = "contradicts"

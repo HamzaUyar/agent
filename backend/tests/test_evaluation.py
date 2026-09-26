@@ -29,6 +29,8 @@ TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58,
 
 
 class FakeDetector:
+    version = "test"
+
     def __init__(self, detections: dict[str, list[Detection]]) -> None:
         self._detections = detections
 

@@ -5,6 +5,7 @@ tespit kararına nasıl yansıdığı gerçek kodla çalışır.
 """
 
 import io
+import threading
 import time as clock
 from datetime import time
 from pathlib import Path
@@ -33,8 +34,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 PACKAGE = read_package(FIXTURE)
 TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
 WEAK_TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.35, x=727, y=284, w=58, h=34)
-T0122_AT_1405 = next(
-    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 5)
+T0122_AT_1410 = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
 )
 T0032_AT_1340 = next(
     p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(13, 40)
@@ -43,6 +44,8 @@ OFFICIAL, THIRD = ReportSource.OFFICIAL, ReportSource.THIRD_PARTY
 
 
 class FakeDetector:
+    version = "test"
+
     def __init__(self, detections: list[Detection]) -> None:
         self._detections = detections
 
@@ -114,7 +117,7 @@ def contact(brief: Brief, track_id: str) -> ContactFinding:
 
 def test_vlm_is_not_called_without_color_or_cargo_claims_or_weak_detections() -> None:
     verifier = FakeVerifier(seen("beyaz"))
-    plain = record(10, time(14, 5), OFFICIAL, claim_at(T0122_AT_1405, vehicle_type="truck"))
+    plain = record(10, time(14, 10), OFFICIAL, claim_at(T0122_AT_1410, vehicle_type="truck"))
 
     brief = evaluate([plain], verifier)
 
@@ -124,8 +127,8 @@ def test_vlm_is_not_called_without_color_or_cargo_claims_or_weak_detections() ->
 
 def test_vlm_is_called_once_for_the_box_of_a_contact_with_a_color_claim() -> None:
     verifier = FakeVerifier(seen("mavi"))
-    blue = record(10, time(14, 5), THIRD, claim_at(T0122_AT_1405, color="mavi"))
-    also_blue = record(11, time(14, 5), OFFICIAL, claim_at(T0122_AT_1405, color="Mavi"))
+    blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
+    also_blue = record(11, time(14, 10), OFFICIAL, claim_at(T0122_AT_1410, color="Mavi"))
 
     brief = evaluate([blue, also_blue], verifier)
 
@@ -149,21 +152,21 @@ def test_color_claim_about_an_undetected_contact_stays_unverified_without_vlm() 
 # --- Renk ve yük rapor kararına yansır -------------------------------------------
 
 
-def test_color_mismatch_makes_the_report_contradict_and_raises_the_contact() -> None:
+def test_color_mismatch_makes_the_report_contradict() -> None:
     package_level = evaluate([], None)
-    blue = record(10, time(14, 5), THIRD, claim_at(T0122_AT_1405, color="mavi"))
+    blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
 
     brief = evaluate([blue], FakeVerifier(seen("beyaz")))
 
     f = finding(brief, 10)
-    assert (f.verdict, f.effect) == ("contradicts", "raises")
+    assert (f.verdict, f.effect) == ("contradicts", "none")
     assert "renk" in f.reasoning
     assert f.certainty == "likely"  # görsel özellik: VLM'e dayalı çelişki kesin sayılmaz
     assert contact(package_level, "T0122").final_level == "critical"
     assert contact(brief, "T0122").final_level == "critical"
 
 
-def test_color_mismatch_raises_a_low_contact_to_high() -> None:
+def test_color_mismatch_does_not_change_the_contact_level() -> None:
     # T0032 kaçırılmış; kutusunu bu testte zayıf olmayan ikinci bir tespit veriyor.
     verifier = FakeVerifier(seen("beyaz"))
     blue = record(10, time(13, 40), OFFICIAL, claim_at(T0032_AT_1340, color="mavi"))
@@ -172,17 +175,16 @@ def test_color_mismatch_raises_a_low_contact_to_high() -> None:
     brief = evaluate([blue], verifier, [TRUCK, t0032_box])
 
     c = contact(brief, "T0032")
-    assert c.base_level == "medium"
-    assert c.final_level == "high"
+    assert (c.base_level, c.final_level) == ("medium", "medium")  # VLM değil tespit esas
     assert finding(brief, 10).verdict == "contradicts"
 
 
 def test_matching_color_lets_an_official_friendly_claim_verify_a_friend() -> None:
     friend = record(
         10,
-        time(14, 5),
+        time(14, 10),
         OFFICIAL,
-        claim_at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="truck", color="mavi"),
+        claim_at(T0122_AT_1410, claim_type="friendly_claim", vehicle_type="truck", color="mavi"),
     )
 
     brief = evaluate([friend], FakeVerifier(seen("mavi")))
@@ -195,9 +197,9 @@ def test_matching_color_lets_an_official_friendly_claim_verify_a_friend() -> Non
 def test_color_named_with_turkish_characters_or_shade_matches_the_palette() -> None:
     friend = record(
         10,
-        time(14, 5),
+        time(14, 10),
         OFFICIAL,
-        claim_at(T0122_AT_1405, claim_type="friendly_claim", color="koyu yeşil"),
+        claim_at(T0122_AT_1410, claim_type="friendly_claim", color="koyu yeşil"),
     )
 
     brief = evaluate([friend], FakeVerifier(seen("yesil")))
@@ -208,9 +210,9 @@ def test_color_named_with_turkish_characters_or_shade_matches_the_palette() -> N
 def test_vlm_unable_to_tell_the_color_keeps_the_friendly_claim_unverified() -> None:
     friend = record(
         10,
-        time(14, 5),
+        time(14, 10),
         OFFICIAL,
-        claim_at(T0122_AT_1405, claim_type="friendly_claim", color="mavi"),
+        claim_at(T0122_AT_1410, claim_type="friendly_claim", color="mavi"),
     )
 
     brief = evaluate([friend], FakeVerifier(seen(color=None)))
@@ -222,9 +224,9 @@ def test_vlm_unable_to_tell_the_color_keeps_the_friendly_claim_unverified() -> N
 def test_vlm_failure_leaves_the_color_unverified() -> None:
     friend = record(
         10,
-        time(14, 5),
+        time(14, 10),
         OFFICIAL,
-        claim_at(T0122_AT_1405, claim_type="friendly_claim", color="mavi"),
+        claim_at(T0122_AT_1410, claim_type="friendly_claim", color="mavi"),
     )
 
     brief = evaluate([friend], FakeVerifier(None))
@@ -234,7 +236,7 @@ def test_vlm_failure_leaves_the_color_unverified() -> None:
 
 
 def test_cargo_mismatch_contradicts() -> None:
-    loaded = record(10, time(14, 5), OFFICIAL, claim_at(T0122_AT_1405, cargo="loaded"))
+    loaded = record(10, time(14, 10), OFFICIAL, claim_at(T0122_AT_1410, cargo="loaded"))
 
     brief = evaluate([loaded], FakeVerifier(seen("beyaz", "empty")))
 
@@ -243,7 +245,7 @@ def test_cargo_mismatch_contradicts() -> None:
 
 
 def test_cargo_match_is_consistent() -> None:
-    loaded = record(10, time(14, 5), OFFICIAL, claim_at(T0122_AT_1405, cargo="loaded"))
+    loaded = record(10, time(14, 10), OFFICIAL, claim_at(T0122_AT_1410, cargo="loaded"))
 
     brief = evaluate([loaded], FakeVerifier(seen("beyaz", "loaded")))
 
@@ -284,7 +286,7 @@ def test_weak_detection_without_a_vlm_answer_stays_weak() -> None:
 
 def test_weak_detection_color_is_reused_for_reports_without_a_second_call() -> None:
     verifier = FakeVerifier(seen("mavi"))
-    blue = record(10, time(14, 5), THIRD, claim_at(T0122_AT_1405, color="mavi"))
+    blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
 
     brief = evaluate([blue], verifier, [WEAK_TRUCK])
 
@@ -302,7 +304,7 @@ def test_unmatched_weak_detection_is_not_sent_to_the_vlm() -> None:
 
 
 def test_brief_text_mentions_the_visual_check() -> None:
-    blue = record(10, time(14, 5), THIRD, claim_at(T0122_AT_1405, color="mavi"))
+    blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
 
     brief = evaluate([blue], FakeVerifier(seen("beyaz", "loaded")))
 
@@ -376,7 +378,7 @@ def test_vlm_verifier_sends_an_enlarged_crop_of_the_box(tmp_path: Path) -> None:
 
     assert result is not None
     assert (result.is_vehicle, result.color, result.cargo) == (True, "beyaz", None)
-    assert result.model.startswith("evren/")
+    assert result.model == "glm/glm-5.3-flash"
     [sent] = provider.images
     with Image.open(io.BytesIO(sent)) as crop:
         assert crop.format == "JPEG"
@@ -402,3 +404,38 @@ def test_vlm_verifier_with_an_unreadable_image_returns_none(tmp_path: Path) -> N
     provider = FakeVisionProvider({"is_vehicle": True, "color": None, "cargo": None})
 
     assert vlm(provider, tmp_path).inspect(IMG_000860, (727, 284, 58, 34)) is None
+
+
+class BarrierVerifier(FakeVerifier):
+    """İki çağrı aynı anda gelmezse bariyer zaman aşımına uğrar: sıralı çağrıyı yakalar."""
+
+    def __init__(self, finding: VisualFinding | None) -> None:
+        super().__init__(finding)
+        self.barrier = threading.Barrier(2, timeout=2)
+
+    def inspect(
+        self, image: ImageMeta, bbox: tuple[float, float, float, float]
+    ) -> VisualFinding | None:
+        self.barrier.wait()
+        return super().inspect(image, bbox)
+
+
+def box_at(point: GeoPoint, image_id: str = "img_000860") -> Detection:
+    [image] = [m for m in PACKAGE.images if m.image_id == image_id]
+    c = image.corners
+    x = (point.lon - c.top_left.lon) / (c.top_right.lon - c.top_left.lon) * image.width_px
+    y = (c.top_left.lat - point.lat) / (c.top_left.lat - c.bottom_left.lat) * image.height_px
+    return Detection(label=VehicleClass.CAR, confidence=0.35, x=x - 10, y=y - 10, w=20, h=20)
+
+
+def test_weak_detections_are_checked_in_parallel() -> None:
+    """Her VLM çağrısı ~10 sn; kutular sırayla değil aynı anda sorulur."""
+    t0032_now = next(
+        p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(14, 10)
+    )
+    verifier = BarrierVerifier(seen("beyaz"))
+
+    brief = evaluate([], verifier, [WEAK_TRUCK, box_at(t0032_now)])
+
+    assert len(verifier.calls) == 2
+    assert {contact(brief, t).certainty for t in ("T0122", "T0032")} == {"likely"}

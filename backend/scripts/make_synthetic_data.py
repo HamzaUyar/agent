@@ -40,6 +40,7 @@ from app.core.rules import RiskRules, default_rules
 from app.data_package import (
     TRACK_STEP_MINUTES,
     check_consistency,
+    dump_claims,
     format_hhmm,
     from_minutes,
     to_minutes,
@@ -79,8 +80,11 @@ APPROACH_SPEED_MPS = 2.5
 # Yerel trafik: çekim noktası çevresinde teğet doğrultuda ±300 m gidip gelir.
 LOCAL_AMPLITUDE_M = 300.0
 LOCAL_PERIOD_MIN = 40.0
-# Bir raporun bağlanabileceği yakınlık (risk_rules [reports] match_m) + pay.
-ALONE_RADIUS_M = 200.0
+# İddia, çekim anında noktasına en yakın temasa bağlanır (risk_rules [reports] bind_now_m).
+# Başka bir araç iddia noktasına odak araçtan bu pay kadar yakın olmamalı (yuvarlama payı).
+BIND_MARGIN_M = 2.0
+# Sayı iddiasında sayılan yarıçap (risk_rules [reports] count_radius_m).
+COUNT_RADIUS_M = 30.0
 # Eşleşme eşiği (15 m) + pay.
 STEAL_RADIUS_M = 20.0
 
@@ -93,8 +97,10 @@ ReportKind = Literal[
     "threat",
     "friendly_official",
     "friendly_third_party",
-    "location_contradiction",
+    "friendly_time_mismatch",
     "type_contradiction",
+    "behavior_contradiction",
+    "count_contradiction",
     "after_capture",
     "irrelevant",
     "zone",
@@ -104,12 +110,12 @@ ReportKind = Literal[
 PATTERN: list[tuple[Archetype, ReportKind | None]] = [
     ("heavy_approach", "consistent"),
     ("light_approach", "threat"),
-    ("loiter", None),
-    ("unregistered", None),
+    ("loiter", "behavior_contradiction"),
+    ("unregistered", "count_contradiction"),
     ("quiet", "irrelevant"),
     ("missed_approach", None),
     ("heavy_approach", "friendly_official"),
-    ("light_approach", "location_contradiction"),
+    ("light_approach", "friendly_time_mismatch"),
     ("heavy_approach", "type_contradiction"),
     ("light_approach", "friendly_third_party"),
 ]
@@ -245,7 +251,7 @@ class ReportPlan:
     claim: ReportClaim
     expected: str
     """Beklenen rapor kararı (etiket biçiminde)."""
-    effect: Literal["raises_high", "raises_one", "lowers", "none"]
+    effect: Literal["raises_one", "lowers", "none"]
 
 
 @dataclass
@@ -295,12 +301,7 @@ def _distance_km(archetype: Archetype, rng: random.Random, rules: RiskRules) -> 
 def _pick_source(
     pool: list[SourceImage], archetype: Archetype, kind: ReportKind | None, rng: random.Random
 ) -> SourceImage:
-    if archetype == "heavy_approach":
-        candidates = [s for s in pool if s.has_heavy]
-    elif kind == "location_contradiction":
-        candidates = sorted(pool, key=lambda s: len(s.boxes))[: max(5, len(pool) // 10)]
-    else:
-        candidates = pool
+    candidates = [s for s in pool if s.has_heavy] if archetype == "heavy_approach" else pool
     if not candidates:
         raise GenerationError(f"'{archetype}' için uygun görüntü kalmadı")
     choice = rng.choice(candidates)
@@ -366,8 +367,8 @@ def _build_scene(
                 "unregistered": None,
                 "quiet": "parked" if off_step else "local",
             }[archetype]
-        elif kind == "location_contradiction" or rng.random() >= coverage:
-            behavior = None  # raporun başka bir araca bağlanmaması için arka plan track'siz
+        elif rng.random() >= coverage:
+            behavior = None  # park halinde, track'siz
         else:
             # 5 dk adımına denk gelmeyen karede ileri kestirim ancak doğrusal hareketi bilir.
             behavior = "parked" if off_step or rng.random() < 0.25 else "local"
@@ -419,11 +420,11 @@ def _false_positive(scene: Scene, rng: random.Random) -> Detection | None:
 
 
 def _coord_text(p: GeoPoint) -> str:
-    return f"{p.lat:.4f}N {p.lon:.4f}E"
+    return f"{p.lat:.5f}N {p.lon:.5f}E"
 
 
 def _rounded(p: GeoPoint) -> GeoPoint:
-    return GeoPoint(round(p.lat, 4), round(p.lon, 4))
+    return GeoPoint(round(p.lat, 5), round(p.lon, 5))
 
 
 def _claim(**fields: object) -> ReportClaim:
@@ -452,10 +453,11 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
     focus = scene.focus
     label = focus.box.label
     tr_name = TYPE_TR[label]
-    # Odak aracın hâlâ uzakta park halinde olduğu bir an (yaklaşma çekimden 35 dk önce başlar).
+    # Gerçek verideki gibi rapor koordinatı odak aracın çekim anındaki konumu; rapor saati
+    # ise aracın hâlâ uzakta olduğu bir an (yaklaşma çekimden 35 dk önce başlar).
     rel = -5 * rng.randint(9, 20)
     when = from_minutes(capture + rel)
-    far = _rounded(focus.at(rel))
+    now = from_minutes(capture)
     here = _rounded(focus.position)
 
     def plan(
@@ -463,33 +465,35 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
         source: ReportSource,
         claim: ReportClaim,
         expected: str,
-        effect: Literal["raises_high", "raises_one", "lowers", "none"] = "none",
+        effect: Literal["raises_one", "lowers", "none"] = "none",
         at: time = when,
     ) -> ReportPlan:
         return ReportPlan(kind, FieldReport(at, source, text), claim, expected, effect)
 
-    coord = {"lat": far.lat, "lon": far.lon}
+    coord = {"lat": here.lat, "lon": here.lon}
     if kind == "consistent":
         return plan(
-            f"{_coord_text(far)} cevresinde 1 {tr_name} bulunuyor, hareketleri olagan.",
+            f"{_coord_text(here)} cevresinde 1 {tr_name} bulunuyor, hareketleri olagan.",
             ReportSource.OFFICIAL,
             _claim(**coord, vehicle_type=_claim_type_of(label), behavior="normal_traffic"),
             "consistent",
         )
     if kind == "threat":
         return plan(
-            f"{_coord_text(far)} civarinda supheli bir {tr_name} goruldu, dikkatli olunmali.",
+            f"{_coord_text(here)} civarinda supheli bir {tr_name} goruldu, dikkatli olunmali.",
             ReportSource.OFFICIAL,
             _claim(**coord, vehicle_type=_claim_type_of(label), claim_type="threat_warning"),
             "consistent",
             "raises_one",
         )
     if kind in ("friendly_official", "friendly_third_party"):
+        # Rapor çekim anında: saat de tutar, resmi olan riski düşürür.
         official = kind == "friendly_official"
         text = (
-            f"{_coord_text(far)} civarindaki {tr_name} dost birliklere aittir, kimlik teyit edildi."
+            f"{_coord_text(here)} civarindaki {tr_name} dost birliklere aittir, "
+            "kimlik teyit edildi."
             if official
-            else f"{_coord_text(far)} yakininda bir {tr_name} var; dost devriye unsurudur."
+            else f"{_coord_text(here)} yakininda bir {tr_name} var; dost devriye unsurudur."
         )
         return plan(
             text,
@@ -497,29 +501,45 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
             _claim(**coord, vehicle_type=_claim_type_of(label), claim_type="friendly_claim"),
             "consistent",
             "lowers" if official else "none",
+            at=now,
         )
     if kind == "type_contradiction":
         wrong = VehicleClass.CAR if label in HEAVY_CLASSES else VehicleClass.TRUCK
         return plan(
-            f"{_coord_text(far)} civarinda 1 {TYPE_TR[wrong]} goruldu.",
+            f"{_coord_text(here)} civarinda 1 {TYPE_TR[wrong]} goruldu.",
             ReportSource.OFFICIAL,
             _claim(**coord, vehicle_type=_claim_type_of(wrong)),
-            "contradicts",
-            "raises_high",
+            "contradicts",  # tespit esas alınır: seviye değişmez
         )
-    if kind == "location_contradiction":
-        # Araç o saatte kilometrelerce uzaktaydı; rapor onu şimdiki yerinde gösteriyor.
+    if kind == "behavior_contradiction":
+        # Odak araç üsse yakın park halinde; rapor onu üsse doğru ilerliyor gösteriyor.
         return plan(
-            f"{_coord_text(here)} noktasinda 1 {tr_name} park halinde bekliyor.",
+            f"{_coord_text(here)} konumundan usse dogru ilerleyen bir {tr_name} goruldu.",
             ReportSource.OFFICIAL,
-            _claim(
-                lat=here.lat,
-                lon=here.lon,
-                vehicle_type=_claim_type_of(label),
-                behavior="stationary",
-            ),
+            _claim(**coord, behavior="approaching"),
+            "contradicts",  # track esas alınır: seviye değişmez
+        )
+    if kind == "count_contradiction":
+        # Çevrede görülenin iki katından fazlası: sayı uyuşmaz.
+        seen = sum(
+            1
+            for v in scene.vehicles
+            if v.detected and distance_m(v.position, here) <= COUNT_RADIUS_M
+        )
+        return plan(
+            f"{_coord_text(here)} yakininda {2 * seen + 2} aracin durdugu bildirildi.",
+            ReportSource.OFFICIAL,
+            _claim(**coord, vehicle_count=2 * seen + 2),
             "contradicts",
-            "raises_high",
+        )
+    if kind == "friendly_time_mismatch":
+        # Araç rapor saatinde orada değildi: resmi dostluk iddiası riski düşüremez.
+        return plan(
+            f"{_coord_text(here)} konumundan usse dogru ilerleyen {tr_name} planli ikmal "
+            "aracidir, kimlik teyidi yapilmistir.",
+            ReportSource.OFFICIAL,
+            _claim(**coord, vehicle_type=_claim_type_of(label), claim_type="friendly_claim"),
+            "unverifiable",
         )
     if kind == "after_capture":
         later = _rounded(focus.at(10))
@@ -579,9 +599,7 @@ def expected_level(scene: Scene, rules: RiskRules) -> RiskLevel:
         level = contact_level(v, rules)
         if v.focus and scene.report is not None:
             effect = scene.report.effect
-            if effect == "raises_high":
-                level = max(level, "high", key=LEVELS.index)
-            elif effect == "raises_one":
+            if effect == "raises_one":
                 level = LEVELS[min(LEVELS.index(level) + 1, len(LEVELS) - 1)]
             elif effect == "lowers":
                 level = "low"
@@ -691,18 +709,15 @@ def _validate(scenes: list[Scene], points: list[TrackPoint]) -> None:
         if plan is None or plan.claim.lat is None or plan.expected == "ignored":
             continue
         claim_at = GeoPoint(plan.claim.lat, plan.claim.lon or 0.0)
-        rel = to_minutes(plan.report.time) - capture
+        focus_d = distance_m(scene.focus.position, claim_at)
         others = [
             v
-            for s in scenes
-            for v in s.vehicles
-            if v.track_id
-            and v is not scene.focus
-            and distance_m(v.at(rel), claim_at) <= ALONE_RADIUS_M
+            for v in scene.vehicles
+            if v is not scene.focus and distance_m(v.position, claim_at) <= focus_d + BIND_MARGIN_M
         ]
         if others and plan.kind != "irrelevant":
             raise GenerationError(
-                f"{scene.meta.image_id} raporu ({plan.kind}) başka araçların yakınında: "
+                f"{scene.meta.image_id} raporu ({plan.kind}) başka bir araca bağlanabilir: "
                 + ", ".join(str(v.track_id) for v in others[:3])
             )
 
@@ -764,39 +779,6 @@ def labels_toml(result: SyntheticPackage, rules: RiskRules | None = None) -> str
                 f"  verdict = {_toml_str(r.expected)}",
             ]
     return "\n".join(lines) + "\n"
-
-
-def dump_claims(claims: list[ClaimRecord], path: Path) -> None:
-    payload = [
-        {
-            "claim_id": c.claim_id,
-            "report": {
-                "time": format_hhmm(c.report.time),
-                "source": c.report.source.value,
-                "text": c.report.text,
-            },
-            "claim": c.claim.model_dump(),
-        }
-        for c in claims
-    ]
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-
-
-def load_claims(path: Path) -> list[ClaimRecord]:
-    from app.data_package import parse_hhmm
-
-    return [
-        ClaimRecord(
-            int(item["claim_id"]),
-            FieldReport(
-                parse_hhmm(item["report"]["time"]),
-                ReportSource(item["report"]["source"]),
-                item["report"]["text"],
-            ),
-            ReportClaim.model_validate(item["claim"]),
-        )
-        for item in json.loads(path.read_text(encoding="utf-8"))
-    ]
 
 
 def write_outputs(result: SyntheticPackage, out: Path, *, copy_images: bool = True) -> None:

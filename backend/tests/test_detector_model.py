@@ -383,6 +383,6 @@ def test_exported_detections_are_served_from_the_file_with_their_own_version(
     settings = Settings(_env_file=None, detector_mode="mock", detector_mock_path=str(out))
     served = build_detector(settings)
 
-    assert served.version == "file:detections_stage2.json"
+    assert served.version == "model çıktısı dosyadan: detections_stage2.json"
     assert served.detect(IMG_000860) == evren(client, images_dir).detect(IMG_000860)
     assert len(client.calls) == len(PACKAGE.images) + 1  # dışa aktarma + karşılaştırma

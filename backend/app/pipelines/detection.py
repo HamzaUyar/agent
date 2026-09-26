@@ -13,18 +13,15 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from app.core.config import Settings
-from app.data_package import find_image_file
 from app.schemas.domain import Detection, ImageMeta, VehicleClass
+from app.storage import SupabaseStorage, build_storage, resolve_image_file
 
 logger = logging.getLogger(__name__)
 
-# Güven eşikleri: altı yok sayılır; arası zayıf tespittir (yalnızca track'le eşleşirse temas).
+# Modelden istenen en düşük güven. Değerlendirmedeki eşikler `risk_rules.toml` [detection];
+# bu sabitler varsayılanlarıdır (sentetik üreteç ve tespit bileşenleri kullanır).
 MIN_CONFIDENCE = 0.25
 STRONG_CONFIDENCE = 0.50
-
-
-def is_weak(detection: Detection) -> bool:
-    return detection.confidence < STRONG_CONFIDENCE
 
 
 class Detector(Protocol):
@@ -128,18 +125,19 @@ class _FileModelDetector:
     havuzunda paralel yürüyebildiği için çıkarım bir kilitle sıraya alınır.
     """
 
-    def __init__(self, images_dir: Path) -> None:
+    def __init__(self, images_dir: Path, storage: SupabaseStorage | None = None) -> None:
         self.images_dir = images_dir
+        self.storage = storage
         self._cache: dict[str, list[Detection]] = {}
         self._lock = threading.Lock()
 
     def detect(self, image: ImageMeta) -> list[Detection]:
         with self._lock:
             if image.image_id not in self._cache:
-                path = find_image_file(self.images_dir, image.image_id)
+                path = resolve_image_file(self.images_dir, image, self.storage)
                 if path is None:
                     raise ImageFileMissingError(
-                        f"{image.image_id}: {self.images_dir} içinde dosya yok"
+                        f"{image.image_id}: {self.images_dir} içinde ve Storage'da dosya yok"
                     )
                 self._cache[image.image_id] = self._infer(image, path)
             return list(self._cache[image.image_id])
@@ -170,8 +168,9 @@ class UltralyticsDetector(_FileModelDetector):
         *,
         imgsz: int | None = None,
         model_factory: ModelFactory = _load_yolo,
+        storage: SupabaseStorage | None = None,
     ) -> None:
-        super().__init__(images_dir)
+        super().__init__(images_dir, storage)
         self.weights = weights
         self.imgsz = imgsz
         self._factory = model_factory
@@ -223,8 +222,9 @@ class EvrenDetector(_FileModelDetector):
         client: Any = None,
         api_key: str = "",
         image_size: int = EVREN_IMAGE_SIZE,
+        storage: SupabaseStorage | None = None,
     ) -> None:
-        super().__init__(images_dir)
+        super().__init__(images_dir, storage)
         self.model = model
         self.image_size = image_size
         self._client = client
@@ -263,9 +263,13 @@ def build_detector(settings: Settings) -> Detector:
         mock_path = settings.resolved_mock_path
         if mock_path is not None:
             # Sürüm dosyayı taşır: farklı tespit dosyalarının kayıtları önbellekte karışmasın.
-            return MockDetector(load_mock_detections(mock_path), version=f"file:{mock_path.name}")
+            # Dosya, 1. gün modelinin önceden alınmış çıktısıdır (scripts/export_detections.py).
+            return MockDetector(
+                load_mock_detections(mock_path), version=f"model çıktısı dosyadan: {mock_path.name}"
+            )
         return MockDetector()
     images_dir = settings.resolved_data_dir / "images"
+    storage = build_storage(settings)
     if settings.detector_mode == "evren":
         key = settings.evren_model_api_key.get_secret_value()
         if not key:
@@ -275,10 +279,11 @@ def build_detector(settings: Settings) -> Detector:
             images_dir,
             api_key=key,
             image_size=settings.detector_imgsz or EVREN_IMAGE_SIZE,
+            storage=storage,
         )
     weights = settings.resolved_weights_path
     if weights is None:
         raise ValueError("DETECTOR_MODE=model için DETECTOR_WEIGHTS_PATH tanımlanmalı")
     if not weights.is_file():
         raise ValueError(f"Model ağırlıkları bulunamadı: {weights}")
-    return UltralyticsDetector(weights, images_dir, imgsz=settings.detector_imgsz)
+    return UltralyticsDetector(weights, images_dir, imgsz=settings.detector_imgsz, storage=storage)

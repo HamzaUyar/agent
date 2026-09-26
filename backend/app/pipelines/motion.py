@@ -73,6 +73,9 @@ class Stop:
 class Motion:
     distance_to_base_m: float
     distance_to_base_window_ago_m: float | None
+    distance_to_base_hour_ago_m: float | None
+    """Bir saat önceki (ya da kayıt daha kısaysa ilk) konumun üsse uzaklığı; görev tanımı s2
+    örneği yaklaşmayı bu farkla anlatır."""
     trend: Trend
     route: list[TrackPoint]
     """Çekim anına kadarki kayıtlı noktalar (saatleriyle); ileri kestirim içermez."""
@@ -83,6 +86,11 @@ class Motion:
     """Son pencerede gidilen yön (kuzey = 0°, saat yönünde); yerinde duruyorsa yok."""
     stops: list[Stop]
     zones_passed: list[str]
+    base_distance_min_m: float
+    base_distance_max_m: float
+    """Kaydın tamamında üsse en yakın ve en uzak mesafe; dar bant üs çevresinde dolaşmadır."""
+    extent_m: float
+    """Kaydın kapsadığı alan: birbirine en uzak iki noktanın arası."""
 
 
 def _path_length(points: list[TrackPoint]) -> float:
@@ -165,15 +173,21 @@ def analyze_motion(
     recent_elapsed = _elapsed_s(recent) if recent else 0
     recent_speed = _path_length(recent) / recent_elapsed if recent_elapsed else 0.0
 
+    to_base = [distance_m(p.location, base) for p in history]
+
     heading: float | None = None
     if recent and distance_m(recent[0].location, current.location) >= (
         trend_rules.stationary_displacement_m
     ):
         heading = bearing_deg(recent[0].location, current.location)
 
+    hour = _since(history, now, 60)
     return Motion(
         distance_to_base_m=distance_m(current.location, base),
         distance_to_base_window_ago_m=then_dist,
+        distance_to_base_hour_ago_m=(
+            distance_m(hour[0].location, base) if hour and hour[0] is not current else None
+        ),
         trend=trend,
         route=list(history),
         total_distance_m=total,
@@ -182,4 +196,7 @@ def analyze_motion(
         heading_deg=heading,
         stops=_stops(history, zones, motion_rules),
         zones_passed=_zones_passed(history, zones) if zones else [],
+        base_distance_min_m=min(to_base),
+        base_distance_max_m=max(to_base),
+        extent_m=max(distance_m(a.location, b.location) for a in history for b in history),
     )

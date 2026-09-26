@@ -21,7 +21,7 @@ Değerlendirme:
 | `field_reports.json` | `time, source (official / third_party), text` (serbest metin, Türkçe karakter kullanılmamış) |
 
 - Track'ler ve raporlar tek bir havuz. Hangi görüntüye ait oldukları verilmiyor. Bağlantı **çekim saati ve koordinatlarla** kuruluyor.
-- **Raporların hepsi doğru değil.** Bazıları yanlış, bazıları kasıtlı yanıltıcı, bazıları ilgisiz. Önce kendi tespitimize ve hareket verisine güveniyoruz; raporları bunlarla karşılaştırıyoruz.
+- **Raporların hepsi doğru değil.** Bazıları doğru, bazıları hatalı veya ilgisiz (görev tanımı s3). Raporları kendi tespitimiz ve hareket verisiyle karşılaştırıyoruz; çelişkide rapor değil tespit esas alınır (s2), çelişki seviyeyi değiştirmez (ADR-0002).
 
 ## Pipeline (üç kol + birleştirme)
 ```
@@ -41,7 +41,7 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
 - **Eşleşmeyen durumlar da sinyaldir:**
   - tespit var, track yok → kayıt dışı araç
   - track var, tespit yok → tipi bilinmiyor
-- **Rapor kontrolü:** Rapordaki koordinat, aracın **rapor saatindeki** track konumuyla karşılaştırılır. Zaman ve konum tutarsızlığı sahte raporu gösterebilir.
+- **Rapor kontrolü:** İddia, **çekim anında** noktasına en yakın temasa bağlanır (≤ 60 m). Saat ayrı bir kontroldür: temasın rapor saatindeki track konumu noktaya ≤ 150 m ise tutar. Saat tutmayan dostluk iddiası riski düşüremez (ADR-0002 notu).
 - **Referans örnek** (organizatörlerin demosu):
   - `img_000860`, 14:10, Doğu Yolu
   - truck, kutu (727, 284, 58, 34), merkez piksel (756, 301) → 39.92531, 32.87183
@@ -50,8 +50,8 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
   - Bu değerler testlerde kullanılmalı.
 
 ## İlkeler
-- **Hesaplar kodla, akıl yürütme LLM ile.** Koordinat, mesafe, hız ve eşleme deterministik Python koduyla yapılır; LLM sayı hesaplamaz. Maliyet kısıtı yok, bunun sebebi doğruluk ve tekrarlanabilirlik.
-- **Model seçimi görev bazlı.** Görev → model zinciri `app/llm/models.toml` dosyasında. Claude modelleri resmi `anthropic` SDK'sıyla çağrılır; GLM yedeği OpenAI uyumlu uç noktasından ayrı bir sağlayıcıdır. Zincir sırayla denenir (kimlik bilgisi yoksa atla, hata veya şemaya uymayan cevapta sıradakine geç). Takıma 15 $ GLM kredisi verildi, ama başka modeller de kullanılabilir.
+- **Hesaplar kodla, akıl yürütme LLM ile.** Koordinat, mesafe, hız ve eşleme deterministik Python koduyla yapılır; LLM sayı hesaplamaz; bunun sebebi doğruluk ve tekrarlanabilirlik.
+- **Model seçimi görev bazlı.** Görev → model zinciri `app/llm/models.toml` dosyasında. Her zincir organizatörlerin gateway'indeki `glm-5.3-flash` ile başlar (görev tanımı s4); EVREN ve Claude yedektir. Zincir sırayla denenir (kimlik bilgisi yoksa ya da bütçe dolduysa atla, hata veya şemaya uymayan cevapta sıradakine geç). Gateway'e takım limitleri uygulanır (`app/llm/limits.py`): 4 eşzamanlı istek, 60 istek/dk, 15 USD; 429'da aynı modelde üstel bekleme.
   - rapor parse etme: hızlı LLM
   - renk ve yük çıkarımı: VLM
   - karar ve brief: en güçlü akıl yürütme modeli
@@ -69,7 +69,8 @@ Python 3.11+ (ortam: `.venv`, Python 3.14, pip), FastAPI (SSE), Pydantic v2, psy
   - **Kaynak:** `bases`, `zones`, `images`, `tracks`, `track_points`, `field_reports`
   - **Zenginleştirilmiş:** `report_claims`, `track_segments`
   - **Analiz:** `analysis_runs`, `detections`, `track_matches`, `motion_analyses`, `report_evaluations`, `risk_assessments`, `agent_steps`
-- Migration'lar: `01_extensions_and_enums` … `08_field_reports_seq` (`app/supabase/migrations/`).
+- Migration'lar: `01_extensions_and_enums` … `09_images_bucket` (`supabase/migrations/`).
+- **Storage:** görüntü dosyaları özel `drone-images` bucket'ında; `images.file_path` = `drone-images/<id>.jpg`. Yerelde (`DATA_DIR/images`) olmayan görüntü, tespit ve VLM ilk ihtiyaç duyduğunda `service_role` ile indirilip oraya yazılır (`app/storage.py`). Yükleme: `upload-images [klasör]`.
 
 ## Dizin yapısı
 ```
