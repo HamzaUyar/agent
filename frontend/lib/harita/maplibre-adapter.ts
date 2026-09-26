@@ -1,8 +1,10 @@
 /**
  * Harita arayüzünün MapLibre GL uygulaması. Yalnızca tarayıcıda, dinamik olarak yüklenir.
  *
- * Zeminler anahtarsız: uydu Esri World Imagery (raster), sokak OpenFreeMap (vektör; koyu temada
- * "dark", açık temada gri tonlu "positron" stili; renkli sokak haritası seviye renkleriyle karışır). Kendi katmanlarımız `op-` önekiyle tutulur ve zemin değişince
+ * Zeminler anahtarsız: uydu Esri World Imagery (raster), sokak OpenFreeMap (vektör "positron" stili).
+ * Sokak stili iki temada da `--harita-*` token'larıyla yeniden boyanır (restyleBasemap): kara, su, yeşil
+ * alan, yapı, yol sınıfları, sınır ve yazılar ayrışır ama hepsi bizim katmanlarımızdan soluk kalır.
+ * CSS filtresiyle ters çevirme yok. Kendi katmanlarımız `op-` önekiyle tutulur ve zemin değişince
  * yeni stile taşınır; renkleri token'lardan okunur, tema ya da stil değişince yeniden boyanır.
  * Zemin yüklenemezse düz zemine geçilir; katmanlar yerel GeoJSON'dan çizildiği için çalışmaya devam eder.
  */
@@ -19,6 +21,7 @@ import {
 } from "maplibre-gl"
 
 import type { Bounds } from "@/lib/geo"
+import { RISK } from "@/lib/labels"
 import type { Tema } from "@/lib/tema"
 
 import {
@@ -36,14 +39,68 @@ import {
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
 
 const PREFIX = "op-"
+const LEVEL_SHAPE = RISK.low.shape
 
 const ESRI_ATTRIBUTION =
   'Uydu: <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics'
-const openFreeMapStyle = (theme: Tema) =>
-  `https://tiles.openfreemap.org/styles/${theme === "koyu" ? "dark" : "positron"}`
+const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron"
 
 const css = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#8e8c86"
+
+/**
+ * Sokak stilinin katmanlarını tema token'larıyla boyar (katman kimlikleri OpenFreeMap positron'dan).
+ * Görsel sıra: yazı > ana yol > yol > yapı > su/yeşil > kara. Bilinmeyen katman olduğu gibi kalır.
+ */
+function basemapPaint(id: string, type: string): Record<string, unknown> | null {
+  const has = (...parts: string[]) => parts.some((part) => id.includes(part))
+  if (type === "background") return { "background-color": css("--harita-kara") }
+  if (type === "fill") {
+    if (has("water")) return { "fill-color": css("--harita-su") }
+    if (has("park", "wood", "grass")) return { "fill-color": css("--harita-yesil") }
+    if (has("residential")) return { "fill-color": css("--harita-yerlesim") }
+    if (has("building"))
+      return { "fill-color": css("--harita-yapi"), "fill-outline-color": css("--harita-yapi-kenar") }
+    if (has("ice", "glacier", "pier", "aeroway")) return { "fill-color": css("--harita-kara") }
+    return null
+  }
+  if (type === "line") {
+    if (has("waterway")) return { "line-color": css("--harita-su") }
+    if (has("boundary")) return { "line-color": css("--harita-sinir") }
+    if (has("railway")) return { "line-color": has("dashline") ? css("--harita-kara") : css("--harita-demiryolu") }
+    if (has("motorway")) return { "line-color": css(has("casing") ? "--harita-otoyol-kilif" : "--harita-otoyol") }
+    if (has("major")) {
+      if (has("casing")) return { "line-color": css("--harita-yol-ana-kilif") }
+      return { "line-color": css(has("subtle") ? "--harita-yol" : "--harita-yol-ana") }
+    }
+    if (has("minor", "path", "pier", "taxiway", "runway"))
+      return { "line-color": css(has("casing") ? "--harita-yol-kilif" : "--harita-yol") }
+    return null
+  }
+  if (type === "symbol") {
+    const halo = { "text-halo-color": css("--harita-yazi-hale"), "text-halo-width": 1.4 }
+    if (has("water")) return { "text-color": css("--harita-su-yazi"), ...halo }
+    if (has("highway", "road", "transportation")) return { "text-color": css("--harita-yazi-yol"), ...halo }
+    // Büyük yerleşim adları (şehir, il) Üs ve Bölge adlarıyla yarışmasın.
+    if (has("city", "state", "country")) return { "text-color": css("--harita-yazi"), "text-opacity": 0.7, ...halo }
+    return { "text-color": css("--harita-yazi"), ...halo }
+  }
+  return null
+}
+
+function restyleBasemap(style: StyleSpecification): StyleSpecification {
+  return {
+    ...style,
+    layers: style.layers.map((layer) => {
+      if (layer.id.startsWith(PREFIX) || layer.type === "raster") return layer
+      // Yol kalkanları (beyaz simgeler) ve tek yön okları bilgi taşımadan göz çeker.
+      if (layer.id.includes("shield") || layer.id.includes("oneway"))
+        return { ...layer, layout: { ...layer.layout, visibility: "none" } } as LayerSpecification
+      const paint = basemapPaint(layer.id, layer.type)
+      return paint ? ({ ...layer, paint: { ...layer.paint, ...paint } } as LayerSpecification) : layer
+    }),
+  }
+}
 
 function rasterStyle(): StyleSpecification {
   return {
@@ -74,21 +131,42 @@ function plainStyle(): StyleSpecification {
   }
 }
 
+/** Rota rengi = araç sınıfı (seviye değil); sınıfı bilinmeyen (kaçırılmış) temas nötr. */
+const vehicleColor = (): unknown => [
+  "match",
+  ["get", "vehicle"],
+  "car",
+  css("--sinif-car"),
+  "van",
+  css("--sinif-van"),
+  "truck",
+  css("--sinif-truck"),
+  "bus",
+  css("--sinif-bus"),
+  css("--sinif-diger"),
+]
+
 /**
  * Katman kimliği → MapLibre katmanları. Renkler tasarım token'larından okunur.
+ * Her katmanın ayrı bir görsel rolü var:
+ *   bölge alanı  nötr, kesikli sınır, çok düşük dolgu (yaklaşık; kesin sınır değil)
+ *   ayak izi     seçim mavisi, düz ve kalın çerçeve (seçili görüntü)
+ *   Üs halkaları ince, soluk düz çizgi (ölçek bilgisi)
+ *   rotalar      sınıf renginde, kılıflı; seçili rota kalın, diğerleri seçim varken soluk
  * Çizgilerin altında zeminin tersi bir kılıf var: hem uydu görüntüsünde hem sokak haritasında seçilsinler.
  */
 function overlayLayers(layer: AreaLayer): LayerSpecification[] {
   const source = PREFIX + layer
-  const casing = (width: number): LayerSpecification => ({
+  const casing = (width: unknown, opacity: unknown = 0.7): LayerSpecification => ({
     id: `${source}-kilif`,
     type: "line",
     source,
-    paint: { "line-color": css("--harita-kilif"), "line-opacity": 0.55, "line-width": width },
+    layout: { "line-join": "round", "line-cap": "round" },
+    paint: { "line-color": css("--harita-kilif"), "line-opacity": opacity, "line-width": width } as never,
   })
   switch (layer) {
-    // Pasta dilimleri: komşu dilimler sırayla açık/koyu dolgu, seçili karenin Bölge'si seçim renginde.
-    // Sınır kesikli: kesin sınır değil.
+    // Pasta dilimleri: komşular sırayla çok hafif farklı dolgu; seçili karenin Bölge'si biraz daha koyu
+    // dolgu ve kalın kesikli sınırla. Mavi değil: mavi yalnızca seçili görüntünün ayak izi.
     case "bolge-alanlari":
       return [
         {
@@ -96,20 +174,21 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
           type: "fill",
           source,
           paint: {
-            "fill-color": ["case", ["get", "selected"], css("--secim"), css("--metin")],
-            "fill-opacity": ["case", ["get", "selected"], 0.2, ["==", ["get", "parity"], 1], 0.12, 0.04],
+            "fill-color": css("--bolge-dolgu"),
+            "fill-opacity": ["case", ["get", "selected"], 0.13, ["==", ["get", "parity"], 1], 0.06, 0.025],
           },
         },
-        casing(3),
+        // İnce kılıf: kesikli sınır uydu görüntüsünde de seçilsin (seçili dilimde daha belirgin).
+        casing(["case", ["get", "selected"], 4, 2.5], ["case", ["get", "selected"], 0.7, 0.35]),
         {
           id: `${source}-cizgi`,
           type: "line",
           source,
           layout: { "line-join": "round" },
           paint: {
-            "line-color": css("--metin"),
-            "line-opacity": 0.7,
-            "line-width": 1.25,
+            "line-color": css("--bolge-cizgi"),
+            "line-opacity": 0.55,
+            "line-width": 1.1,
             "line-dasharray": [4, 3],
           },
         },
@@ -119,7 +198,12 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
           source,
           filter: ["==", ["get", "selected"], true],
           layout: { "line-join": "round" },
-          paint: { "line-color": css("--secim"), "line-width": 2.5 },
+          paint: {
+            "line-color": css("--bolge-secili"),
+            "line-opacity": 0.9,
+            "line-width": 2,
+            "line-dasharray": [3, 2],
+          },
         },
       ]
     case "ayak-izi":
@@ -128,49 +212,40 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
           id: `${source}-dolgu`,
           type: "fill",
           source,
-          paint: { "fill-color": css("--secim"), "fill-opacity": 0.12 },
+          paint: { "fill-color": css("--secim"), "fill-opacity": 0.1 },
         },
-        casing(4),
+        casing(6, 0.9),
         {
           id: `${source}-cizgi`,
           type: "line",
           source,
-          paint: { "line-color": css("--secim"), "line-width": 2 },
+          layout: { "line-join": "miter" },
+          paint: { "line-color": css("--secim"), "line-width": 2.5 },
         },
       ]
     case "rotalar":
       return [
-        casing(5),
+        casing(["case", ["get", "selected"], 8, 5], ["case", ["get", "dimmed"], 0.35, 0.85]),
         {
           id: `${source}-cizgi`,
           type: "line",
           source,
           layout: { "line-join": "round", "line-cap": "round" },
           paint: {
-            "line-color": [
-              "match",
-              ["get", "level"],
-              "critical",
-              css("--risk-kritik"),
-              "high",
-              css("--risk-yuksek"),
-              "medium",
-              css("--risk-orta"),
-              css("--risk-dusuk"),
-            ],
+            "line-color": vehicleColor(),
             "line-width": ["case", ["get", "selected"], 4.5, 2.5],
-            "line-opacity": ["case", ["get", "dimmed"], 0.35, 1],
-          },
+            "line-opacity": ["case", ["get", "dimmed"], 0.3, 0.95],
+          } as never,
         },
       ]
     case "us-halkalari":
       return [
-        casing(4),
+        casing(3.5, 0.6),
         {
           id: `${source}-cizgi`,
           type: "line",
           source,
-          paint: { "line-color": css("--metin"), "line-opacity": 0.95, "line-width": 1.75 },
+          paint: { "line-color": css("--metin-ikincil"), "line-opacity": 0.75, "line-width": 1.25 },
         },
       ]
   }
@@ -178,7 +253,12 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
 
 function markerElement(group: MarkerGroup, marker: MapMarker, onClick?: () => void): HTMLElement {
   const el = document.createElement(onClick ? "button" : "div")
-  el.className = [`harita-isaret`, `harita-isaret--${group}`, ...(marker.variant ?? []).map((v) => `harita-isaret--${v}`)].join(" ")
+  el.className = [
+    `harita-isaret`,
+    `harita-isaret--${group}`,
+    ...(marker.variant ?? []).map((v) => `harita-isaret--${v}`),
+    ...(marker.tone ? [`harita-isaret--sinif-${marker.tone}`] : []),
+  ].join(" ")
   el.setAttribute("aria-label", marker.description ?? marker.label)
   el.title = marker.description ?? marker.label
   if (onClick) {
@@ -193,7 +273,16 @@ function markerElement(group: MarkerGroup, marker: MapMarker, onClick?: () => vo
   icon.setAttribute("aria-hidden", "true")
   const label = document.createElement("span")
   label.className = "harita-isaret__etiket"
-  label.textContent = marker.label
+  // Baştaki seviye baklavası metin değil, seviye simgesi olarak çizilir (dolgu seviyeyle artar).
+  if (marker.label.startsWith(`${LEVEL_SHAPE} `)) {
+    const level = document.createElement("span")
+    level.className = "seviye-simge"
+    level.setAttribute("aria-hidden", "true")
+    level.textContent = LEVEL_SHAPE
+    label.append(level, marker.label.slice(LEVEL_SHAPE.length + 1))
+  } else {
+    label.textContent = marker.label
+  }
   el.append(icon, label)
   if (marker.headingDeg !== undefined) {
     const arrow = document.createElement("span")
@@ -237,6 +326,7 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
   let basemap: Basemap | null = null
   let theme: Tema = "koyu"
   const markers = new Map<MarkerGroup, Marker[]>()
+  const areas = new Map<AreaLayer, FeatureCollection>()
 
   const map = new MapLibreMap({
     container,
@@ -248,6 +338,16 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
     pitchWithRotate: false,
   })
   map.touchZoomRotate.disableRotation()
+
+  // Son sığdırma isteği: panel boyutu değişince (ilk yerleşim, çekmece açılıp kapanınca) yeniden
+  // sığdırılır; kullanıcı haritayı kendisi kaydırdı ya da yakınlaştırdıysa onun görünümü korunur.
+  let lastFit: { bounds: Bounds; padding: number } | null = null
+  map.on("movestart", (event) => {
+    if ((event as { originalEvent?: Event }).originalEvent) lastFit = null
+  })
+  map.on("resize", () => {
+    if (lastFit) map.fitBounds(lastFit.bounds, { padding: lastFit.padding, duration: 0 })
+  })
   map.addControl(new NavigationControl({ showCompass: false }), "top-left")
   map.addControl(new ScaleControl({ unit: "metric" }), "bottom-right")
 
@@ -262,7 +362,8 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
 
   function applyStyle(style: StyleSpecification | string) {
     map.setStyle(style, {
-      transformStyle: (previous, next) => {
+      transformStyle: (previous, incoming) => {
+        const next = restyleBasemap(incoming)
         if (!previous) return next
         const ours = Object.fromEntries(
           Object.entries(previous.sources).filter(([id]) => id.startsWith(PREFIX)),
@@ -291,9 +392,26 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
     }
     if (map.getLayer("zemin-arka")) map.setPaintProperty("zemin-arka", "background-color", css("--harita-duz-zemin"))
   }
-  map.on("style.load", repaint)
+  /** Alan katmanını sabit sırayla ekler: listede kendinden sonra gelen ilk katmanın altına. */
+  function addArea(layer: AreaLayer, data: FeatureCollection) {
+    map.addSource(PREFIX + layer, { type: "geojson", data })
+    const after = AREA_LAYERS.slice(AREA_LAYERS.indexOf(layer) + 1)
+      .flatMap((l) => overlayLayers(l).map((s) => s.id))
+      .find((layerId) => map.getLayer(layerId))
+    for (const spec of overlayLayers(layer)) map.addLayer(spec, after)
+  }
 
-  const styleFor = (b: Basemap) => (b === "uydu" ? rasterStyle() : b === "sokak" ? openFreeMapStyle(theme) : plainStyle())
+  // Stil önceki stil yüklenmeden değişirse MapLibre onu sıfırdan kurar ve transformStyle'a önceki
+  // stili vermez; o arada eklenen katmanlarımız düşer. Her stil yüklenişinde eksik olanlar yeniden eklenir.
+  map.on("style.load", () => {
+    for (const layer of AREA_LAYERS) {
+      const data = areas.get(layer)
+      if (data && !map.getSource(PREFIX + layer)) addArea(layer, data)
+    }
+    repaint()
+  })
+
+  const styleFor = (b: Basemap) => (b === "uydu" ? rasterStyle() : b === "sokak" ? OPENFREEMAP_STYLE : plainStyle())
 
   function withStyle(fn: () => void) {
     if (map.isStyleLoaded()) fn()
@@ -310,25 +428,18 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
     setTheme(next) {
       if (next === theme) return
       theme = next
-      // Sokak zemininin kendi koyu/açık stili var; diğer zeminlerde yalnızca katmanlar boyanır.
+      // Sokak zemini tema token'larıyla yeniden boyanır (stil yeniden yüklenir, katmanlarımız taşınır);
+      // diğer zeminlerde yalnızca katmanlar boyanır.
       if (basemap === "sokak") applyStyle(styleFor("sokak"))
       else withStyle(repaint)
     },
 
     setArea(layer, data: FeatureCollection) {
+      areas.set(layer, data)
       withStyle(() => {
-        const id = PREFIX + layer
-        const existing = map.getSource(id) as GeoJSONSource | undefined
-        if (existing) {
-          existing.setData(data)
-          return
-        }
-        map.addSource(id, { type: "geojson", data })
-        // Alan katmanları sabit sırayla: listede kendinden sonra gelen ilk katmanın altına.
-        const after = AREA_LAYERS.slice(AREA_LAYERS.indexOf(layer) + 1)
-          .flatMap((l) => overlayLayers(l).map((s) => s.id))
-          .find((layerId) => map.getLayer(layerId))
-        for (const spec of overlayLayers(layer)) map.addLayer(spec, after)
+        const existing = map.getSource(PREFIX + layer) as GeoJSONSource | undefined
+        if (existing) existing.setData(data)
+        else addArea(layer, data)
       })
     },
 
@@ -345,6 +456,7 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
     },
 
     fitBounds(bounds: Bounds, paddingPx) {
+      lastFit = { bounds, padding: paddingPx }
       map.fitBounds(bounds, { padding: paddingPx, duration: 0 })
     },
 

@@ -3,7 +3,10 @@
 import type { FeatureCollection } from "geojson"
 import { useMemo } from "react"
 
+import { CircleAlert, TriangleAlert } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
+import { toLngLat } from "@/lib/geo"
 import { buildFootprint, buildScene } from "@/lib/harita/sahne"
 import { buildContactLayers, contactBounds } from "@/lib/harita/temaslar"
 import type { MarkerGroup } from "@/lib/harita/types"
@@ -35,9 +38,14 @@ export function HaritaPaneli() {
 
   const theme = useOperasyon((s) => s.theme)
   const selectedZone = imageDetail.status === "ready" ? imageDetail.data.zone : null
+  // Seçili karenin köşeleri Bölge dilimlerinin içinde kalmalı (uzak kareler dilimin dışına taşmasın).
+  const cover = useMemo(
+    () => (imageDetail.status === "ready" ? Object.values(imageDetail.data.corner_coordinates).map(toLngLat) : []),
+    [imageDetail],
+  )
   const scene = useMemo(
-    () => (zones.status === "ready" ? buildScene(zones.data, selectedZone) : null),
-    [zones, selectedZone],
+    () => (zones.status === "ready" ? buildScene(zones.data, selectedZone, cover) : null),
+    [zones, selectedZone, cover],
   )
   const footprint = useMemo(
     () => (imageDetail.status === "ready" ? buildFootprint(imageDetail.data) : null),
@@ -96,7 +104,11 @@ export function HaritaPaneli() {
       />
 
       <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
-        <div role="group" aria-label="Harita zemini" className="flex rounded-md border border-cizgi bg-yuzey/90 p-0.5">
+        <div
+          role="group"
+          aria-label="Harita zemini"
+          className="flex gap-0.5 rounded-md border border-cizgi bg-yuzey p-0.5 shadow-golge"
+        >
           {BASEMAPS.map((b) => (
             <button
               key={b.id}
@@ -104,8 +116,10 @@ export function HaritaPaneli() {
               aria-pressed={basemap === b.id}
               onClick={() => setBasemap(b.id)}
               className={cn(
-                "rounded px-2.5 py-1 text-xs font-bold",
-                basemap === b.id ? "bg-secim-zemin text-metin" : "text-metin-ikincil hover:text-metin",
+                "rounded px-3 py-1 text-xs font-bold transition-colors focus-visible:outline-offset-0",
+                basemap === b.id
+                  ? "bg-birincil text-birincil-uzeri"
+                  : "text-metin-ikincil hover:bg-kart-hover hover:text-metin",
               )}
             >
               {b.label}
@@ -113,7 +127,11 @@ export function HaritaPaneli() {
           ))}
         </div>
         {basemapFailed && (
-          <p role="status" className="max-w-56 rounded-md border border-cizgi bg-yuzey/90 px-2 py-1 text-xs text-metin-ikincil">
+          <p
+            role="status"
+            className="flex max-w-60 gap-1.5 rounded-md border border-cizgi bg-yuzey px-2 py-1.5 text-xs text-metin-ikincil shadow-golge"
+          >
+            <TriangleAlert aria-hidden className="mt-px size-3.5 shrink-0 text-metin" />
             Harita zemini yüklenemedi; düz zemin gösteriliyor. Katmanlar çalışmaya devam ediyor.
           </p>
         )}
@@ -123,7 +141,8 @@ export function HaritaPaneli() {
 
       {zones.status === "error" && (
         <div className="absolute inset-0 z-10 flex items-center justify-center">
-          <div role="alert" className="max-w-sm rounded-lg border border-cizgi bg-yuzey p-4 text-center">
+          <div role="alert" className="max-w-sm rounded-lg border border-cizgi bg-yuzey p-4 text-center shadow-golge-yuksek">
+            <CircleAlert aria-hidden className="mx-auto mb-1 size-5 text-hata" />
             <p className="font-bold">Üs ve bölge bilgisi alınamadı.</p>
             <p className="mt-1 text-xs text-metin-soluk">{zones.message}</p>
             <Button className="mt-3" size="sm" onClick={() => void loadZones()}>

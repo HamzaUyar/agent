@@ -142,14 +142,17 @@ describe("Görüntü üzerinde tespitler", () => {
     )
   })
 
-  it("zayıf tespit kesikli kutuyla ve 'zayıf tespit' olarak gösterilir", async () => {
+  it("takip durumu çizgide: eşleşmiş düz, track'i olmayan kesikli; zayıf tespit ince ve 'zayıf tespit' olarak", async () => {
     withBrief((b) => {
       b.contacts[1].is_weak = true
       return b
     })
     await evaluated()
 
+    const tracked = screen.getByRole("button", { name: /· T0122 · Kritik$/ })
+    expect(tracked).not.toHaveClass("border-dashed")
     const weak = screen.getByRole("button", { name: /otomobil %83 · track yok · Düşük · zayıf tespit/ })
     expect(weak).toHaveClass("border-dashed")
+    expect(weak).toHaveClass("border-[1.5px]")
   })
 })

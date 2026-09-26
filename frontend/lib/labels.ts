@@ -38,6 +38,14 @@ export const VEHICLE_CLASS: Record<string, string> = {
 export const vehicleClass = (label: string | null | undefined) =>
   label ? (VEHICLE_CLASS[label] ?? label) : "tip bilinmiyor"
 
+/**
+ * Araç sınıfının renk tonu (`--sinif-<ton>` token'ı). Renk yalnızca sınıfı anlatır; seviye ve takip
+ * durumu başka kanallardadır. Bilinmeyen sınıf ve tipi bilinmeyen temas nötr `diger`.
+ */
+export type VehicleTone = "car" | "van" | "truck" | "bus" | "diger"
+export const vehicleTone = (label: string | null | undefined): VehicleTone =>
+  label && label in VEHICLE_CLASS ? (label as VehicleTone) : "diger"
+
 export const CERTAINTY: Record<Certainty, string> = {
   certain: "kesin",
   likely: "olası",

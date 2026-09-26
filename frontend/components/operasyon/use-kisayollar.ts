@@ -16,7 +16,15 @@ function isTyping(target: EventTarget | null): boolean {
 
 /** Ok tuşlarını kendisi kullanan öğeler (sekmeler, seçim kutuları); orada ←/→ kare değiştirmez. */
 function usesArrows(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && target.closest('[role="tablist"], select, [role="slider"]') !== null
+  return (
+    target instanceof HTMLElement &&
+    target.closest('[role="tablist"], select, [role="slider"], [role="combobox"]') !== null
+  )
+}
+
+/** Açık seçim listesi (Radix Select) bütün tuşları kendisi kullanır: harfle arama, oklar, Esc. */
+function inListbox(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.closest('[role="listbox"]') !== null
 }
 
 /**
@@ -26,7 +34,7 @@ function usesArrows(target: EventTarget | null): boolean {
 export function useKisayollar() {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || inListbox(event.target)) return
       const s = useOperasyon.getState()
 
       if (event.key === "Escape") {

@@ -35,6 +35,8 @@ export type MapMarker = {
   description?: string
   /** Görünüm değişkenleri (ör. Temas türü ve seviyesi); `harita-isaret--<değişken>` sınıfı olur. */
   variant?: string[]
+  /** Renk tonu (araç sınıfı: car/van/truck/bus/diger); `harita-isaret--sinif-<ton>` sınıfı olur. */
+  tone?: string
   /** Varsa işaretin yanında bu yöne dönük ok (derece, kuzeyden saat yönünde). */
   headingDeg?: number
 }

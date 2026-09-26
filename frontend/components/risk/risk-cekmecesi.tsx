@@ -1,6 +1,6 @@
 "use client"
 
-import { Loader2 } from "lucide-react"
+import { CircleAlert, Loader2 } from "lucide-react"
 import { useEffect, useRef } from "react"
 
 import { SeviyeRozeti, levelText } from "@/components/operasyon/seviye-rozeti"
@@ -34,7 +34,7 @@ export function RiskCekmecesi() {
 
   return (
     <Tabs value={riskTab} onValueChange={(v) => setRiskTab(v as RiskTab)}>
-      <TabsList>
+      <TabsList className="w-full">
         <TabsTrigger value="temaslar">Temaslar</TabsTrigger>
         <TabsTrigger value="brief">Brief</TabsTrigger>
       </TabsList>
@@ -53,7 +53,11 @@ export function RiskCekmecesi() {
 }
 
 function BosDurum() {
-  return <p className="text-metin-soluk">Henüz değerlendirme yok. Bir kare seçip risk analizini başlatın.</p>
+  return (
+    <p className="rounded-md border border-dashed border-cizgi-guclu p-3 text-center text-metin-soluk">
+      Henüz değerlendirme yok. Bir kare seçip risk analizini başlatın.
+    </p>
+  )
 }
 
 function DegerlendirmeDurumu({ evaluation }: { evaluation: Evaluation }) {
@@ -83,15 +87,18 @@ function DegerlendirmeDurumu({ evaluation }: { evaluation: Evaluation }) {
   return (
     <>
       {brief && (
-        <div className="flex flex-wrap items-center gap-2">
-          <SeviyeRozeti level={brief.risk_level} />
-          <span>→ {brief.recommended_action}</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-cizgi bg-kart p-2">
+          <SeviyeRozeti level={brief.risk_level} className="text-sm" />
+          <span className="text-metin">→ {brief.recommended_action}</span>
         </div>
       )}
       {evaluation.status === "error" && (
-        <div role="alert" className="rounded-md border border-risk-kritik/50 p-3">
-          <p className="font-bold">{evaluation.error ?? "Değerlendirme başarısız."}</p>
-          <Button className="mt-2" size="sm" onClick={() => void startEvaluation(true)}>
+        <div role="alert" className="rounded-md border border-cizgi bg-kart p-3 shadow-golge">
+          <p className="flex items-center gap-1.5 font-bold">
+            <CircleAlert aria-hidden className="size-4 shrink-0 text-hata" />
+            {evaluation.error ?? "Değerlendirme başarısız."}
+          </p>
+          <Button className="mt-2" size="sm" variant="outline" onClick={() => void startEvaluation(true)}>
             Tekrar dene
           </Button>
         </div>
@@ -100,8 +107,8 @@ function DegerlendirmeDurumu({ evaluation }: { evaluation: Evaluation }) {
       {brief && <TemasListesi brief={brief} />}
       {brief ? (
         // Brief geldikten sonra adımlar katlanır; gerekçe için açılabilir.
-        <details aria-label="Değerlendirme adımları" className="rounded-md border border-cizgi px-2 py-1.5">
-          <summary className="cursor-pointer text-xs font-bold tracking-wider text-metin-soluk uppercase select-none">
+        <details aria-label="Değerlendirme adımları" className="rounded-md border border-cizgi bg-kart px-2 py-1.5">
+          <summary className="text-xs font-bold tracking-wider text-metin-soluk uppercase select-none">
             Değerlendirme adımları ({evaluation.steps.length})
           </summary>
           <div className="mt-2">{steps}</div>

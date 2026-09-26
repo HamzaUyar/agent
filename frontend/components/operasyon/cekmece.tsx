@@ -113,22 +113,22 @@ export function Cekmece({ side, title, panelKey, state, peek, children }: Cekmec
           side === "right" ? "-left-1.5" : "-right-1.5",
         )}
       >
-        <span className="h-10 w-1 rounded-full bg-cizgi" />
+        <span className="h-10 w-1 rounded-full bg-cizgi-guclu/60 transition-colors hover:bg-cizgi-guclu" />
       </div>
 
       {state === "peek" ? (
         <button
           type="button"
           onClick={() => setDrawerState(side, "half")}
-          className="flex h-full w-full items-center justify-center text-xs text-metin-ikincil [writing-mode:vertical-rl]"
+          className="flex h-full w-full items-center justify-center text-xs font-bold text-metin-ikincil transition-colors [writing-mode:vertical-rl] hover:bg-kart-hover hover:text-metin"
           aria-label={`${title} çekmecesini aç`}
         >
           {peek ?? title}
         </button>
       ) : (
         <>
-          <header className="flex items-center gap-2 border-b border-cizgi px-3 py-2">
-            <h2 ref={headingRef} tabIndex={-1} className="flex-1 text-sm font-bold outline-none">
+          <header className="flex items-center gap-2 border-b border-cizgi bg-yuzey px-3 py-2">
+            <h2 ref={headingRef} tabIndex={-1} className="flex-1 text-sm font-bold text-metin outline-none">
               {title}
             </h2>
             <Button

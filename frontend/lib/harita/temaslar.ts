@@ -1,13 +1,14 @@
 /**
  * Brief'ten harita katmanları: Temas'lar (çekim anındaki konum), track'i olan Temas'ların rotası,
  * rota saatleri, duraklamaları ve son yönü. Çekim anından sonraki hiçbir şey çizilmez (ADR-0001).
+ * Renk = araç sınıfı (nokta ve rota); seviye etiketteki baklava ve şeritte; takip durumu noktanın çizgisinde.
  */
 import type { FeatureCollection } from "geojson"
 
 import type { Brief, ContactFinding, RoutePoint } from "@/lib/api/types"
 import { formatDegrees, formatDistance } from "@/lib/format"
 import { boundsOf, circleRing, toLngLat, type Bounds } from "@/lib/geo"
-import { CERTAINTY, CONTACT_KIND, RISK, TREND, vehicleClass } from "@/lib/labels"
+import { CERTAINTY, CONTACT_KIND, RISK, TREND, vehicleClass, vehicleTone } from "@/lib/labels"
 import { bySeverity, contactName, keyedContacts } from "@/lib/temas"
 
 import type { MapMarker } from "./types"
@@ -59,12 +60,15 @@ export function buildContactLayers(brief: Brief, selectedKey: string | null = nu
         properties: {
           key,
           level: contact.final_level,
+          vehicle: vehicleTone(contact.effective_label ?? contact.label),
           selected: key === selectedKey,
           dimmed: selectedKey !== null && key !== selectedKey,
         },
         geometry: { type: "LineString", coordinates: route.map(toLngLat) },
       })
     }
+    // Metaveri (saat, duraklama) seçim varken yalnızca seçili Temas için: harita sade kalsın.
+    if (selectedKey !== null && key !== selectedKey) continue
     route.forEach((p, i) => {
       if (!p.time || (i % TIME_LABEL_EVERY !== 0 && i !== route.length - 1)) return
       routeTimes.push({ id: `${key}-${i}`, lngLat: toLngLat(p), label: p.time, description: `${key} · ${p.time}` })
@@ -89,6 +93,7 @@ export function buildContactLayers(brief: Brief, selectedKey: string | null = nu
       label: `${RISK[contact.final_level].shape} ${contactName(contact)}${m ? ` · ${TREND[m.trend]}` : ""}`,
       description: describe(contact),
       variant: [contact.kind, contact.final_level, ...(key === selectedKey ? ["secili"] : [])],
+      tone: vehicleTone(contact.effective_label ?? contact.label),
       headingDeg: heading,
     }
   })

@@ -44,11 +44,12 @@ export function SekmeRafi({ side }: { side: Side }) {
           aria-keyshortcuts={tab.shortcut}
           title={`${tab.label} (${tab.shortcut})`}
           className={cn(
-            "rounded-md border px-1.5 py-3 text-xs font-bold [writing-mode:vertical-rl]",
+            "rounded-md border px-1.5 py-3 text-xs font-bold transition-colors [writing-mode:vertical-rl]",
             side === "left" && "rotate-180",
+            // Etkin sekme: ters renk (mürekkep). Mavi değil: mavi yalnızca seçili veri için.
             tab.active
-              ? "border-secim bg-secim-zemin text-metin"
-              : "border-cizgi bg-kart text-metin-ikincil hover:text-metin",
+              ? "border-birincil bg-birincil text-birincil-uzeri"
+              : "border-cizgi bg-kart text-metin-ikincil hover:border-cizgi-guclu hover:bg-kart-hover hover:text-metin",
           )}
         >
           {tab.label}

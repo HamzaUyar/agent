@@ -6,101 +6,245 @@
 
 /*
  * Tasarım token'ları üç katmanlı (design-system/operasyon-ekrani/pages/operasyon.md):
- *   1. ham değerler      --ham-*
- *   2. anlamlı değerler  --zemin, --metin, --secim, --risk-*, --veri-bayat …
+ *   1. ham değerler      --ham-*   (yalnızca bu dosyada, anlamlı katmanda kullanılır)
+ *   2. anlamlı değerler  zemin/yüzey/kart/çizgi/metin, --birincil, --secim, --odak, --seviye-*,
+ *                        --sinif-*, --bolge-*, --harita-*, --veri-bayat, --otomatik-ozet, --hata
  *   3. bileşen değerleri --ust-cubuk-*, --harita-paneli-*, --cekmece-*, --zaman-akisi-*
- * İki tema: koyu (varsayılan; karanlık oda, projektör) ve açık (aydınlık ortam). Tema yalnızca
- * anlamlı katmanı değiştirir; bileşenler anlamlı değerlere bağlı olduğu için kendiliğinden uyar.
- * Palet nötr grafit/kâğıt tonları ve çelik mavisi seçim; mor, neon ve gradyan yok.
+ * İki tema ayrı tasarlanır (biri ötekinin tersi değil): açık = ferah operasyon masası, koyu =
+ * izleme odası. Tema yalnızca anlamlı katmanı değiştirir; bileşenler kendiliğinden uyar.
+ *
+ * Renk = anlam. Her renk ailesinin tek bir görevi var:
+ *   mavi  (--secim)     yalnızca kullanıcının seçtiği veri: kare, temas, zaman akışındaki kare, ayak izi; odak halkası
+ *   mürekkep (--birincil) birincil eylem düğmesi ve etkin kontrol (sekme, zemin anahtarı)
+ *   kırmızı→yeşil (--seviye-*) yalnızca risk seviyesi; her zaman simge dolgusu + kelimeyle
+ *   camgöbeği/mor/gül/limon (--sinif-*) yalnızca araç sınıfı (kutu, harita noktası, rota)
+ *   nötr kesikli (--bolge-*) yaklaşık bölge alanı; nötr mono (--metin-soluk) koordinat/saat/metaveri
+ * Takip durumu renkle değil çizgi biçimiyle: düz = eşleşmiş, kesikli = kayıt dışı, noktalı = kaçırılmış.
  */
 :root {
-  /* 1 · ham */
-  --ham-grafit-950: #101214;
-  --ham-grafit-900: #16191c;
-  --ham-grafit-850: #1b1e22;
-  --ham-grafit-800: #22262a;
-  --ham-grafit-700: #2d3136;
-  --ham-grafit-600: #43484e;
-  --ham-tas-400: #8e8c86;
-  --ham-tas-300: #c4c1ba;
-  --ham-tas-50: #eeece7;
-  --ham-kagit-50: #f6f5f1;
-  --ham-kagit-100: #ecebe6;
-  --ham-kagit-200: #e2e0da;
-  --ham-kagit-300: #c9c6be;
-  --ham-murekkep-900: #1c1d1f;
-  --ham-murekkep-700: #3d4043;
-  --ham-murekkep-500: #63666a;
-  --ham-celik-400: #5aa2dc;
-  --ham-celik-700: #1f66a3;
-  --ham-celik-950: #11283b;
-  --ham-celik-100: #d6e6f4;
-  --ham-yesil-400: #4cb963;
-  --ham-yesil-700: #257a38;
-  --ham-sari-400: #f2c230;
-  --ham-sari-700: #9a7400;
-  --ham-turuncu-400: #f28a2e;
-  --ham-turuncu-700: #b85a0c;
-  --ham-kirmizi-400: #f0514a;
-  --ham-kirmizi-700: #c0272d;
-  --ham-kum-400: #c6b184;
+  /* 1 · ham · açık */
+  --ham-acik-0: #ffffff;
+  --ham-acik-50: #f7f8fa;
+  --ham-acik-100: #f3f5f8;
+  --ham-acik-150: #eef1f5;
+  --ham-acik-200: #eceff3;
+  --ham-acik-300: #d6dce3;
+  --ham-acik-500: #858f9c;
+  --ham-murekkep-400: #5b6573;
+  --ham-murekkep-600: #3c4654;
+  --ham-murekkep-800: #2b3643;
+  --ham-murekkep-900: #17202b;
+  --ham-murekkep-950: #121821;
+  /* 1 · ham · koyu (antrasit; saf siyah değil) */
+  --ham-koyu-950: #0e1217;
+  --ham-koyu-900: #151a21;
+  --ham-koyu-850: #1c222b;
+  --ham-koyu-800: #212833;
+  --ham-koyu-750: #242b36;
+  --ham-koyu-700: #2e3743;
+  --ham-koyu-500: #647082;
+  --ham-sis-400: #8a95a3;
+  --ham-sis-200: #b4beca;
+  --ham-sis-50: #e7ebf0;
+  /* seçim mavisi */
+  --ham-mavi-700: #1c62d4;
+  --ham-mavi-100: #e6effc;
+  --ham-mavi-300: #6aa5f7;
+  --ham-mavi-950: #172a45;
+  /* seviye */
+  --ham-kirmizi-700: #c42b2b;
+  --ham-kirmizi-50: #fcebeb;
+  --ham-kirmizi-300: #f47272;
+  --ham-kirmizi-950: #3a1c1f;
+  --ham-turuncu-700: #ad4f08;
+  --ham-turuncu-50: #fcf0e5;
+  --ham-turuncu-300: #f29450;
+  --ham-turuncu-950: #3a2718;
+  --ham-amber-700: #876500;
+  --ham-amber-50: #faf3da;
+  --ham-amber-300: #e3bf4e;
+  --ham-amber-950: #352e16;
+  --ham-yesil-700: #2d7a4c;
+  --ham-yesil-50: #e6f3eb;
+  --ham-yesil-300: #5cc58c;
+  --ham-yesil-950: #16301f;
+  /* araç sınıfı: seviye ve seçim tonlarından uzak dört ton (≥3:1 kendi haritasında) */
+  --ham-camgobegi-700: #0a7d89;
+  --ham-camgobegi-300: #52cad6;
+  --ham-mor-700: #6346c2;
+  --ham-mor-300: #a99af5;
+  --ham-gul-700: #b0307a;
+  --ham-gul-300: #ee8cc1;
+  --ham-limon-700: #647a0c;
+  --ham-limon-300: #c2d35a;
+  /* kaynak rozetleri */
   --ham-kum-700: #7a6430;
+  --ham-kum-300: #c6b184;
   --ham-beyaz: #ffffff;
   --ham-siyah: #000000;
 
-  /* Görüntü üzerindeki tespit kutuları: fotoğrafın üstünde, temadan bağımsız.
-     Hepsi tek renk (beyaz, siyah kılıflı); seçili kutu çelik mavisi. */
-  --tespit-kutu: var(--ham-beyaz);
-  --tespit-kutu-kilif: var(--ham-siyah);
-  --tespit-kutu-secili: var(--ham-celik-400);
+  /* Görüntü üzerindeki tespit katmanı fotoğrafın üstünde, temadan bağımsız: renkler koyu temanın
+     sınıf tonları (katman `.dark` altında çizilir), her kutu siyah kılıflı. */
+  --tespit-kutu-kilif: rgb(0 0 0 / 0.85);
+  --tespit-kutu-secili-hale: var(--ham-beyaz);
+  --tespit-etiket-zemin: rgb(14 18 23 / 0.88);
 }
 
-/* 2 · anlamlı · açık tema */
+/* 2 · anlamlı · açık tema: serin açık gri zemin, beyaz kartlar, mürekkep metin */
 :root {
-  --zemin: var(--ham-kagit-100);
-  --yuzey: var(--ham-kagit-50);
-  --kart: var(--ham-beyaz);
-  --kart-vurgu: var(--ham-kagit-200);
-  --cizgi: var(--ham-kagit-300);
-  --metin: var(--ham-murekkep-900);
-  --metin-ikincil: var(--ham-murekkep-700);
-  --metin-soluk: var(--ham-murekkep-500);
-  --secim: var(--ham-celik-700);
-  --secim-zemin: var(--ham-celik-100);
+  --zemin: var(--ham-acik-200);
+  --yuzey: var(--ham-acik-50);
+  --kart: var(--ham-acik-0);
+  --kart-vurgu: var(--ham-acik-150);
+  --kart-hover: var(--ham-acik-100);
+  --cizgi: var(--ham-acik-300);
+  --cizgi-guclu: var(--ham-acik-500);
+  --metin: var(--ham-murekkep-950);
+  --metin-ikincil: var(--ham-murekkep-600);
+  --metin-soluk: var(--ham-murekkep-400);
+  --golge: 0 1px 2px rgb(18 24 33 / 0.06), 0 2px 8px rgb(18 24 33 / 0.06);
+  --golge-yuksek: 0 4px 16px rgb(18 24 33 / 0.12), 0 1px 3px rgb(18 24 33 / 0.08);
+
+  --birincil: var(--ham-murekkep-900);
+  --birincil-hover: var(--ham-murekkep-800);
+  --birincil-uzeri: var(--ham-beyaz);
+  --secim: var(--ham-mavi-700);
+  --secim-zemin: var(--ham-mavi-100);
   --secim-uzeri: var(--ham-beyaz);
-  --risk-dusuk: var(--ham-yesil-700);
-  --risk-orta: var(--ham-sari-700);
-  --risk-yuksek: var(--ham-turuncu-700);
-  --risk-kritik: var(--ham-kirmizi-700);
-  --veri-bayat: var(--ham-murekkep-500);
+  --odak: var(--ham-mavi-700);
+  --hata: var(--ham-kirmizi-700);
+
+  --seviye-kritik: var(--ham-kirmizi-700);
+  --seviye-kritik-zemin: var(--ham-kirmizi-50);
+  --seviye-kritik-uzeri: var(--ham-beyaz);
+  --seviye-yuksek: var(--ham-turuncu-700);
+  --seviye-yuksek-zemin: var(--ham-turuncu-50);
+  --seviye-orta: var(--ham-amber-700);
+  --seviye-orta-zemin: var(--ham-amber-50);
+  --seviye-dusuk: var(--ham-yesil-700);
+  --seviye-dusuk-zemin: var(--ham-yesil-50);
+  --seviye-yok: var(--ham-murekkep-400);
+  /* Canlı seviye işaretleri (yalnızca metinsiz simgeler, ör. zaman akışı): doygun tonlar; sarı
+     açık zeminde kaybolmasın diye koyu amber kenarlı. Metin ve rozetler yukarıdaki koyu tonlarda kalır. */
+  --seviye-kritik-canli: #e5322d;
+  --seviye-yuksek-canli: #f97316;
+  --seviye-orta-canli: #f5b800;
+  --seviye-orta-canli-kenar: #b98600;
+  --seviye-dusuk-canli: #1fa35b;
+
+  --sinif-car: var(--ham-camgobegi-700);
+  --sinif-van: var(--ham-mor-700);
+  --sinif-truck: var(--ham-gul-700);
+  --sinif-bus: var(--ham-limon-700);
+  --sinif-diger: var(--ham-murekkep-400);
+
+  --veri-bayat: var(--ham-murekkep-400);
   --otomatik-ozet: var(--ham-kum-700);
-  /* Harita çizgilerinin kılıfı: zeminin tersi, açık sokak haritasında da seçilsin. */
+
+  /* Harita zemini (OpenFreeMap vektör stili bu token'larla yeniden boyanır). Sakin ama boş değil:
+     yollar beyaz ve kılıflı, su/yeşil alan düşük doygunlukta; bizim katmanlarımızdan hep daha soluk. */
+  --harita-kara: #efede8;
+  --harita-yerlesim: #e8e5df;
+  --harita-yesil: #dbe5d3;
+  --harita-su: #bdd2e1;
+  --harita-su-yazi: #4a6b86;
+  --harita-yapi: #e0dbd3;
+  --harita-yapi-kenar: #cfc8bd;
+  --harita-yol: #ffffff;
+  --harita-yol-kilif: #d9d3c9;
+  --harita-yol-ana: #ffffff;
+  --harita-yol-ana-kilif: #c4bcae;
+  --harita-otoyol: #fbf6ec;
+  --harita-otoyol-kilif: #b5ab9b;
+  --harita-demiryolu: #c9c3ba;
+  --harita-sinir: #a59eb3;
+  --harita-yazi: #3e444c;
+  --harita-yazi-yol: #6b7079;
+  --harita-yazi-hale: rgb(247 246 242 / 0.95);
+  --harita-duz-zemin: var(--harita-kara);
+  /* Bizim çizgilerimizin kılıfı ve DOM işaretlerinin yazı halesi. */
   --harita-kilif: var(--ham-beyaz);
-  --harita-duz-zemin: var(--ham-kagit-200);
+  --harita-hale: rgb(255 255 255 / 0.92);
+  --bolge-cizgi: #4d5663;
+  --bolge-dolgu: #3c4654;
+  --bolge-secili: #1f2833;
 }
 
-/* 2 · anlamlı · koyu tema */
+/* 2 · anlamlı · koyu tema: antrasit katmanlar (zemin < yüzey < kart), sis rengi metin */
 .dark {
-  --zemin: var(--ham-grafit-950);
-  --yuzey: var(--ham-grafit-900);
-  --kart: var(--ham-grafit-800);
-  --kart-vurgu: var(--ham-grafit-700);
-  --cizgi: var(--ham-grafit-600);
-  --metin: var(--ham-tas-50);
-  --metin-ikincil: var(--ham-tas-300);
-  --metin-soluk: var(--ham-tas-400);
-  --secim: var(--ham-celik-400);
-  --secim-zemin: var(--ham-celik-950);
-  --secim-uzeri: var(--ham-grafit-950);
-  --risk-dusuk: var(--ham-yesil-400);
-  --risk-orta: var(--ham-sari-400);
-  --risk-yuksek: var(--ham-turuncu-400);
-  /* Kırmızı yalnızca kritik için. */
-  --risk-kritik: var(--ham-kirmizi-400);
-  --veri-bayat: var(--ham-tas-400);
-  --otomatik-ozet: var(--ham-kum-400);
-  --harita-kilif: var(--ham-grafit-950);
-  --harita-duz-zemin: var(--ham-grafit-850);
+  --zemin: var(--ham-koyu-950);
+  --yuzey: var(--ham-koyu-900);
+  --kart: var(--ham-koyu-850);
+  --kart-vurgu: var(--ham-koyu-750);
+  --kart-hover: var(--ham-koyu-800);
+  --cizgi: var(--ham-koyu-700);
+  --cizgi-guclu: var(--ham-koyu-500);
+  --metin: var(--ham-sis-50);
+  --metin-ikincil: var(--ham-sis-200);
+  --metin-soluk: var(--ham-sis-400);
+  --golge: 0 1px 2px rgb(0 0 0 / 0.35);
+  --golge-yuksek: 0 6px 20px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.4);
+
+  --birincil: var(--ham-sis-50);
+  --birincil-hover: var(--ham-beyaz);
+  --birincil-uzeri: var(--ham-koyu-950);
+  --secim: var(--ham-mavi-300);
+  --secim-zemin: var(--ham-mavi-950);
+  --secim-uzeri: var(--ham-koyu-950);
+  --odak: var(--ham-mavi-300);
+  --hata: var(--ham-kirmizi-300);
+
+  --seviye-kritik: var(--ham-kirmizi-300);
+  --seviye-kritik-zemin: var(--ham-kirmizi-950);
+  --seviye-kritik-uzeri: #1a0909;
+  --seviye-yuksek: var(--ham-turuncu-300);
+  --seviye-yuksek-zemin: var(--ham-turuncu-950);
+  --seviye-orta: var(--ham-amber-300);
+  --seviye-orta-zemin: var(--ham-amber-950);
+  --seviye-dusuk: var(--ham-yesil-300);
+  --seviye-dusuk-zemin: var(--ham-yesil-950);
+  --seviye-yok: var(--ham-sis-400);
+  --seviye-kritik-canli: var(--seviye-kritik);
+  --seviye-yuksek-canli: var(--seviye-yuksek);
+  --seviye-orta-canli: var(--seviye-orta);
+  --seviye-orta-canli-kenar: var(--seviye-orta);
+  --seviye-dusuk-canli: var(--seviye-dusuk);
+
+  --sinif-car: var(--ham-camgobegi-300);
+  --sinif-van: var(--ham-mor-300);
+  --sinif-truck: var(--ham-gul-300);
+  --sinif-bus: var(--ham-limon-300);
+  --sinif-diger: #c3ccd6;
+
+  --veri-bayat: var(--ham-sis-400);
+  --otomatik-ozet: var(--ham-kum-300);
+
+  /* Koyu harita: siyah değil, lacivert-antrasit kara; yollar kara ile ayrışır, ana yollar belirgin;
+     su koyu çelik mavisi. Yazılar sis tonunda, harita yine de verinin gerisinde kalır. */
+  --harita-kara: #1a1f26;
+  --harita-yerlesim: #1d232b;
+  --harita-yesil: #1b2924;
+  --harita-su: #13283b;
+  --harita-su-yazi: #7197b8;
+  --harita-yapi: #242b35;
+  --harita-yapi-kenar: #2d3541;
+  --harita-yol: #2c3440;
+  --harita-yol-kilif: #1a1f26;
+  --harita-yol-ana: #3a4553;
+  --harita-yol-ana-kilif: #151a20;
+  --harita-otoyol: #4a5668;
+  --harita-otoyol-kilif: #12161b;
+  --harita-demiryolu: #353e4a;
+  --harita-sinir: #5d6878;
+  --harita-yazi: #a9b3bf;
+  --harita-yazi-yol: #818d9b;
+  --harita-yazi-hale: rgb(20 24 30 / 0.95);
+  --harita-duz-zemin: var(--harita-kara);
+  --harita-kilif: var(--ham-koyu-950);
+  --harita-hale: rgb(14 18 23 / 0.9);
+  --bolge-cizgi: #b4beca;
+  --bolge-dolgu: #c9d2dc;
+  --bolge-secili: #eef2f6;
 }
 
 :root,
@@ -127,18 +271,18 @@
   --card-foreground: var(--metin);
   --popover: var(--kart);
   --popover-foreground: var(--metin);
-  --primary: var(--secim);
-  --primary-foreground: var(--secim-uzeri);
+  --primary: var(--birincil);
+  --primary-foreground: var(--birincil-uzeri);
   --secondary: var(--kart-vurgu);
   --secondary-foreground: var(--metin);
   --muted: var(--kart-vurgu);
   --muted-foreground: var(--metin-soluk);
-  --accent: var(--kart-vurgu);
+  --accent: var(--kart-hover);
   --accent-foreground: var(--metin);
-  --destructive: var(--risk-kritik);
+  --destructive: var(--hata);
   --border: var(--cizgi);
-  --input: var(--cizgi);
-  --ring: var(--secim);
+  --input: var(--cizgi-guclu);
+  --ring: var(--odak);
   --radius: 0.5rem;
 }
 
@@ -165,20 +309,34 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
 
+  --color-zemin: var(--zemin);
   --color-yuzey: var(--yuzey);
   --color-kart: var(--kart);
+  --color-kart-vurgu: var(--kart-vurgu);
+  --color-kart-hover: var(--kart-hover);
   --color-cizgi: var(--cizgi);
+  --color-cizgi-guclu: var(--cizgi-guclu);
   --color-metin: var(--metin);
   --color-metin-ikincil: var(--metin-ikincil);
   --color-metin-soluk: var(--metin-soluk);
+  --color-birincil: var(--birincil);
+  --color-birincil-hover: var(--birincil-hover);
+  --color-birincil-uzeri: var(--birincil-uzeri);
   --color-secim: var(--secim);
   --color-secim-zemin: var(--secim-zemin);
-  --color-risk-dusuk: var(--risk-dusuk);
-  --color-risk-orta: var(--risk-orta);
-  --color-risk-yuksek: var(--risk-yuksek);
-  --color-risk-kritik: var(--risk-kritik);
+  --color-secim-uzeri: var(--secim-uzeri);
+  --color-odak: var(--odak);
+  --color-hata: var(--hata);
+  --color-seviye-kritik: var(--seviye-kritik);
+  --color-seviye-yuksek: var(--seviye-yuksek);
+  --color-seviye-orta: var(--seviye-orta);
+  --color-seviye-dusuk: var(--seviye-dusuk);
+  --color-seviye-yok: var(--seviye-yok);
   --color-veri-bayat: var(--veri-bayat);
   --color-otomatik-ozet: var(--otomatik-ozet);
+
+  --shadow-golge: var(--golge);
+  --shadow-golge-yuksek: var(--golge-yuksek);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -188,7 +346,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   html {
     @apply font-sans;
@@ -202,12 +360,26 @@
     font-size: 0.875rem;
   }
   button:not(:disabled),
-  [role="button"]:not(:disabled) {
+  [role="button"]:not(:disabled),
+  summary {
     cursor: pointer;
   }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  /* Tek odak dili: 2 px odak mavisi, 2 px boşluk (zeminden ayrışsın diye). Seçim halkası boşluksuzdur. */
   :focus-visible {
-    outline: 2px solid var(--secim);
+    outline: 2px solid var(--odak);
     outline-offset: 2px;
+  }
+  /* İnce, temaya uyan kaydırma çubukları. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cizgi-guclu) transparent;
+  }
+  ::selection {
+    background: var(--secim-zemin);
+    color: var(--metin);
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -219,7 +391,122 @@
   }
 }
 
-/* Harita işaretleri (MapLibre DOM işaretleri) ve lejant simgeleri */
+/*
+ * Seviye dili: bütün seviyeler aynı baklava ailesi (operatör kararı), ama renk tek kanal değil.
+ * Baklavanın dolgusu seviyeyle artar: düşük = boş, orta = yarı dolu, yüksek = dolu, kritik = dolu + dış halka,
+ * değerlendirilmedi = kesikli gri. Renk körlüğünde de sıra okunur; yanında her zaman kelime ya da erişilebilir ad var.
+ * `.seviye--<level>` ya da haritadaki `.harita-isaret--<level>` bağlamı `--sv` değişkenlerini verir.
+ */
+@layer components {
+  :is(.seviye--low, .harita-isaret--low) {
+    --sv: var(--seviye-dusuk);
+    --sv-zemin: var(--seviye-dusuk-zemin);
+    --sv-dolgu: transparent;
+  }
+  :is(.seviye--medium, .harita-isaret--medium) {
+    --sv: var(--seviye-orta);
+    --sv-zemin: var(--seviye-orta-zemin);
+    --sv-dolgu: linear-gradient(to bottom right, transparent 50%, var(--seviye-orta) 50%);
+  }
+  :is(.seviye--high, .harita-isaret--high) {
+    --sv: var(--seviye-yuksek);
+    --sv-zemin: var(--seviye-yuksek-zemin);
+    --sv-dolgu: var(--seviye-yuksek);
+  }
+  :is(.seviye--critical, .harita-isaret--critical) {
+    --sv: var(--seviye-kritik);
+    --sv-zemin: var(--seviye-kritik-zemin);
+    --sv-dolgu: var(--seviye-kritik);
+    --sv-halka: 0 0 0 1.5px var(--sv-bosluk, var(--kart)), 0 0 0 3px var(--seviye-kritik);
+  }
+  .seviye--none {
+    --sv: var(--seviye-yok);
+    --sv-zemin: transparent;
+    --sv-dolgu: transparent;
+    --sv-cizgi: dashed;
+  }
+  /* Canlı bağlam (zaman akışı): aynı dolgu merdiveni, doygun renklerle. */
+  .seviye-canli .seviye--low {
+    --sv: var(--seviye-dusuk-canli);
+    --sv-kenar: 2px;
+  }
+  .seviye-canli .seviye--medium {
+    --sv: var(--seviye-orta-canli-kenar);
+    --sv-dolgu: linear-gradient(to bottom right, transparent 50%, var(--seviye-orta-canli) 50%);
+  }
+  .seviye-canli .seviye--high {
+    --sv: var(--seviye-yuksek-canli);
+    --sv-dolgu: var(--seviye-yuksek-canli);
+  }
+  .seviye-canli .seviye--critical {
+    --sv: var(--seviye-kritik-canli);
+    --sv-dolgu: var(--seviye-kritik-canli);
+    --sv-halka: 0 0 0 1.5px var(--sv-bosluk, var(--kart)), 0 0 0 3px var(--seviye-kritik-canli);
+  }
+  .seviye-simge {
+    display: inline-block;
+    flex-shrink: 0;
+    width: var(--sv-boyut, 0.62em);
+    height: var(--sv-boyut, 0.62em);
+    margin-inline: 0.12em;
+    transform: rotate(45deg);
+    border: var(--sv-kenar, 1.5px) var(--sv-cizgi, solid) var(--sv, currentColor);
+    background: var(--sv-dolgu, currentColor);
+    box-shadow: var(--sv-halka, none);
+    border-radius: 1px;
+    /* İçindeki ◆ karakteri yalnızca metin olarak kalır (kopyalama, metin içeriği); şekli CSS çizer. */
+    overflow: hidden;
+    color: transparent;
+    font-size: 0;
+    line-height: 0;
+    vertical-align: middle;
+  }
+}
+
+/* Harita denetimleri (MapLibre): tema yüzeyinde, ikonlar temaya göre. */
+@layer components {
+  .maplibregl-ctrl-group:not(:empty) {
+    background: var(--yuzey);
+    border: 1px solid var(--cizgi);
+    border-radius: var(--radius-md);
+    box-shadow: var(--golge);
+    overflow: hidden;
+  }
+  .maplibregl-ctrl-group button + button {
+    border-top: 1px solid var(--cizgi);
+  }
+  .maplibregl-ctrl-group button:not(:disabled):hover {
+    background: var(--kart-hover);
+  }
+  .maplibregl-ctrl-group button:focus-visible {
+    outline: 2px solid var(--odak);
+    outline-offset: -2px;
+    box-shadow: none;
+  }
+  .dark .maplibregl-ctrl-group .maplibregl-ctrl-icon {
+    filter: invert(0.9);
+  }
+  .maplibregl-ctrl-scale {
+    background: color-mix(in srgb, var(--yuzey) 88%, transparent);
+    border-color: var(--metin-ikincil);
+    color: var(--metin-ikincil);
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+  .maplibregl-ctrl.maplibregl-ctrl-attrib {
+    background: color-mix(in srgb, var(--yuzey) 88%, transparent);
+    color: var(--metin-soluk);
+    font-size: 10px;
+  }
+  .maplibregl-ctrl-attrib a {
+    color: var(--metin-ikincil);
+  }
+}
+
+/*
+ * Harita işaretleri (MapLibre DOM işaretleri). Önem sırası: seçili temas > temaslar > Üs >
+ * bölge adları > duraklama/saat/halka etiketleri (metaveri: küçük, soluk, mono) > zemin.
+ */
 @layer components {
   .harita-isaret {
     display: flex;
@@ -229,10 +516,10 @@
     background: none;
     border: 0;
     padding: 0;
-    color: var(--metin);
+    color: var(--metin-ikincil);
     font-size: 12px;
     line-height: 1.1;
-    text-shadow: 0 0 3px var(--zemin), 0 0 2px var(--zemin);
+    text-shadow: 0 0 3px var(--harita-hale), 0 0 2px var(--harita-hale), 0 0 1px var(--harita-hale);
     pointer-events: auto;
   }
   .harita-isaret__etiket {
@@ -246,201 +533,264 @@
   .harita-isaret--us .harita-isaret__etiket,
   .harita-isaret--bolgeler .harita-isaret__etiket {
     position: absolute;
-    top: calc(100% + 2px);
+    top: calc(100% + 3px);
   }
   .harita-isaret--us .harita-isaret__etiket {
+    color: var(--metin);
     font-weight: 700;
+    font-size: 13px;
   }
+  /* Üs: kare içinde dolu kare (baklava değil; baklava seviyenin simgesi). */
   .harita-isaret--us .harita-isaret__simge,
   .harita-lejant__us {
     display: block;
-    width: 14px;
-    height: 14px;
-    transform: rotate(45deg);
-    border: 2px solid var(--metin);
-    background: var(--zemin);
+    width: 16px;
+    height: 16px;
+    border: 2.5px solid var(--metin);
+    border-radius: 2px;
+    background: radial-gradient(var(--metin) 0 0) center / 6px 6px no-repeat, var(--harita-hale);
   }
   .harita-isaret--bolgeler .harita-isaret__simge,
   .harita-lejant__bolge {
     display: block;
-    width: 10px;
-    height: 10px;
+    width: 9px;
+    height: 9px;
     border-radius: 9999px;
-    border: 2px solid var(--metin-ikincil);
-    background: color-mix(in srgb, var(--zemin) 60%, transparent);
+    border: 2px solid var(--bolge-cizgi);
+    background: var(--harita-hale);
+  }
+  .harita-isaret--bolgeler .harita-isaret__etiket {
+    color: var(--metin-ikincil);
+  }
+  .harita-isaret--bolgeler.harita-isaret--secili .harita-isaret__simge {
+    border-color: var(--bolge-secili);
+    background: var(--bolge-secili);
+  }
+  .harita-isaret--bolgeler.harita-isaret--secili .harita-isaret__etiket {
+    color: var(--metin);
+    font-weight: 700;
   }
   .harita-isaret--halka-etiketleri {
-    color: var(--metin-ikincil);
-    font-size: 11px;
+    color: var(--metin-soluk);
+    font-family: var(--font-mono);
+    font-size: 10px;
     pointer-events: none;
   }
   .harita-isaret--halka-etiketleri .harita-isaret__simge {
     display: none;
   }
-  .maplibregl-ctrl-attrib {
-    font-size: 10px;
-  }
 }
 
-/* Temas işaretleri: nokta gerçek konumda (tür dolgu/çizgiyle), etiket yanında (seviye şekil + kelime).
-   Etiketler çakışırsa adaptör --etiket-kayma ile aşağı kaydırır; kırık çizgi noktaya bağlar. */
+/*
+ * Temas işaretleri: nokta gerçek konumda. Nokta rengi = araç sınıfı; nokta çizgisi = takip durumu
+ * (düz dolu = eşleşmiş, kesikli halka = kayıt dışı, noktalı gri halka = kaçırılmış). Etiket nötr bir
+ * çiptir: soldaki şerit ve baklava seviyeyi söyler, metin kimlik ve eğilimi. Etiketler çakışırsa
+ * adaptör --etiket-kayma ile aşağı kaydırır; ince bir çizgi noktaya bağlar.
+ */
 @layer components {
   .harita-isaret--temaslar {
+    --sinif: var(--sinif-diger);
     position: relative;
     width: 14px;
     height: 14px;
     padding: 0;
+    color: var(--sinif);
     text-shadow: none;
   }
+  .harita-isaret--sinif-car { --sinif: var(--sinif-car); }
+  .harita-isaret--sinif-van { --sinif: var(--sinif-van); }
+  .harita-isaret--sinif-truck { --sinif: var(--sinif-truck); }
+  .harita-isaret--sinif-bus { --sinif: var(--sinif-bus); }
   .harita-isaret--temaslar .harita-isaret__simge {
     position: absolute;
     inset: 0;
     border-radius: 9999px;
-    border: 2px solid var(--zemin);
-    background: currentColor;
+    background: var(--sinif);
+    box-shadow: 0 0 0 2px var(--harita-kilif);
   }
   .harita-isaret--temaslar .harita-isaret__etiket {
+    --sv-bosluk: var(--kart);
     position: absolute;
-    left: 18px;
+    left: 20px;
     top: calc(50% + var(--etiket-kayma, 0px));
     transform: translateY(-50%);
-    padding: 1px 6px;
-    border-radius: 6px;
-    border: 2px solid currentColor;
-    background: color-mix(in srgb, var(--zemin) 85%, transparent);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px 2px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--cizgi);
+    border-left: 3px solid var(--sv, var(--cizgi-guclu));
+    background: color-mix(in srgb, var(--kart) 94%, transparent);
+    box-shadow: var(--golge);
     color: var(--metin);
     font-weight: 700;
     white-space: nowrap;
+  }
+  .harita-isaret--temaslar .harita-isaret__etiket .seviye-simge {
+    --sv-boyut: 8px;
+  }
+  .harita-isaret--temaslar:hover .harita-isaret__etiket {
+    border-color: var(--cizgi-guclu);
+    border-left-color: var(--sv, var(--cizgi-guclu));
   }
   .harita-isaret--temaslar::after {
     content: "";
     position: absolute;
     left: 7px;
     top: 7px;
-    width: 11px;
+    width: 13px;
     height: var(--etiket-kayma, 0px);
-    border-left: 1px solid currentColor;
-    border-bottom: 1px solid currentColor;
+    border-left: 1px solid var(--metin-soluk);
+    border-bottom: 1px solid var(--metin-soluk);
     pointer-events: none;
   }
-  .harita-isaret--low {
-    color: var(--risk-dusuk);
-  }
-  .harita-isaret--medium {
-    color: var(--risk-orta);
-  }
-  .harita-isaret--high {
-    color: var(--risk-yuksek);
-  }
-  .harita-isaret--critical {
-    color: var(--risk-kritik);
-  }
-  /* Eşleşmiş: dolu nokta · kayıt dışı: içi boş nokta · kaçırılmış: çarpılı nokta, kesikli etiket */
   .harita-isaret--unregistered .harita-isaret__simge {
-    background: var(--zemin);
-    box-shadow: inset 0 0 0 3px currentColor;
+    background: var(--harita-kilif);
+    border: 2.5px dashed var(--sinif);
+  }
+  .harita-isaret--missed {
+    --sinif: var(--sinif-diger);
   }
   .harita-isaret--missed .harita-isaret__simge {
-    background: linear-gradient(45deg, var(--zemin) 40%, currentColor 40% 60%, var(--zemin) 60%);
-    box-shadow: inset 0 0 0 3px currentColor;
+    background: var(--harita-kilif);
+    border: 2.5px dotted var(--sinif);
   }
   .harita-isaret--missed .harita-isaret__etiket {
-    border-style: dashed;
+    border-style: dotted;
+    border-left-style: solid;
   }
-  /* Son yön oku: noktanın çevresinde, yöne dönük. */
+  /* Son yön oku: noktanın çevresinde, yöne dönük; sınıf renginde. */
   .harita-isaret__yon {
     position: absolute;
     left: 1px;
-    top: -16px;
+    top: -15px;
     width: 0;
     height: 0;
     border-left: 6px solid transparent;
     border-right: 6px solid transparent;
-    border-bottom: 11px solid currentColor;
-    filter: drop-shadow(0 0 1px var(--zemin));
-    transform-origin: 6px 23px;
+    border-bottom: 10px solid var(--sinif);
+    filter: drop-shadow(0 0 1px var(--harita-kilif)) drop-shadow(0 0 1px var(--harita-kilif));
+    transform-origin: 6px 22px;
   }
+  /* Metaveri: duraklama ve rota saatleri küçük, soluk, mono. */
   .harita-isaret--duraklamalar .harita-isaret__simge {
     display: block;
-    width: 10px;
-    height: 10px;
-    border: 2px solid var(--metin);
+    width: 9px;
+    height: 9px;
+    border: 0 solid var(--metin-ikincil);
     border-left-width: 3px;
     border-right-width: 3px;
-    border-top: 0;
-    border-bottom: 0;
   }
   .harita-isaret--duraklamalar,
   .harita-isaret--rota-saatleri {
     flex-direction: row;
-    font-size: 11px;
+    gap: 3px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
     pointer-events: none;
   }
-  .harita-isaret--rota-saatleri {
+  .harita-isaret--duraklamalar {
     color: var(--metin-ikincil);
-    font-family: var(--font-mono);
+  }
+  .harita-isaret--rota-saatleri {
+    color: var(--metin-soluk);
   }
   .harita-isaret--rota-saatleri .harita-isaret__simge {
     display: block;
     width: 5px;
     height: 5px;
     border-radius: 9999px;
-    background: var(--metin-ikincil);
+    background: var(--metin-soluk);
+    box-shadow: 0 0 0 1.5px var(--harita-kilif);
   }
 }
 
+/* Seçili Temas: seçim mavisinde boşluklu halka, mavi çerçeveli çip; diğerlerinin üstünde. */
 @layer components {
-  /* Çeyrek daire: pasta dilimi. */
+  .harita-isaret--temaslar.harita-isaret--secili {
+    z-index: 20 !important;
+  }
+  .harita-isaret--temaslar.harita-isaret--secili .harita-isaret__simge {
+    outline: 2.5px solid var(--secim);
+    outline-offset: 2.5px;
+    transform: scale(1.15);
+  }
+  .harita-isaret--temaslar.harita-isaret--secili .harita-isaret__etiket {
+    border-color: var(--secim);
+    border-width: 2px;
+    border-left: 3px solid var(--sv, var(--secim));
+    box-shadow: var(--golge-yuksek);
+  }
+}
+
+/* Lejant simgeleri */
+@layer components {
   .harita-lejant__dilim {
     display: block;
-    width: 12px;
-    height: 12px;
+    width: 13px;
+    height: 13px;
     border-top-right-radius: 100%;
-    border: 1px dashed var(--metin-ikincil);
+    border: 1.25px dashed var(--bolge-cizgi);
     border-left-style: solid;
     border-bottom-style: solid;
-    background: color-mix(in srgb, var(--metin) 12%, transparent);
+    background: color-mix(in srgb, var(--bolge-dolgu) 10%, transparent);
   }
   .harita-lejant__dilim--secili {
+    border: 2px dashed var(--bolge-secili);
+    border-left-style: solid;
+    border-bottom-style: solid;
+    background: color-mix(in srgb, var(--bolge-dolgu) 22%, transparent);
+  }
+  .harita-lejant__ayak-izi {
+    display: block;
+    width: 14px;
+    height: 10px;
     border: 2px solid var(--secim);
-    background: color-mix(in srgb, var(--secim) 25%, transparent);
+    background: color-mix(in srgb, var(--secim) 12%, transparent);
   }
   .harita-lejant__temas {
     display: block;
-    width: 10px;
-    height: 10px;
+    width: 11px;
+    height: 11px;
     border-radius: 9999px;
-    color: var(--metin);
-    background: currentColor;
+    background: var(--metin-ikincil);
   }
-  .harita-lejant__temas.harita-isaret--unregistered {
+  .harita-lejant__temas--unregistered {
     background: transparent;
-    box-shadow: inset 0 0 0 2px currentColor;
+    border: 2px dashed var(--metin-ikincil);
   }
-  .harita-lejant__temas.harita-isaret--missed {
-    background: linear-gradient(45deg, transparent 42%, currentColor 42% 58%, transparent 58%);
-    box-shadow: inset 0 0 0 2px currentColor;
+  .harita-lejant__temas--missed {
+    background: transparent;
+    border: 2px dotted var(--metin-ikincil);
+  }
+  .harita-lejant__secili {
+    display: block;
+    width: 11px;
+    height: 11px;
+    border-radius: 9999px;
+    background: var(--metin-ikincil);
+    outline: 2px solid var(--secim);
+    outline-offset: 2px;
   }
   .harita-lejant__duraklama {
     display: block;
+    width: 9px;
+    height: 9px;
+    border-left: 3px solid var(--metin-ikincil);
+    border-right: 3px solid var(--metin-ikincil);
+  }
+  .sinif-renk {
+    display: inline-block;
+    flex-shrink: 0;
     width: 10px;
     height: 10px;
-    border-left: 3px solid var(--metin);
-    border-right: 3px solid var(--metin);
+    border-radius: 2px;
+    background: var(--sinif, var(--sinif-diger));
   }
-}
-
-/* Seçili Temas: seçim renginde halka ve etiket çerçevesi; diğerlerinin üstünde. */
-@layer components {
-  .harita-isaret--secili {
-    z-index: 20 !important;
-  }
-  .harita-isaret--secili .harita-isaret__simge {
-    outline: 3px solid var(--secim);
-    outline-offset: 2px;
-  }
-  .harita-isaret--secili .harita-isaret__etiket {
-    border-color: var(--secim);
-    box-shadow: 0 0 0 2px var(--secim-zemin);
-  }
+  .sinif--car { --sinif: var(--sinif-car); }
+  .sinif--van { --sinif: var(--sinif-van); }
+  .sinif--truck { --sinif: var(--sinif-truck); }
+  .sinif--bus { --sinif: var(--sinif-bus); }
+  .sinif--diger { --sinif: var(--sinif-diger); }
 }

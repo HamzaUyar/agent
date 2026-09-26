@@ -3,20 +3,26 @@
 import { SeviyeRozeti } from "@/components/operasyon/seviye-rozeti"
 import type { Brief, ContactKind } from "@/lib/api/types"
 import { formatDistance } from "@/lib/format"
-import { CERTAINTY, CONTACT_KIND, vehicleClass } from "@/lib/labels"
+import { CERTAINTY, CONTACT_KIND, vehicleClass, vehicleTone } from "@/lib/labels"
 import { bySeverity, keyedContacts, type KeyedContact } from "@/lib/temas"
 import { cn } from "@/lib/utils"
 import { useOperasyon } from "@/store/operasyon"
 
+/** Takip durumu çizgiyle (harita noktası ve görüntü kutusuyla aynı): düz · kesikli · noktalı. */
 const KIND_STYLE: Record<ContactKind, string> = {
-  matched: "border-metin-ikincil bg-metin-ikincil/15",
-  unregistered: "border-metin-ikincil",
-  missed: "border-dashed border-metin-ikincil",
+  matched: "border-solid",
+  unregistered: "border-dashed",
+  missed: "border-dotted",
 }
 
 export function TurRozeti({ kind }: { kind: ContactKind }) {
   return (
-    <span className={cn("rounded border px-1 py-px text-[11px] whitespace-nowrap text-metin-ikincil", KIND_STYLE[kind])}>
+    <span
+      className={cn(
+        "rounded border-[1.5px] border-cizgi-guclu px-1 py-px text-[11px] leading-4 whitespace-nowrap text-metin-ikincil",
+        KIND_STYLE[kind],
+      )}
+    >
       {CONTACT_KIND[kind]}
     </span>
   )
@@ -44,8 +50,8 @@ export function TemasListesi({ brief }: { brief: Brief }) {
         ))}
       </ul>
       {low.length > 0 && (
-        <details className="group rounded-md border border-cizgi">
-          <summary className="cursor-pointer px-2 py-1.5 text-xs text-metin-ikincil select-none">
+        <details className="group rounded-md border border-cizgi bg-kart">
+          <summary className="px-2 py-1.5 text-xs text-metin-ikincil select-none hover:text-metin">
             {low.length} düşük seviyeli temas, en yakını {formatDistance(nearestLow)}
           </summary>
           <ul className="flex flex-col gap-1 p-1">
@@ -59,9 +65,14 @@ export function TemasListesi({ brief }: { brief: Brief }) {
   )
 }
 
+/**
+ * Temas satırı: nötr kart. Seviye soldaki ince şeritte ve rozette (kartı boyamaz); sınıf renk
+ * karesinde; takip durumu tür rozetinin çizgisinde. Seçili satır mavi çerçeve + açık mavi zemin.
+ */
 function TemasSatiri({ item: { key, contact } }: { item: KeyedContact }) {
   const selected = useOperasyon((s) => s.selectedContactKey === key)
   const selectContact = useOperasyon((s) => s.selectContact)
+  const label = contact.effective_label ?? contact.label
   return (
     <li>
       <button
@@ -69,13 +80,17 @@ function TemasSatiri({ item: { key, contact } }: { item: KeyedContact }) {
         aria-pressed={selected}
         onClick={() => selectContact(selected ? null : key)}
         className={cn(
-          "grid w-full grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 rounded-md border px-2 py-1.5 text-left text-xs",
-          selected ? "border-secim bg-secim-zemin" : "border-cizgi bg-kart hover:border-metin-soluk",
+          `seviye--${contact.final_level}`,
+          "grid w-full grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 rounded-md border border-l-[3px] border-l-[color:var(--sv)] py-1.5 pr-2 pl-2 text-left text-xs transition-colors",
+          selected
+            ? "border-secim border-l-[color:var(--sv)] bg-secim-zemin ring-1 ring-secim"
+            : "border-cizgi bg-kart hover:border-cizgi-guclu hover:border-l-[color:var(--sv)] hover:bg-kart-hover",
         )}
       >
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className="font-mono font-bold">{contact.track_id ?? "track yok"}</span>
-          <span className="truncate">{vehicleClass(contact.effective_label ?? contact.label)}</span>
+          <span className="font-mono text-[13px] font-bold text-metin">{contact.track_id ?? "track yok"}</span>
+          <span aria-hidden className={cn("sinif-renk", `sinif--${vehicleTone(label)}`)} />
+          <span className="truncate text-metin-ikincil">{vehicleClass(label)}</span>
         </span>
         <SeviyeRozeti level={contact.final_level} />
         <span className="flex items-center gap-1.5 text-metin-ikincil">

@@ -44,14 +44,23 @@ export function ZamanAkisi() {
       <div className="flex items-baseline justify-between text-xs">
         <h2 className="font-bold tracking-wider text-metin-soluk uppercase">Günün görüntüleri</h2>
         <span className="text-metin-soluk">
-          <kbd className="font-mono">←</kbd> <kbd className="font-mono">→</kbd> önceki / sonraki kare
+          <kbd className="rounded border border-cizgi bg-kart px-1 font-mono text-metin-ikincil">←</kbd>{" "}
+          <kbd className="rounded border border-cizgi bg-kart px-1 font-mono text-metin-ikincil">→</kbd> önceki / sonraki kare
         </span>
       </div>
       {images.status === "error" && <p className="text-xs text-metin-soluk">Görüntü listesi alınamadı.</p>}
       {list.length > 0 && (
         <div className="relative mx-2 h-12">
-          <div aria-hidden className="absolute top-4 right-0 left-0 border-t border-cizgi" />
-          <ol aria-label="Görüntüler, çekim anına göre" className="absolute inset-x-0 top-0 h-8">
+          <div aria-hidden className="absolute top-4 right-0 left-0 border-t border-cizgi-guclu/70" />
+          {hours.map((h) => (
+            <span
+              key={`c-${h}`}
+              aria-hidden
+              className="absolute top-3 h-2 w-px bg-cizgi-guclu"
+              style={{ left: `${((h - start) / (end - start)) * 100}%` }}
+            />
+          ))}
+          <ol aria-label="Görüntüler, çekim anına göre" className="seviye-canli absolute inset-x-0 top-0 h-8">
             {list.map((image) => {
               const selected = image.image_id === selectedImageId
               const level = image.last_risk_level
@@ -66,14 +75,17 @@ export function ZamanAkisi() {
                     }`}
                     title={`${image.image_id} · ${image.zone} · ${image.capture_time}${level ? ` · ${RISK[level].label}` : ""}`}
                     className={cn(
-                      "flex h-8 w-4 items-center justify-center rounded-sm text-sm leading-none",
-                      selected ? "bg-secim-zemin ring-2 ring-secim" : "hover:bg-kart",
+                      "flex h-8 w-4 items-center justify-center rounded-sm text-sm leading-none transition-colors [--sv-bosluk:var(--yuzey)]",
+                      selected
+                        ? "bg-secim-zemin ring-2 ring-secim [--sv-bosluk:var(--secim-zemin)]"
+                        : "hover:bg-kart-vurgu hover:ring-1 hover:ring-cizgi-guclu",
                     )}
                   >
+                    {/* Seviye: baklava (dolgu seviyeyle artar). Değerlendirilmemiş kare: ince nötr çentik. */}
                     {level ? (
-                      <SeviyeSekli level={level} />
+                      <SeviyeSekli level={level} className="[--sv-boyut:10px]" />
                     ) : (
-                      <span aria-hidden className="h-3 w-0.5 rounded bg-metin-soluk" />
+                      <span aria-hidden className="h-2.5 w-0.5 rounded bg-cizgi-guclu" />
                     )}
                   </button>
                 </li>

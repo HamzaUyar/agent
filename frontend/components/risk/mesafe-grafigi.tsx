@@ -31,7 +31,9 @@ export function MesafeGrafigi({ series }: { series: DistancePoint[] }) {
   return (
     <figure className="mt-1 flex flex-col gap-0.5">
       <svg role="img" aria-label={summary} viewBox={`0 0 ${W} ${H}`} className="h-16 w-full" preserveAspectRatio="none">
-        <polyline points={points} fill="none" stroke="var(--secim)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        {/* Nötr mürekkep: mavi seçim, renkler sınıf/seviye için ayrılmış. */}
+        <polyline points={`${PAD},${H} ${points} ${W - PAD},${H}`} fill="var(--kart-vurgu)" stroke="none" />
+        <polyline points={points} fill="none" stroke="var(--metin-ikincil)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
       </svg>
       <figcaption className="flex justify-between font-mono text-[11px] text-metin-soluk">
         <span>
