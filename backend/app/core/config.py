@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     """package: veri `data_dir`'den, iddialar `claims_path`'ten; kayıtlar bellekte (çevrimdışı)."""
     claims_path: str = ""
     """Ayrıştırılmış iddiaların JSON'u (`scripts/export_claims.py`); `data_source=package` için."""
+    use_inference: Literal["DEMO", "REAL"] | None = None
+    """DEMO: tespitler modelin önceden alınmış çıktısından (Supabase `model_detections` ya da
+    `detections_csv_path`); REAL: görüntü EVREN'deki modele gönderilir. Tanımlıysa
+    `detector_mode`'un yerine geçer."""
+    detections_csv_path: str = "../../stage2/detections_all.csv"
+    """DEMO + `data_source=package`: modelin çıktısı (image_id, cls, score, x, y, w, h)."""
+    detections_source: str = "detections_all.csv"
+    """DEMO + `data_source=supabase`: `model_detections.source` değeri."""
     detector_mode: Literal["mock", "evren", "model"] = "mock"
     detector_weights_path: str = ""
     evren_model_api_key: SecretStr = SecretStr("")
@@ -65,6 +73,10 @@ class Settings(BaseSettings):
     @property
     def resolved_claims_path(self) -> Path | None:
         return _resolve(Path(self.claims_path)) if self.claims_path else None
+
+    @property
+    def resolved_detections_csv_path(self) -> Path:
+        return _resolve(Path(self.detections_csv_path))
 
     @property
     def resolved_mock_path(self) -> Path | None:

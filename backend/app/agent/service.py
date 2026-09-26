@@ -172,9 +172,11 @@ class EvaluationService:
                 visuals[box] = self._verifier.inspect(image, box) if self._verifier else None
             return visuals[box]
 
-        matches, positions = self._match(located, now)
-        # Track'le eşleşen zayıf tespit VLM'e sorulur; araç değilse kutu düşer ve track
-        # kaçırılmış temas olarak kalır. Kutular paralel sorulur: her çağrı ~10 sn sürer.
+        matches, positions = self._match(image, located)
+        # Track'le eşleşen zayıf tespit VLM'e sorulur: araç derse kesinlik "olası"ya çıkar.
+        # "Araç değil" cevabı kutuyu düşürmez: 1 m içindeki track orada bir araç olduğunu zaten
+        # gösteriyor; VLM'in reddettiği bu kutular ağaç ya da gölge altındaki gerçek araçlardı.
+        # Kutular paralel sorulur.
         if self._verifier is not None:
             weak = list(
                 dict.fromkeys(
@@ -188,15 +190,14 @@ class EvaluationService:
                 with ThreadPoolExecutor(max_workers=VISUAL_WORKERS) as pool:
                     found = pool.map(lambda box: verifier.inspect(image, box), weak)
                     visuals.update(zip(weak, found, strict=True))
-        not_vehicles = [
-            m
+        unconfirmed = [
+            m.track.track_id
             for m in matches
             if m.track
             and self._is_weak(m.located.detection)
-            and (v := look(_bbox(m.located.detection))) is not None
+            and (v := visuals.get(_bbox(m.located.detection))) is not None
             and not v.is_vehicle
         ]
-        matches = [m for m in matches if m not in not_vehicles]
         assigned = {m.track.track_id for m in matches if m.track}
         missed = [
             p for p in positions if p.track_id not in assigned and in_footprint(image, p.location)
@@ -221,7 +222,7 @@ class EvaluationService:
             ],
             missed=[p.track_id for p in missed],
             estimated_positions=sorted(estimated),
-            visually_rejected=[m.track.track_id for m in not_vehicles if m.track],
+            visually_unconfirmed=unconfirmed,
         )
 
         history = self._label_history(image)
@@ -408,27 +409,26 @@ class EvaluationService:
         return [LocatedDetection(d, pixel_to_geo(image, *d.center_px)) for d in detections]
 
     def _match(
-        self, located: list[LocatedDetection], now: time
+        self, image: ImageMeta, located: list[LocatedDetection]
     ) -> tuple[list[MatchResult], list[Position]]:
-        """Tespitleri çekim anındaki track konumlarıyla eşler.
+        """Tespitleri çekim anında görüntünün alanındaki track konumlarıyla birebir eşler.
 
-        Önce güçlü tespitler eşlenir; zayıf tespitler yalnızca kalan track'lerle eşlenir ve
-        eşleşmezse düşer. Böylece zayıf bir kopya kutu, güçlü tespitin track'ini alamaz.
+        Güçlü ve zayıf tespitler tek atamada eşlenir; eşitlik bozma güçlü tespiti öne alır.
+        Eşleşmeyen zayıf tespit düşer.
         """
+        now = image.capture_time
         since = from_minutes(to_minutes(now) - 2 * TRACK_STEP_MINUTES)
         positions = positions_at(self._repo.track_points_between(since, now), now)
-        points = [TrackPoint(p.track_id, now, p.location) for p in positions]
-        threshold = self._rules.matching.threshold_m
-        strong = match_detections(
-            [d for d in located if not self._is_weak(d.detection)], points, threshold
-        )
-        taken = {m.track.track_id for m in strong if m.track}
-        weak = match_detections(
-            [d for d in located if self._is_weak(d.detection)],
-            [p for p in points if p.track_id not in taken],
-            threshold,
-        )
-        matches = strong + [m for m in weak if m.track is not None]
+        points = [
+            TrackPoint(p.track_id, now, p.location)
+            for p in positions
+            if in_footprint(image, p.location)
+        ]
+        rules = self._rules.matching
+        matches = match_detections(located, points, rules.threshold_m, rules.score_tiebreak)
+        matches = [
+            m for m in matches if m.track is not None or not self._is_weak(m.located.detection)
+        ]
         return matches, positions
 
     def _label_history(self, image: ImageMeta) -> dict[str, list[LabelObservation]]:
@@ -444,7 +444,7 @@ class EvaluationService:
                 logger.warning("Tip geçmişi: %s atlandı, dosya yok", frame.image_id)
                 continue
             usable = self._usable(detected)
-            matches, _ = self._match(self._locate(frame, usable), frame.capture_time)
+            matches, _ = self._match(frame, self._locate(frame, usable))
             for m in matches:
                 if m.track:
                     history[m.track.track_id].append(
@@ -695,8 +695,12 @@ def _match_summary(matches: list[MatchResult], missed: list[Position]) -> str:
 def _contact_notes(c: ContactFinding) -> list[str]:
     notes = []
     if c.is_weak:
-        confirmed = c.visual is not None and c.visual.is_vehicle
-        notes.append("zayıf tespit, görsel olarak araç doğrulandı" if confirmed else "zayıf tespit")
+        if c.visual is None:
+            notes.append("zayıf tespit")
+        elif c.visual.is_vehicle:
+            notes.append("zayıf tespit, görsel olarak araç doğrulandı")
+        else:
+            notes.append("zayıf tespit, araç görsel olarak seçilemedi (hareket kaydı var)")
     if c.visual:
         looks: list[str] = [c.visual.color] if c.visual.color else []
         looks += [CARGO_TR[c.visual.cargo]] if c.visual.cargo else []

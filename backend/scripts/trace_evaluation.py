@@ -137,8 +137,8 @@ def _print_event(t: Tracer, name: str, data: dict[str, Any], state: dict[str, An
             )
             amb = " · BELİRSİZ" if m["ambiguous"] else ""
             t.line(f"#{ref:<2} → {m['track_id']}  {m['distance_m']:.1f} m{extra}{amb}")
-        for tid in data["visually_rejected"]:
-            t.line(f"VLM 'araç değil' dedi → zayıf kutu düştü, {tid} kaçırılmış sayılacak")
+        for tid in data["visually_unconfirmed"]:
+            t.line(f"VLM aracı seçemedi → {tid} zayıf kesinlikte kalıyor (kutu düşmez)")
         for tid in data["missed"]:
             t.line(f"{tid} karede ama tespit yok → kaçırılmış temas")
         if data["estimated_positions"]:

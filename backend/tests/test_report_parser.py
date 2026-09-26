@@ -261,8 +261,10 @@ def test_task_routing_comes_from_the_models_file() -> None:
         for task, names in CONFIG.tasks.items()
     }
 
-    # Görev tanımı s4: bütün görevler organizatör gateway'inin glm-5.3-flash'ıyla başlar
-    # (görüntü de okur, s7); EVREN yedektir.
+    # Görev tanımı s4: metin görevleri organizatör gateway'inin glm-5.3-flash'ıyla başlar;
+    # EVREN yedektir. VLM zincirinde GLM yok (görüntülü istekte şemaya uymuyor).
+    assert chains.pop("vision")[0] == "qwen3-vl-30b"
+    assert "glm-5.3-flash" not in [CONFIG.models[n].model_id for n in CONFIG.tasks["vision"]]
     for task, chain in chains.items():
         assert chain[0] == "glm-5.3-flash", task
         assert CONFIG.models[CONFIG.tasks[task][0]].provider == "glm", task

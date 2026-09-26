@@ -3,15 +3,19 @@
 
 [detection]
 # Altı yok sayılır; arası zayıf tespittir (yalnızca bir track'le eşleşirse temas sayılır).
-# Tespit bileşenleri modelden `app.pipelines.detection.MIN_CONFIDENCE` (0,25) ve üstünü ister;
+# Tespit bileşenleri modelden `app.pipelines.detection.MIN_CONFIDENCE` (0,20) ve üstünü ister;
 # daha düşük bir eşik o değer düşürülmeden işe yaramaz.
-min_confidence = 0.25
+min_confidence = 0.20
 strong_confidence = 0.50
 
 [matching]
-# Tespit, çekim anında en fazla bu kadar uzaktaki en yakın track'le eşleşir (görev tanımı s3:
-# "makul bir mesafe sınırı"). Gerçek veride eşleşmelerin ortancası 0,2 m, %90'ı 2,5 m altında.
-threshold_m = 15.0
+# Görüntü başına birebir eşleme: aday track'ler çekim anında görüntünün alanı içinde olanlar;
+# eşik içindeki çiftler arasından toplam mesafeyi en aza indiren atama seçilir (Hungarian).
+# Maliyet = mesafe + score_tiebreak × (1 − güven): mesafeler neredeyse eşitse güçlü tespit kazanır.
+# Gerçek veride (detections_all.csv) 206 track noktasının 191'i eşleşiyor; ortanca 0,13 m,
+# en uzak 1,85 m. 2–3 m eşik de aynı sonucu veriyor.
+threshold_m = 5.0
+score_tiebreak = 0.01
 
 [trend]
 # Son `window_minutes` içinde üsse mesafe `threshold_m`'den fazla azaldıysa "yaklaşıyor".
