@@ -31,7 +31,7 @@ Tarayıcı backend'e doğrudan gitmez. Frontend `/api/*` isteklerini backend'e y
       ├── zones.json
       ├── tracks.csv
       ├── field_reports.json
-      └── detections_evren.json   ← (isteğe bağlı) hazır tespitler, DETECTOR_MODE=mock için
+      └── detections_all.csv      ← (isteğe bağlı) modelin kayıtlı çıktısı, ağsız demo (USE_INFERENCE=DEMO + DATA_SOURCE=package) için
   ```
   Başka bir yerdeyse `backend/.env` içindeki `DATA_DIR` değerini değiştir. Yol `backend/` klasörüne göre çözülür.
 - **Anahtarlar:** Supabase bilgileri ve en az bir LLM anahtarı (GLM, EVREN ya da Anthropic). Bunlar takım içinde paylaşılır ve repoya girmez.
@@ -92,19 +92,18 @@ uvicorn app.main:app --reload --port 8000
 | `GLM_API_KEY` / `EVREN_API_KEY` / `ANTHROPIC_API_KEY` | LLM sağlayıcıları. Sırayla denenir (`app/llm/models.toml`), anahtarı olmayan atlanır. Hiçbiri yoksa brief kurallarla yazılır ("otomatik özet"). |
 | `DATA_DIR` | Veri paketinin yeri (varsayılan `../../stage2`). |
 | `DATA_SOURCE` | `supabase` (varsayılan) ya da `package`: **ağsız demo**. Veri `DATA_DIR`'den okunur, kayıtlar bellekte tutulur. |
-| `DETECTOR_MODE` | Araç tespiti nereden gelsin (aşağıdaki tabloya bak). |
+| `USE_INFERENCE` | Araç tespiti nereden gelsin (aşağıdaki tabloya bak). |
 
-**Tespit modları (`DETECTOR_MODE`):**
+**Tespit modları (`USE_INFERENCE`):**
 
 | Mod | Açıklama | Gerekenler |
 |---|---|---|
-| `mock` | Önceden kaydedilmiş tespitler, dosyadan okunur. İnternet istemez, en hızlısıdır. | `DETECTOR_MOCK_PATH` (ör. `../../stage2/detections_evren.json`) |
-| `evren` | Ekibin EVREN'deki modeli **canlı** çalışır. Görüntü her analizde EVREN'e gönderilir. | `EVREN_MODEL_API_KEY`, internet |
-| `model` | Yerel YOLO ağırlıkları. | `pip install -e ".[model]"`, `DETECTOR_WEIGHTS_PATH` |
+| `DEMO` (varsayılan) | Modelin önceden alınmış çıktısı. En hızlısıdır, EVREN'e gitmez. | `DATA_SOURCE=supabase`: `model_detections` tablosu (yükleme: `python -m scripts.load_detections`). `DATA_SOURCE=package`: `DETECTIONS_CSV_PATH` (ör. `../../stage2/detections_all.csv`) |
+| `REAL` | Ekibin EVREN'deki modeli **canlı** çalışır. Görüntü her analizde EVREN'e gönderilir. | `EVREN_MODEL_API_KEY`, internet |
 
 ### Ağsız demo (internet ya da veritabanı yoksa)
 
-`.env` içinde `DATA_SOURCE=package`, `DETECTOR_MODE=mock` ve `CLAIMS_PATH=../../stage2/claims.json` yap. Rapor iddiaları bu dosyadan okunur. Dosyayı bir kez, ağ ve Supabase erişimi varken üret (`backend/` klasöründe):
+`.env` içinde `DATA_SOURCE=package`, `USE_INFERENCE=DEMO`, `DETECTIONS_CSV_PATH=../../stage2/detections_all.csv` ve `CLAIMS_PATH=../../stage2/claims.json` yap. Tespitler CSV'den okunur. Rapor iddiaları bu dosyadan okunur. Dosyayı bir kez, ağ ve Supabase erişimi varken üret (`backend/` klasöründe):
 
 ```bash
 python -m scripts.export_claims --out ../../stage2/claims.json
@@ -205,7 +204,7 @@ Sanal ortam etkinken `backend/` klasöründe çalıştırılır.
 ## Sık karşılaşılan sorunlar
 
 - **"Değerlendirme başlatılamadı. Backend'e ulaşılamıyor olabilir."** Backend çalışmıyor ya da farklı bir portta. Backend terminalini ve `BACKEND_URL` ayarını kontrol et.
-- **Analiz uzun sürüyor.** Canlı tespit (`evren`) ve LLM çağrısı birlikte 15–40 saniye sürebilir. Adımlar geldikçe ekranda görünür. Hız gerekiyorsa `DETECTOR_MODE=mock` kullan.
+- **Analiz uzun sürüyor.** Canlı tespit (`USE_INFERENCE=REAL`) ve LLM çağrısı birlikte 15–40 saniye sürebilir. Adımlar geldikçe ekranda görünür. Hız gerekiyorsa `USE_INFERENCE=DEMO` kullan.
 - **Harita zemini yüklenmiyor.** Sokak ve uydu zemini internetten gelir. İnternet yoksa harita düz zemine geçer, katmanlar çalışmaya devam eder.
 - **`.env` değişikliği etkisiz.** Backend'i yeniden başlat. Ayarlar yalnızca açılışta okunur.
 - **Windows'ta `npm run fixtures` hata veriyor.** Script macOS/Linux yolunu (`.venv/bin/python`) kullanıyor. Günlük çalıştırma için gerekmez.

@@ -452,6 +452,11 @@
 - img_000860'taki kamyonun CSV'deki skoru 0,037: eşiğin altında kaldığı için T0122 kaçırılmış temas, görüntü kritik yerine yüksek (R5'le aynı).
 - Testler: 12 yeni (eşleşme, USE_INFERENCE, CSV okuma); eşik değişen 5 test güncellendi. Toplam 274; ruff ve mypy temiz.
 
+### Tespit kaynağı yalnızca USE_INFERENCE (27 Eylül)
+- `DETECTOR_MODE` ve onunla gelen `mock` (sahte tespit, `DETECTOR_MOCK_PATH`, yerleşik img_000860 örneği) ile `model` (yerel Ultralytics YOLO, `DETECTOR_WEIGHTS_PATH`, `[model]` ek paketi) kaldırıldı. Tespit kaynağı tek ayar: `USE_INFERENCE=DEMO` (varsayılan, kayıtlı çıktı) ya da `REAL` (EVREN).
+- `MockDetector` → `RecordedDetector` (sürüm zorunlu, yerleşik örnek yok); `load_mock_detections` / `dump_mock_detections` → `load_detections_json` / `dump_detections_json`. JSON biçimi yalnızca `run_eval_set --detections`, `export_detections` ve sentetik üreteçte kullanılıyor.
+- Testler: YOLO testleri çıkarıldı; sınıf eşlemesi (Türkçe adlar dahil) ve önceki karesi eksik görüntü EVREN detektörüyle sınanıyor.
+
 ### VLM zincirinden GLM çıkarıldı (27 Eylül)
 - `models.toml` `vision`: `qwen3-vl-30b → gemma-4-31b → deepseek-v4.1-flash → Sonnet 5`. glm-5.3-flash görüntülü istekte istenen JSON yerine şemanın kendisini döndürüyordu; her VLM çağrısı önce onu deneyip hata alıyor, 10-15 sn kaybediyordu. Claude anahtarı şu an yok; Sonnet anahtar gelene kadar atlanır.
 - VLM artık track'le eşleşmiş zayıf kutuyu düşüremiyor. Önceden "araç değil" cevabı kutuyu düşürüp track'i kaçırılmış temasa çeviriyordu; görülen 3 vakanın 3'ü de gerçek araçtı (ağaç/gölge altında, track < 1 m). Şimdi: araç derse kesinlik "olası", demezse kutu kalır, kesinlik "zayıf", brief'te "araç görsel olarak seçilemedi (hareket kaydı var)". Olay alanı `visually_rejected` → `visually_unconfirmed`.

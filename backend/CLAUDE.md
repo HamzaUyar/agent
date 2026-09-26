@@ -55,7 +55,7 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
   - rapor parse etme: hızlı LLM
   - renk ve yük çıkarımı: VLM
   - karar ve brief: en güçlü akıl yürütme modeli
-- **Tespit modeli arayüz arkasında.** `detect(image) → [Detection]` şeklinde tanımlı. `USE_INFERENCE=DEMO` modelin kayıtlı çıktısı (Supabase `model_detections`; paket modunda `DETECTIONS_CSV_PATH`), `REAL` EVREN'deki model. Tanımsızsa `DETECTOR_MODE`: `mock` sahte tespit, `evren`, `model` 1. aşama Ultralytics YOLO modeli (`DETECTOR_WEIGHTS_PATH`; `pip install -e '.[model]'`).
+- **Tespit modeli arayüz arkasında.** `detect(image) → [Detection]` şeklinde tanımlı. `USE_INFERENCE=DEMO` modelin kayıtlı çıktısı (Supabase `model_detections`; paket modunda `DETECTIONS_CSV_PATH`), `REAL` EVREN'deki model (`EVREN_MODEL_API_KEY`). Başka tespit kaynağı yok.
 - **Veritabanına sadece backend yazar** (`service_role` anahtarıyla). Pipeline'lar SQL bilmez; sorgular `app/db/repositories.py` içindedir.
 - **İzlenebilirlik.** Her agent adımı `agent_steps` tablosuna yazılır; brief kaynaklarını belirtir.
 

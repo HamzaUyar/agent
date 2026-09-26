@@ -40,7 +40,6 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] Gerçek görüntüler gelince VLM'i birkaç kırpmada gözle kontrol et (renk paleti, "araç değil" oranı; R11)
 - [ ] Mevcut raporlarda yük geçiyorsa `parse_reports --force` ile `cargo` alanını doldur
 
-- [ ] Model ağırlıkları gelince: `pip install -e '.[model]'`, `.env`'de `DETECTOR_MODE=model` + `DETECTOR_WEIGHTS_PATH` (+ eğitim boyutu `DETECTOR_IMGSZ`), img_000860'ta kutunun (727, 284, 58, 34) civarında truck çıktığını doğrula; sınıf adları `CLASS_ALIASES`'ta yoksa ekle
 
 - [x] LLM'in boş ya da "..." değerlendirme paragrafı geçersiz sayılıyor, sıradaki modele geçiliyor
 - [x] Sentetik 2. aşama paketi (Kaggle eğitim görüntülerinden 40 kare, track'ler, bilerek yanlış raporlar, otomatik etiketler) ve bütün pipeline'ın onunla koşturulması
