@@ -440,3 +440,34 @@ def test_weak_detections_are_checked_in_parallel() -> None:
 
     assert len(verifier.calls) == 2
     assert {contact(brief, t).certainty for t in ("T0122", "T0032")} == {"likely"}
+
+
+def test_color_claims_and_weak_boxes_are_checked_in_one_parallel_wave() -> None:
+    """Renk iddiasının kutusu (güçlü kamyon, T0122) ile zayıf kutu (T0032) aynı dalgada, aynı
+    anda sorulur; iddia değerlendirilirken VLM yeniden çağrılmaz."""
+    t0032_now = next(
+        p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(14, 10)
+    )
+    verifier = BarrierVerifier(seen("mavi"))
+    blue = record(10, time(14, 0), THIRD, claim_at(T0122_AT_1410, color="mavi"))
+
+    brief = evaluate([blue], verifier, [TRUCK, box_at(t0032_now)])
+
+    assert sorted(bbox for _, bbox in verifier.calls) == sorted(
+        [(727, 284, 58, 34), tuple(box_at(t0032_now).__dict__[k] for k in ("x", "y", "w", "h"))]
+    )
+    assert finding(brief, 10).verdict == "consistent"
+    assert contact(brief, "T0122").visual == seen("mavi")
+
+
+def test_claims_that_bind_to_no_tracked_contact_are_not_sent_to_the_vlm() -> None:
+    """Renk iddiası uzakta (bağlanacak temas yok) ya da ilgisiz: VLM çağrılmaz."""
+    verifier = FakeVerifier(seen("mavi"))
+    far = record(10, time(14, 0), THIRD, claim_at(GeoPoint(39.99, 32.99), color="mavi"))
+    irrelevant = record(
+        11, time(14, 0), THIRD, claim_at(T0122_AT_1410, color="mavi", claim_type="irrelevant")
+    )
+
+    evaluate([far, irrelevant], verifier)
+
+    assert verifier.calls == []

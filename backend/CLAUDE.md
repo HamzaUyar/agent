@@ -71,21 +71,32 @@ Python 3.11+ (ortam: `.venv`, Python 3.14, pip), FastAPI (SSE), Pydantic v2, psy
   - **Model çıktısı:** `model_detections` (USE_INFERENCE=DEMO; yükleme `python -m scripts.load_detections`)
   - **Analiz:** `analysis_runs`, `detections`, `track_matches`, `motion_analyses`, `report_evaluations`, `risk_assessments`, `agent_steps`
 - Migration'lar: `01_extensions_and_enums` … `10_model_detections` (`supabase/migrations/`).
-- **Storage:** görüntü dosyaları özel `drone-images` bucket'ında; `images.file_path` = `drone-images/<id>.jpg`. Yerelde (`DATA_DIR/images`) olmayan görüntü, tespit ve VLM ilk ihtiyaç duyduğunda `service_role` ile indirilip oraya yazılır (`app/storage.py`). Yükleme: `upload-images [klasör]`.
+- **Storage:** görüntü dosyaları özel `drone-images` bucket'ında; `images.file_path` = `drone-images/<id>.jpg`. Yerelde (`DATA_DIR/images`) olmayan görüntü, tespit ve VLM ilk ihtiyaç duyduğunda `service_role` ile indirilip oraya yazılır (`app/storage.py`). Arayüzün görüntü ucu (`GET /images/{id}/file`) Supabase modunda dosyayı yerel klasöre bakmadan doğrudan bucket'tan sunar; yalnızca ağsız demoda (`DATA_SOURCE=package`) yerelden okur. Yükleme: `upload-images [klasör]`.
 
 ## Dizin yapısı
 ```
 app/
   main.py            FastAPI uygulaması
-  core/config.py     ayarlar
-  api/               analyze.py (SSE), data.py
+  data_package.py    veri paketi okuma ve zaman yardımcıları (paket modu)
+  core/              config.py (ayarlar), rules.py + risk_rules.toml (eşikler)
+  api/               analyze.py (SSE, sohbet), data.py, stores.py
   db/                session, models, repositories
-  pipelines/         detection, vision, geo, motion, matching, reports, risk
-  agent/             state, graph, prompts/
-  llm/               client.py, models.toml
-  schemas/           domain.py, api.py
-scripts/             load_data, parse_reports, make_mock_data
-tests/               test_geo, test_motion, test_matching, fixtures/
+  pipelines/         detection, vision, geo, motion, matching, report_parser, reports, risk
+  agent/
+    service.py       EvaluationService: ince orkestratör, aşama başına bir SSE adımı
+    stages.py        tipli aşamalar (ImageContext → Detections ∥ TrackBranch → Matches
+                     → Contacts → ClaimEvaluations → RiskResult → FinalDecision → Brief)
+    events.py        adımların özet ve data yükleri (frontend sözleşmesi)
+    brief_text.py    brief ve özet metinleri
+    decision.py      LLM kararı (±1 kademe, ADR-0002)
+    runner.py        kayıt, önbellekten tekrar oynatma
+    chat.py, tools.py  sohbet agent'ı ve araçları
+    prompts/         brief, chat, report_parse, vision
+  llm/               client.py, limits.py, models.toml
+  schemas/           domain, api, claims, chat, runs
+scripts/             load_data, parse_reports, run_eval_set, trace_evaluation, ...
+tests/               test_evaluation (ana test noktası), test_stages, ..., fixtures/
+../supabase/migrations/  şema migration'ları (01 … 10)
 ```
 
 ## Çalışma notları

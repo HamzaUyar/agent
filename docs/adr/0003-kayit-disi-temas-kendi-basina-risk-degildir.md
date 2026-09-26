@@ -12,5 +12,5 @@ Sebep: 2. aşama görev tanımı açıkça "park halindeki araçların hareket k
 
 ## Consequences
 
-- LLM karar prompt'u, bir aracı yalnızca track'i yok diye yükseltmemesini söylüyor. LLM yine de gerekçesiyle ±1 kademe değiştirebilir (ADR-0002).
+- LLM kayıt dışı teması `kayit_disi` nedeniyle işaretleyebilir, ama bu nedenle seviyeyi yükseltemez: kurallar track'in yokluğunu seviyede zaten sayıyor (`level_basis`). Başka, doğrulanmış bir nedenle ±1 kademe değiştirebilir (ADR-0002). Üssün hemen yakınındaki (`unregistered_alert_m`) kayıt dışı temas için "dikkat gerekmiyor" kabul edilmez.
 - Raporlar artık kayıt dışı temaslara da bağlanıyor (ADR-0002 notu, çekim anındaki konum), ama etkileri seviyeye uygulanmıyor: rapor etkileri temasa track kimliğiyle işleniyor. Hakkında çelişkili bir rapor olan kayıt dışı aracın riskini yükseltmek için etkinin temasa track'siz de uygulanması gerekiyor (TODO).

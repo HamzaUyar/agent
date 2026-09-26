@@ -76,6 +76,19 @@ class VisualFinding(BaseModel):
     """Cevabı veren model (`sağlayıcı/model`)."""
 
 
+AttentionReason = Literal[
+    "yaklasma",
+    "dolasma",
+    "uzun_duraklama",
+    "tehdit_uyarisi",
+    "rapor_celiskisi",
+    "kacirilmis_temas",
+    "kayit_disi",
+    "dikkat_gerekmiyor",
+]
+"""Karar LLM'inin bir temas için seçebileceği dikkat nedenleri; her biri kodla doğrulanır."""
+
+
 class ContactFinding(BaseModel):
     """Temas: bir Tespit ve/veya onu çekim anında karşılayan Track."""
 
@@ -104,6 +117,8 @@ class ContactFinding(BaseModel):
     base_level: RiskLevel
     final_level: RiskLevel
     level_reasons: list[str] = Field(default_factory=list)
+    level_basis: list[AttentionReason] = Field(default_factory=list)
+    """Kuralların seviyede zaten saydığı dikkat nedenleri; LLM bunlarla yükseltemez."""
     adjustment_reason: str | None = None
     """LLM'in kabul edilen ±1 kademe ayarının gerekçesi."""
     adjustment_rejected: str | None = None
@@ -133,6 +148,26 @@ class ReportFinding(BaseModel):
     reasoning: str
 
 
+class AttentionFinding(BaseModel):
+    """Karar LLM'inin bir dikkat maddesi ve kodun onu veriyle doğrulamasının sonucu."""
+
+    contact: str
+    """Temas etiketi: track kimliği ya da kayıt dışı temas için `kayit_disi_N`."""
+    track_id: str | None
+    reason: AttentionReason
+    basis: list[int | str]
+    """Dayanılan bulgu alanları ve rapor iddialarının kimlikleri."""
+    level_proposal: RiskLevel | None = None
+    accepted: bool
+    """Neden veriyle doğrulandı."""
+    level_accepted: bool | None = None
+    """Seviye önerisi kabul edildi mi; öneri yoksa ya da seviyeyi değiştirmiyorsa `None`."""
+    rejection: str | None = None
+    """Nedenin ya da seviye önerisinin reddedilme sebebi."""
+    text: str | None = None
+    """Doğrulanmış nedenin kodla yazılmış açıklaması (sayılar bulgu alanlarından)."""
+
+
 class Brief(BaseModel):
     image_id: str
     zone: str
@@ -147,6 +182,12 @@ class Brief(BaseModel):
     report_findings: list[ReportFinding] = Field(default_factory=list)
     text: str
     sources: list[str]
+    attention: list[AttentionFinding] = Field(default_factory=list)
+    """Karar LLM'inin dikkat maddeleri ve doğrulamaları; otomatik özette boş."""
+    summary: str | None = None
+    """LLM'in kısa özeti; sayı, kimlik, bölge adı ya da İngilizce terim içeriyorsa atılır."""
+    summary_rejected: str | None = None
+    """Özet atıldıysa sebebi."""
 
 
 class StepEvent(BaseModel):

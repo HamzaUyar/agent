@@ -58,7 +58,7 @@ class SwitchableLLM:
         if not self.working:
             raise RuntimeError("503")
         return schema.model_validate(
-            {"adjustments": [], "assessment": "T0122 üsse yaklaşan kamyon."}
+            {"dikkat": [], "ozet": "Ağır araç üsse yaklaşıyor, izlenmeli."}
         )
 
 

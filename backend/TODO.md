@@ -24,7 +24,7 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [x] EVREN anahtarı, şart kabulü ve rapor ayrıştırma (6 iddia `report_claims`'te)
 - [ ] Organizatörlerin GLM anahtarı gelince: `.env`'e `GLM_API_KEY` yaz, `GLM_API_BASE=` satırını sil (boş değer varsayılan URL'i ezer), `curl .../key/info` ile doğrula
 - [x] GLM-5.3 gecikmesi ölçüldü; düşünme kapatıldı (13–20 sn), zaman sınırı ve otomatik özet (ticket 07)
-- [ ] `backend/CLAUDE.md`'deki dizin yapısını güncelle (`data_package.py`, `agent/service.py`, `supabase/migrations/`)
+- [x] `backend/CLAUDE.md`'deki dizin yapısını güncelle (`data_package.py`, `agent/service.py`, `supabase/migrations/`)
 - [ ] Boş test dosyalarını (`test_geo.py`, `test_motion.py`, `test_matching.py`) kaldır ya da doldur. Onaylanan test noktalarına göre bunlar ayrı test edilmiyor; istisna interpolasyon gibi karmaşık hesaplar.
 - [ ] Ayrıntılı analiz tablolarını (`detections`, `track_matches`, `risk_assessments`) doldur; şu an sonuç yalnızca `brief_json` içinde
 - [x] B1 · Arayüz için ek uçlar: `GET /zones`, `GET /images/{id}`, `GET /images/{id}/file`, rota noktalarına `time`

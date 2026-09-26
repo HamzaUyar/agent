@@ -43,6 +43,15 @@ def in_footprint(image: ImageMeta, point: GeoPoint) -> bool:
     return min(lats) <= point.lat <= max(lats) and min(lons) <= point.lon <= max(lons)
 
 
+def distance_to_footprint_m(image: ImageMeta, point: GeoPoint) -> float:
+    """Noktanın görüntünün kapladığı alana uzaklığı; içindeyse 0."""
+    c = image.corners
+    lats = sorted((c.top_left.lat, c.bottom_left.lat))
+    lons = sorted((c.top_left.lon, c.top_right.lon))
+    edge = GeoPoint(min(max(point.lat, lats[0]), lats[1]), min(max(point.lon, lons[0]), lons[1]))
+    return distance_m(point, edge)
+
+
 def nearest_zone(point: GeoPoint, zones: list[Zone]) -> Zone:
     """Merkezi `point`'e en yakın bölge."""
     if not zones:

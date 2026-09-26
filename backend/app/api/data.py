@@ -3,8 +3,9 @@
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.api.stores import Stores
 from app.core.config import get_settings
@@ -21,6 +22,7 @@ from app.schemas.api import (
     ZonesResponse,
 )
 from app.schemas.domain import GeoPoint, ImageMeta, RiskLevel
+from app.storage import StorageError, SupabaseStorage
 
 router = APIRouter(tags=["data"])
 
@@ -37,8 +39,15 @@ def get_images_dir() -> Path:
     return get_settings().resolved_data_dir / IMAGES_DIR
 
 
+def get_image_storage(request: Request) -> SupabaseStorage | None:
+    """Görüntü dosyalarının bucket'ı; `None` ise dosyalar yerel klasörden (ağsız demo)."""
+    storage: SupabaseStorage | None = getattr(request.app.state, "image_storage", None)
+    return storage
+
+
 RepoDep = Annotated[DataRepository, Depends(get_repository)]
 ImagesDirDep = Annotated[Path, Depends(get_images_dir)]
+ImageStorageDep = Annotated[SupabaseStorage | None, Depends(get_image_storage)]
 
 
 def get_stores(request: Request) -> Stores:
@@ -115,16 +124,37 @@ def get_image(image_id: str, repo: RepoDep) -> ImageDetail:
 
 @router.get(
     "/images/{image_id}/file",
-    response_class=FileResponse,
+    response_class=Response,
     responses={
         200: {"content": {"image/jpeg": {}, "image/png": {}}, "description": "Görüntü dosyası"},
         404: {"description": "Görüntü veri setinde yok ya da dosyası bulunamadı"},
+        502: {"description": "Storage'a ulaşılamadı"},
     },
 )
-def get_image_file(image_id: str, repo: RepoDep, images_dir: ImagesDirDep) -> FileResponse:
-    """Görüntü dosyası. Ad veri setindeki kimlikten kurulur, istekten gelen yol kullanılmaz."""
+def get_image_file(
+    image_id: str, repo: RepoDep, images_dir: ImagesDirDep, storage: ImageStorageDep
+) -> Response:
+    """Görüntü dosyası: Supabase modunda `images.file_path` ile bucket'tan, ağsız demoda
+    yerel klasörden. Yol veri setindeki kayıttan kurulur, istekten gelen yol kullanılmaz."""
     m = _image_or_404(repo, image_id)
-    path = find_image_file(images_dir, m.image_id)
-    if path is None:
+    headers = {"Cache-Control": IMAGE_CACHE_CONTROL}
+    if storage is None:
+        path = find_image_file(images_dir, m.image_id)
+        if path is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"Görüntü dosyası bulunamadı: {image_id}"
+            )
+        return FileResponse(path, headers=headers)
+    if not m.file_path:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Görüntü dosyası bulunamadı: {image_id}")
-    return FileResponse(path, headers={"Cache-Control": IMAGE_CACHE_CONTROL})
+    try:
+        data, content_type = storage.fetch(m.file_path)
+    except StorageError as exc:
+        if exc.not_found:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"Görüntü dosyası bulunamadı: {image_id}"
+            ) from exc
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Storage'a ulaşılamadı") from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Storage'a ulaşılamadı") from exc
+    return Response(data, media_type=content_type, headers=headers)

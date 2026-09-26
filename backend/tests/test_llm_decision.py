@@ -1,33 +1,49 @@
-"""Değerlendirme servisi: LLM karar ayarı ve brief yazarı (ticket 07, ADR-0002).
+"""Değerlendirme servisi: LLM'in dikkat maddeleri, kodun doğrulaması ve brief (ADR-0002).
 
-LLM sahte sağlayıcıdan cevap verir; ±1 kademe ve kanıtlı düşürme kuralları, yedek
-modele geçiş, zaman sınırı ve otomatik özet gerçek kodla çalışır.
+LLM sahte sağlayıcıdan cevap verir. Temas kimliği şemada enum; her neden veriyle
+doğrulanır; ±1 kademe ayarı yalnızca doğrulanmış bir nedenle kabul edilir. "Değerlendirme"
+bölümünü kod yazar; LLM'in özeti sayı, kimlik, bölge adı ya da İngilizce terim içerirse
+atılır. Yedek modele geçiş, zaman sınırı ve otomatik özet gerçek kodla çalışır.
 """
 
+import re
 import time as clock
 from datetime import time
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
+from app.agent.decision import (
+    DecisionDraft,
+    FactKey,
+    apply_attention,
+    build_input,
+    contact_labels,
+    draft_schema,
+)
 from app.agent.service import EvaluationService
+from app.core.rules import load_rules
 from app.data_package import read_package
 from app.db.repositories import InMemoryRepository
 from app.llm.client import LLMRouter, load_model_config
-from app.schemas.api import Brief
+from app.schemas.api import AttentionFinding, Brief, ContactFinding, LatLon, ReportFinding
 from app.schemas.claims import ClaimRecord, ReportClaim
 from app.schemas.domain import Detection, FieldReport, ImageMeta, ReportSource, VehicleClass
 
 FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 PACKAGE = read_package(FIXTURE)
 TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
+# Track'i olmayan güçlü tespit: kayıt dışı temas.
+PARKED = Detection(label=VehicleClass.CAR, confidence=0.9, x=100, y=100, w=20, h=20)
 CONFIG = load_model_config()
 CHAIN = [CONFIG.models[name] for name in CONFIG.tasks["reasoning"]]
 PRIMARY, FALLBACK = CHAIN[0], CHAIN[1]
 
-# img_000860: K1 = T0122 (truck, KRİTİK), K2 = T0032 (kaçırılmış, ORTA).
+# img_000860, 14:10: T0122 (truck, üsse yaklaşıyor, KRİTİK); T0032 (kaçırılmış temas,
+# 12:10'dan beri üsse 1,6 km'de duruyor, ORTA). T0032, canlı denemedeki T0020 gibi
+# duran bir araç: "yaklasma" veriyle doğrulanamaz.
 T0032_AT_1235 = next(
     p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(12, 35)
 )
@@ -48,13 +64,39 @@ CONSISTENT_CLAIM = ClaimRecord(
         is_verifiable=True,
     ),
 )
+THREAT_ABOUT_T0032 = ClaimRecord(
+    claim_id=9,
+    report=FieldReport(time(13, 0), ReportSource.OFFICIAL, "burada kamyon var"),
+    claim=CONSISTENT_CLAIM.claim.model_copy(update={"claim_type": "threat_warning"}),
+)
+# T0032 duruyor; "yaklaşıyor" diyen rapor hareket verisiyle çelişir.
+CONTRADICTS_T0032 = ClaimRecord(
+    claim_id=5,
+    report=FieldReport(time(13, 30), ReportSource.THIRD_PARTY, "arac yaklasiyor"),
+    claim=CONSISTENT_CLAIM.claim.model_copy(update={"behavior": "approaching"}),
+)
+T0122_AT_1410 = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
+)
+ABOUT_T0122 = ClaimRecord(
+    claim_id=3,
+    report=FieldReport(time(14, 0), ReportSource.OFFICIAL, "tehdit uyarisi"),
+    claim=CONSISTENT_CLAIM.claim.model_copy(
+        update={"lat": T0122_AT_1410.lat, "lon": T0122_AT_1410.lon, "claim_type": "threat_warning"}
+    ),
+)
+
+SUMMARY = "Ağır araç üsse yaklaşıyor; duran temas izlenmeli."
 
 
 class FakeDetector:
     version = "test"
 
+    def __init__(self, *extra: Detection) -> None:
+        self.extra = list(extra)
+
     def detect(self, image: ImageMeta) -> list[Detection]:
-        return [TRUCK] if image.image_id == "img_000860" else []
+        return [TRUCK, *self.extra] if image.image_id == "img_000860" else []
 
 
 class FakeProvider:
@@ -63,6 +105,8 @@ class FakeProvider:
         self.delay_s = delay_s
         self.available = available
         self.calls = 0
+        self.schemas: list[type[BaseModel]] = []
+        self.users: list[str] = []
 
     def is_available(self) -> bool:
         return self.available
@@ -77,6 +121,8 @@ class FakeProvider:
         extra_body: object = None,
     ) -> BaseModel:
         self.calls += 1
+        self.schemas.append(schema)
+        self.users.append(user)
         if self.delay_s:
             clock.sleep(self.delay_s)
         if isinstance(self.reply, Exception):
@@ -84,10 +130,19 @@ class FakeProvider:
         return schema.model_validate(self.reply)
 
 
-def draft(
-    adjustments: list[dict[str, Any]], assessment: str = "T0122 üsse yaklaşıyor."
+def item(
+    track_id: str, neden: str, dayanak: list[Any] | None = None, seviye: str | None = None
 ) -> dict[str, Any]:
-    return {"adjustments": adjustments, "assessment": assessment}
+    return {
+        "track_id": track_id,
+        "neden": neden,
+        "dayanak": dayanak or [],
+        "seviye_onerisi": seviye,
+    }
+
+
+def draft(items: list[dict[str, Any]], ozet: str = SUMMARY) -> dict[str, Any]:
+    return {"dikkat": items, "ozet": ozet}
 
 
 def run(
@@ -96,6 +151,7 @@ def run(
     *,
     claims: list[ClaimRecord] | None = None,
     timeout_s: float | None = None,
+    detector: FakeDetector | None = None,
 ) -> Brief:
     router = None
     if primary is not None:
@@ -105,130 +161,241 @@ def run(
         router = LLMRouter(CONFIG, providers)
     service = EvaluationService(
         InMemoryRepository(PACKAGE, claims=claims or []),
-        FakeDetector(),
+        detector or FakeDetector(),
         router=router,
         brief_timeout_s=timeout_s,
     )
     return service.run("img_000860")
 
 
-def level_of(brief: Brief, track_id: str) -> tuple[str, str]:
+def contact(brief: Brief, track_id: str) -> ContactFinding:
     [c] = [c for c in brief.contacts if c.track_id == track_id]
+    return c
+
+
+def level_of(brief: Brief, track_id: str) -> tuple[str, str]:
+    c = contact(brief, track_id)
     return c.base_level, c.final_level
 
 
-def test_llm_can_raise_a_level_by_one_with_a_reason() -> None:
-    brief = run(
-        FakeProvider(
-            draft(
-                [
-                    {
-                        "contact": "K2",
-                        "level": "high",
-                        "reason": "üsse yakın park",
-                        "evidence_claim_ids": [],
-                    }
-                ]
-            )
-        )
+def attention(brief: Brief, contact_id: str) -> list[AttentionFinding]:
+    return [a for a in brief.attention if a.contact == contact_id]
+
+
+# --- şema ----------------------------------------------------------------------------
+
+
+def test_track_id_is_an_enum_of_the_contacts_in_this_frame() -> None:
+    primary = FakeProvider(draft([]))
+    run(primary, detector=FakeDetector(PARKED))
+
+    [schema] = primary.schemas
+    [enum] = [
+        prop["enum"]
+        for definition in schema.model_json_schema()["$defs"].values()
+        for name, prop in definition.get("properties", {}).items()
+        if name == "track_id"
+    ]
+    assert enum == ["T0122", "kayit_disi_1", "T0032"]
+    with pytest.raises(ValidationError):
+        schema.model_validate(draft([item("T0012", "yaklasma")]))
+
+
+def test_schema_is_built_per_call_from_the_contact_labels() -> None:
+    parked = ContactFinding(
+        kind="unregistered",
+        label="car",
+        effective_label="car",
+        confidence=0.9,
+        bbox=(1, 2, 3, 4),
+        location=LatLon(lat=39.9, lon=32.8),
+        distance_to_base_m=900,
+        base_level="low",
+        final_level="low",
+        certainty="likely",
     )
+    labels = contact_labels([parked, parked.model_copy(update={"track_id": "T0001"}), parked])
+
+    assert labels == ["kayit_disi_1", "T0001", "kayit_disi_2"]
+    draft_schema(labels).model_validate(draft([item("kayit_disi_2", "dikkat_gerekmiyor")]))
+    with pytest.raises(ValidationError):
+        draft_schema(["T0001"]).model_validate(draft([item("kayit_disi_2", "dikkat_gerekmiyor")]))
+
+
+def test_without_contacts_the_attention_list_must_be_empty() -> None:
+    schema = draft_schema([])
+
+    schema.model_validate(draft([]))
+    with pytest.raises(ValidationError):
+        schema.model_validate(draft([item("T0001", "yaklasma")]))
+
+
+# --- nedenlerin veriyle doğrulanması ------------------------------------------------
+
+
+def test_approach_claimed_for_a_standing_contact_is_rejected_with_its_level_change() -> None:
+    """Canlı denemede T0020 duruyordu ama LLM "yaklaştı" deyip yükseltti; kabul edilmişti."""
+    brief = run(FakeProvider(draft([item("T0032", "yaklasma", ["hareket"], "high")])))
+
+    assert level_of(brief, "T0032") == ("medium", "medium")
+    [a] = attention(brief, "T0032")
+    assert a.accepted is False
+    assert a.rejection is not None and "yaklaşmıyor" in a.rejection
+    assert contact(brief, "T0032").adjustment_rejected == a.rejection
+    assert "T0032" not in brief.text.split("Değerlendirme:")[1].split("\n")[0]
+
+
+def test_verified_reason_allows_a_one_step_raise_with_a_code_written_reason() -> None:
+    # T0032'nin ORTA'sı duraklamadan geliyor; tipinin bilinmemesi kuralların saymadığı bir neden.
+    brief = run(FakeProvider(draft([item("T0032", "kacirilmis_temas", ["tur"], "high")])))
 
     assert level_of(brief, "T0032") == ("medium", "high")
-    [c] = [c for c in brief.contacts if c.track_id == "T0032"]
-    assert c.adjustment_reason == "üsse yakın park"
+    [a] = attention(brief, "T0032")
+    assert (a.accepted, a.level_accepted, a.rejection) == (True, True, None)
+    assert a.text == "karede ama tespit edilmedi (kaçırılmış temas), tipi bilinmiyor"
+    assert contact(brief, "T0032").adjustment_reason == a.text
     assert brief.is_fallback is False
     assert brief.model == f"{PRIMARY.provider}/{PRIMARY.model_id}"
 
 
-def test_llm_assessment_is_in_the_brief_text_with_code_generated_header_and_action() -> None:
-    brief = run(FakeProvider(draft([], assessment="T0122 üsse hızla yaklaşan bir kamyon.")))
-
-    assert "T0122 üsse hızla yaklaşan bir kamyon." in brief.text
-    assert brief.text.splitlines()[0].startswith("img_000860 · Dogu Yolu · 14:10 · Risk: KRİTİK")
-    assert f"Önerilen eylem: {brief.recommended_action}" in brief.text
-    assert "otomatik özet" not in brief.text
-
-
-def test_jump_of_more_than_one_level_is_rejected() -> None:
+def test_assessment_is_written_by_code_from_accepted_items_and_the_clean_summary() -> None:
     brief = run(
         FakeProvider(
             draft(
                 [
-                    {
-                        "contact": "K2",
-                        "level": "low",
-                        "reason": "zararsız",
-                        "evidence_claim_ids": [2],
-                    },
-                    {
-                        "contact": "K1",
-                        "level": "medium",
-                        "reason": "sadece kamyon",
-                        "evidence_claim_ids": [],
-                    },
-                ]
-            )
-        ),
-        claims=[CONSISTENT_CLAIM],
-    )
-
-    assert level_of(brief, "T0122") == ("critical", "critical")
-    [c] = [c for c in brief.contacts if c.track_id == "T0122"]
-    assert c.adjustment_rejected is not None and "bir kademe" in c.adjustment_rejected
-
-
-def test_lowering_without_evidence_is_rejected() -> None:
-    brief = run(
-        FakeProvider(
-            draft(
-                [
-                    {
-                        "contact": "K2",
-                        "level": "low",
-                        "reason": "park etmiş sivil",
-                        "evidence_claim_ids": [],
-                    }
+                    item("T0122", "yaklasma", ["hareket", "uzaklik"]),
+                    item("T0032", "kacirilmis_temas", ["tur"]),
+                    item("T0032", "dolasma", ["cevrede_dolasma"]),
                 ]
             )
         )
     )
 
-    assert level_of(brief, "T0032") == ("medium", "medium")
-    [c] = [c for c in brief.contacts if c.track_id == "T0032"]
-    assert c.adjustment_rejected is not None and "kanıt" in c.adjustment_rejected
+    lines = brief.text.splitlines()
+    assert lines[0].startswith("img_000860 · Dogu Yolu · 14:10 · Risk: KRİTİK")
+    assert "otomatik özet" not in lines[0]
+    assert lines[1] == (
+        f"Değerlendirme: {SUMMARY} "
+        "T0122: üsse yaklaşıyor, 30 dk önce 5,5 km, şimdi 1,6 km, son 30 dk 2,1 m/s. "
+        "T0032: karede ama tespit edilmedi (kaçırılmış temas), tipi bilinmiyor."
+    )
+    [circling] = [a for a in attention(brief, "T0032") if a.reason == "dolasma"]
+    assert circling.accepted is False and circling.rejection is not None
+    assert lines[-1] == f"Önerilen eylem: {brief.recommended_action}"
 
 
-def test_lowering_with_a_consistent_claim_about_that_contact_is_accepted() -> None:
+def test_no_attention_needed_is_rejected_when_the_data_shows_a_reason() -> None:
+    brief = run(FakeProvider(draft([item("T0122", "dikkat_gerekmiyor")])))
+
+    [a] = attention(brief, "T0122")
+    assert a.accepted is False
+    assert a.rejection is not None and "yaklaşma" in a.rejection
+
+
+def test_threat_warning_needs_a_consistent_threat_claim_linked_to_that_contact() -> None:
     brief = run(
         FakeProvider(
-            draft(
-                [
-                    {
-                        "contact": "K2",
-                        "level": "low",
-                        "reason": "resmi rapor olağan diyor",
-                        "evidence_claim_ids": [2],
-                    }
-                ]
-            )
+            draft([item("T0032", "tehdit_uyarisi", [9]), item("T0122", "tehdit_uyarisi")])
         ),
+        claims=[THREAT_ABOUT_T0032],
+    )
+
+    [t0032] = attention(brief, "T0032")
+    assert t0032.accepted is True
+    assert t0032.text == "13:00 tehdit uyarısı bu temasla tutarlı"
+    [t0122] = attention(brief, "T0122")
+    assert t0122.accepted is False
+
+
+def test_report_contradiction_needs_a_contradicting_claim_linked_to_that_contact() -> None:
+    brief = run(
+        FakeProvider(
+            draft([item("T0032", "rapor_celiskisi", [5]), item("T0122", "rapor_celiskisi")])
+        ),
+        claims=[CONTRADICTS_T0032],
+    )
+
+    assert [f.verdict for f in brief.report_findings if f.claim_id == 5] == ["contradicts"]
+    [t0032] = attention(brief, "T0032")
+    assert t0032.accepted is True
+    assert t0032.text == "13:30 raporu tespitle çelişiyor; tespit esas alındı"
+    assert attention(brief, "T0122")[0].accepted is False
+
+
+def test_basis_claims_must_be_linked_to_that_contact() -> None:
+    brief = run(
+        FakeProvider(draft([item("T0122", "yaklasma", ["hareket", 2])])),
         claims=[CONSISTENT_CLAIM],
     )
 
-    assert level_of(brief, "T0032") == ("medium", "low")
+    [a] = attention(brief, "T0122")
+    assert a.accepted is False
+    assert a.rejection is not None and "bu temasa bağlı değil" in a.rejection
 
 
-def test_lowering_citing_a_claim_about_another_contact_is_rejected() -> None:
+def test_unregistered_contacts_get_a_code_label_and_no_attention_is_left_out_of_the_text() -> None:
+    brief = run(
+        FakeProvider(draft([item("kayit_disi_1", "dikkat_gerekmiyor")])),
+        detector=FakeDetector(PARKED),
+    )
+
+    [a] = attention(brief, "kayit_disi_1")
+    assert (a.accepted, a.track_id, a.text) == (True, None, "dikkat gerektiren bir durum yok")
+    # Dikkat gerektirmeyen temaslar brief verisinde kalır; değerlendirme metnini doldurmaz.
+    assert brief.text.splitlines()[1] == f"Değerlendirme: {SUMMARY}"
+
+
+def test_items_about_the_same_contact_are_written_as_one_sentence() -> None:
     brief = run(
         FakeProvider(
             draft(
                 [
-                    {
-                        "contact": "K1",
-                        "level": "high",
-                        "reason": "rapor olağan diyor",
-                        "evidence_claim_ids": [2],
-                    }
+                    item("T0032", "kacirilmis_temas", ["tur"]),
+                    item("T0122", "yaklasma", ["hareket"]),
+                    item("T0032", "uzun_duraklama", ["duraklamalar"]),
+                ],
+                ozet="",
+            )
+        ),
+        FakeProvider(
+            draft(
+                [
+                    item("T0032", "kacirilmis_temas", ["tur"]),
+                    item("T0122", "yaklasma", ["hareket"]),
+                    item("T0032", "uzun_duraklama", ["duraklamalar"]),
+                ],
+                ozet="Sayı içeren özet: 3 araç.",
+            )
+        ),
+    )
+
+    assert brief.text.splitlines()[1] == (
+        "Değerlendirme: T0032: karede ama tespit edilmedi (kaçırılmış temas), tipi bilinmiyor; "
+        "üsse 1,6 km'de en az 120 dk'dır duruyor. "
+        "T0122: üsse yaklaşıyor, 30 dk önce 5,5 km, şimdi 1,6 km, son 30 dk 2,1 m/s."
+    )
+
+
+# --- seviye ayarı ---------------------------------------------------------------------
+
+
+def test_jump_of_more_than_one_level_is_rejected() -> None:
+    brief = run(FakeProvider(draft([item("T0032", "kacirilmis_temas", ["tur"], "critical")])))
+
+    assert level_of(brief, "T0032") == ("medium", "medium")
+    [a] = attention(brief, "T0032")
+    assert a.accepted is True  # neden doğru; seviye önerisi reddedildi
+    assert a.level_accepted is False
+    assert a.rejection is not None and "bir kademe" in a.rejection
+
+
+def test_a_raising_reason_cannot_lower_and_no_attention_cannot_raise() -> None:
+    brief = run(
+        FakeProvider(
+            draft(
+                [
+                    item("T0122", "yaklasma", ["hareket"], "high"),
+                    item("T0032", "dikkat_gerekmiyor", [2], "high"),
                 ]
             )
         ),
@@ -236,18 +403,165 @@ def test_lowering_citing_a_claim_about_another_contact_is_rejected() -> None:
     )
 
     assert level_of(brief, "T0122") == ("critical", "critical")
+    assert level_of(brief, "T0032") == ("medium", "medium")
+    assert all(a.level_accepted is False for a in brief.attention)
+
+
+def test_lowering_without_evidence_is_rejected() -> None:
+    brief = run(FakeProvider(draft([item("T0032", "dikkat_gerekmiyor", [], "low")])))
+
+    assert level_of(brief, "T0032") == ("medium", "medium")
+    assert contact(brief, "T0032").adjustment_rejected is not None
+
+
+def test_lowering_with_a_consistent_claim_about_that_contact_is_accepted() -> None:
+    brief = run(
+        FakeProvider(draft([item("T0032", "dikkat_gerekmiyor", [2], "low")])),
+        claims=[CONSISTENT_CLAIM],
+    )
+
+    assert level_of(brief, "T0032") == ("medium", "low")
+    [a] = attention(brief, "T0032")
+    assert a.text == "dikkat gerektiren bir durum yok; 12:35 resmi raporu doğruluyor"
+
+
+def test_lowering_citing_a_claim_about_another_contact_is_rejected() -> None:
+    brief = run(
+        FakeProvider(draft([item("T0122", "dikkat_gerekmiyor", [2], "high")])),
+        claims=[CONSISTENT_CLAIM],
+    )
+
+    assert level_of(brief, "T0122") == ("critical", "critical")
+
+
+def test_llm_cannot_lower_a_contact_that_a_report_has_raised() -> None:
+    brief = run(
+        FakeProvider(draft([item("T0032", "dikkat_gerekmiyor", [2], "medium")])),
+        claims=[CONSISTENT_CLAIM, THREAT_ABOUT_T0032],
+    )
+
+    assert level_of(brief, "T0032") == ("medium", "high")  # tehdit uyarısı +1; LLM düşüremedi
+    rejected = contact(brief, "T0032").adjustment_rejected
+    assert rejected is not None and "yükseltti" in rejected
+
+
+def test_lowering_citing_a_claim_whose_report_time_does_not_match_is_rejected() -> None:
+    """İddia T0122'nin çekim anındaki noktasını gösteriyor ama T0122 12:35'te orada değildi."""
+    stale = ClaimRecord(
+        claim_id=7,
+        report=FieldReport(time(12, 35), ReportSource.OFFICIAL, "1 agir arac, hareketleri olagan"),
+        claim=CONSISTENT_CLAIM.claim.model_copy(
+            update={"lat": T0122_AT_1410.lat, "lon": T0122_AT_1410.lon}
+        ),
+    )
+    # T0122 yaklaşıyor; önce yaklaşma olmayan bir temas gerekir: burada düşürme önerisinin
+    # kanıtı saat kontrolünden geçmediği için reddedilir.
+    brief = run(
+        FakeProvider(draft([item("T0122", "dikkat_gerekmiyor", [7], "high")])), claims=[stale]
+    )
+
+    assert level_of(brief, "T0122") == ("critical", "critical")
+    rejected = contact(brief, "T0122").adjustment_rejected
+    assert rejected is not None and "saat" in rejected
+
+
+def test_raise_citing_another_contacts_report_is_rejected() -> None:
+    brief = run(
+        FakeProvider(draft([item("T0032", "uzun_duraklama", ["duraklamalar", 3], "high")])),
+        claims=[CONSISTENT_CLAIM, ABOUT_T0122],
+    )
+
+    assert [f.track_id for f in brief.report_findings if f.claim_id == 3] == ["T0122"]
+    assert contact(brief, "T0032").final_level == "medium"
+    [a] = attention(brief, "T0032")
+    assert a.rejection is not None and "bu temasa bağlı değil" in a.rejection
 
 
 def test_image_level_and_action_follow_the_final_levels() -> None:
+    brief = run(FakeProvider(draft([item("T0032", "kacirilmis_temas", ["tur"], "high")])))
+
+    assert brief.risk_level == "critical"  # T0122 kritik kalıyor
+    assert "alarm" in brief.recommended_action
+
+
+# --- özet -----------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "ozet",
+    [
+        "Araç son 30 dakikada yaklaştı.",
+        "T0122 üsse yaklaşıyor.",
+        "Doğu Yolu bölgesinde ağır araç var.",
+        "Duran temas low seviyede.",
+        "Birinci cümle. İkinci cümle. Üçüncü cümle.",
+        "Park halindeki kayit_disi_1 izlenmeli.",
+        # Canlı denemede: yazıyla sayı (duran temas bir taneydi) ve bölge adlarının yönleri.
+        "İki başka temas üsse yakın uzun süredir duruyor.",
+        "Kuzey ve doğu erişim yollarındaki hareketlilik izlenmeli.",
+    ],
+)
+def test_summary_with_numbers_ids_zone_names_or_english_is_dropped(ozet: str) -> None:
+    brief = run(FakeProvider(draft([item("T0122", "yaklasma", ["hareket"])], ozet=ozet)))
+
+    assert brief.summary is None
+    assert brief.summary_rejected is not None
+    assert ozet not in brief.text
+    assert "Değerlendirme: T0122: üsse yaklaşıyor" in brief.text
+    assert brief.is_fallback is False
+
+
+@pytest.mark.parametrize(
+    "ozet",
+    [
+        SUMMARY,
+        "Kayıt dışı temas park halinde olabilir; üs çevresi sakin.",
+        "Birden fazla temas üsse yaklaşıyor; ikinci bir kaynak gerekmiyor.",
+    ],
+)
+def test_clean_summary_is_kept(ozet: str) -> None:
+    brief = run(FakeProvider(draft([], ozet=ozet)))
+
+    assert (brief.summary, brief.summary_rejected) == (ozet, None)
+    assert f"Değerlendirme: {ozet}" in brief.text
+
+
+PLACEHOLDERS = ["", "   ", "...", "…", "-", "Değerlendirme:"]
+
+
+@pytest.mark.parametrize("empty", PLACEHOLDERS)
+def test_empty_or_placeholder_summary_falls_through_to_the_next_model(empty: str) -> None:
+    primary = FakeProvider(draft([], ozet=empty))
+    fallback = FakeProvider(draft([]))
+
+    brief = run(primary, fallback)
+
+    assert brief.model == f"{FALLBACK.provider}/{FALLBACK.model_id}"
+    assert f"Değerlendirme: {SUMMARY}" in brief.text
+
+
+# --- yedek yol ------------------------------------------------------------------------
+
+
+def test_reply_outside_the_schema_falls_through_to_the_next_model() -> None:
+    primary = FakeProvider(draft([item("T0122", "tehlikeli")]))
+    brief = run(primary, FakeProvider(draft([])))
+
+    assert brief.model == f"{FALLBACK.provider}/{FALLBACK.model_id}"
+
+
+def test_no_model_answering_within_the_schema_gives_the_automatic_summary() -> None:
     brief = run(
-        FakeProvider(
-            draft([{"contact": "K1", "level": "high", "reason": "x", "evidence_claim_ids": [2]}])
-        ),
-        claims=[ClaimRecord(3, CONSISTENT_CLAIM.report, CONSISTENT_CLAIM.claim)],
+        FakeProvider(draft([item("T0999", "yaklasma")])),
+        FakeProvider({"adjustments": [], "assessment": "eski şema"}),
     )
 
-    assert brief.risk_level == "critical"  # K1 düşürülemedi (kanıt başka temasa ait)
-    assert "alarm" in brief.recommended_action
+    assert brief.is_fallback is True
+    assert brief.model is None
+    assert brief.fallback_reason == "kullanılabilir model yok"
+    assert "(otomatik özet)" in brief.text
+    assert brief.attention == []
+    assert level_of(brief, "T0122") == ("critical", "critical")
 
 
 def test_failing_primary_falls_back_to_the_next_model() -> None:
@@ -278,6 +592,8 @@ def test_without_an_llm_the_brief_is_the_automatic_summary() -> None:
 
     assert brief.is_fallback is True
     assert brief.model is None
+    assert brief.attention == []
+    assert "Değerlendirme" not in brief.text
 
 
 def test_decision_step_is_streamed_between_risk_and_brief() -> None:
@@ -291,139 +607,329 @@ def test_decision_step_is_streamed_between_risk_and_brief() -> None:
     assert names[-3:] == ["risk", "karar", "brief"]
 
 
-PLACEHOLDERS = ["", "   ", "...", "…", "-", "Değerlendirme:", "T0122."]
-
-
-@pytest.mark.parametrize("empty", PLACEHOLDERS)
-def test_empty_or_placeholder_assessment_falls_through_to_the_next_model(empty: str) -> None:
-    primary = FakeProvider(draft([], assessment=empty))
-    fallback = FakeProvider(draft([], assessment="T0122 üsse yaklaşan kamyon; kritik."))
-
-    brief = run(primary, fallback)
-
-    assert brief.model == f"{FALLBACK.provider}/{FALLBACK.model_id}"
-    assert "Değerlendirme: T0122 üsse yaklaşan kamyon; kritik." in brief.text
-
-
-def test_no_model_writing_a_real_assessment_gives_the_automatic_summary() -> None:
-    brief = run(FakeProvider(draft([], assessment="...")), FakeProvider(draft([], assessment="")))
-
-    assert brief.is_fallback is True
-    assert brief.model is None
-    assert brief.fallback_reason == "kullanılabilir model yok"
-    assert "(otomatik özet)" in brief.text
-
-
-def test_llm_cannot_lower_a_contact_that_a_report_has_raised() -> None:
-    contradiction = ClaimRecord(
-        claim_id=9,
-        report=FieldReport(time(13, 0), ReportSource.OFFICIAL, "burada kamyon var"),
-        claim=CONSISTENT_CLAIM.claim.model_copy(update={"claim_type": "threat_warning"}),
+def test_a_report_contradiction_does_not_change_the_level() -> None:
+    """ADR-0002: çelişen rapor seviyeyi değiştirmez; tespit esas alınır."""
+    brief = run(
+        FakeProvider(draft([item("T0032", "rapor_celiskisi", [5], "high")])),
+        claims=[CONTRADICTS_T0032],
     )
+
+    assert level_of(brief, "T0032") == ("medium", "medium")
+    [a] = attention(brief, "T0032")
+    assert (a.accepted, a.level_accepted) == (True, False)
+    assert a.rejection is not None and "seviyeyi değiştirmez" in a.rejection
+
+
+def test_a_rejected_proposal_does_not_block_a_verified_one_for_the_same_contact() -> None:
     brief = run(
         FakeProvider(
             draft(
                 [
-                    {
-                        "contact": "K2",
-                        "level": "medium",
-                        "reason": "olağan",
-                        "evidence_claim_ids": [2],
-                    }
+                    item("T0032", "yaklasma", ["hareket"], "high"),
+                    item("T0032", "kacirilmis_temas", ["tur"], "high"),
+                    item("T0032", "uzun_duraklama", ["duraklamalar"], "critical"),
                 ]
             )
-        ),
-        claims=[CONSISTENT_CLAIM, contradiction],
+        )
     )
 
-    base, final = level_of(brief, "T0032")
-    assert (base, final) == ("medium", "high")  # tehdit uyarısı +1; LLM düşüremedi
-    [c] = [c for c in brief.contacts if c.track_id == "T0032"]
-    assert c.adjustment_rejected is not None and "yükseltti" in c.adjustment_rejected
-
-
-def test_lowering_citing_a_claim_whose_report_time_does_not_match_is_rejected() -> None:
-    """İddia T0122'nin çekim anındaki noktasını gösteriyor ama T0122 12:35'te orada değildi."""
-    t0122_now = next(
-        p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
-    )
-    stale = ClaimRecord(
-        claim_id=7,
-        report=FieldReport(time(12, 35), ReportSource.OFFICIAL, "1 agir arac, hareketleri olagan"),
-        claim=CONSISTENT_CLAIM.claim.model_copy(
-            update={"lat": t0122_now.lat, "lon": t0122_now.lon}
-        ),
-    )
-    brief = run(
-        FakeProvider(
-            draft(
-                [
-                    {
-                        "contact": "K1",
-                        "level": "high",
-                        "reason": "resmi rapor olağan diyor",
-                        "evidence_claim_ids": [7],
-                    }
-                ]
-            )
-        ),
-        claims=[stale],
-    )
-
-    assert level_of(brief, "T0122") == ("critical", "critical")
-    [c] = [c for c in brief.contacts if c.track_id == "T0122"]
-    assert c.adjustment_rejected is not None and "saat" in c.adjustment_rejected
-
-
-T0122_AT_1410 = next(
-    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
-)
-ABOUT_T0122 = ClaimRecord(
-    claim_id=3,
-    report=FieldReport(time(14, 0), ReportSource.OFFICIAL, "tehdit uyarisi"),
-    claim=CONSISTENT_CLAIM.claim.model_copy(
-        update={"lat": T0122_AT_1410.lat, "lon": T0122_AT_1410.lon, "claim_type": "threat_warning"}
-    ),
-)
-
-
-def test_raise_citing_another_contacts_report_is_rejected() -> None:
-    """Canlı denemede LLM, T0316 hakkındaki raporla T0314'ü yükseltmişti; kanıt o temasa ait
-    olmalı. Buradaki iddia (2) T0032'ye bağlı, yükseltilmek istenen T0122 (K1)."""
-    brief = run(
-        FakeProvider(
-            draft(
-                [
-                    {
-                        "contact": "K2",
-                        "level": "high",
-                        "reason": "raporla uyumlu park",
-                        "evidence_claim_ids": [2],
-                    },
-                ]
-            )
-        ),
-        claims=[CONSISTENT_CLAIM],
-    )
     assert level_of(brief, "T0032") == ("medium", "high")
+    assert [a.level_accepted for a in attention(brief, "T0032")] == [False, True, None]
+    assert contact(brief, "T0032").adjustment_rejected is None
 
+
+# --- kuralların zaten saydığı neden ---------------------------------------------------
+
+
+def test_raise_with_the_reason_the_rules_already_counted_is_rejected() -> None:
+    """Canlı denemede ORTA'sı yaklaşmadan gelen temas "yaklaşma" ile YÜKSEK'e çıkıyordu;
+    aynı girdi bir koşuda ORTA, bir koşuda YÜKSEK veriyordu."""
+    brief = run(FakeProvider(draft([item("T0032", "uzun_duraklama", ["duraklamalar"], "high")])))
+
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama"]
+    assert level_of(brief, "T0032") == ("medium", "medium")
+    [a] = attention(brief, "T0032")
+    assert (a.accepted, a.level_accepted) == (True, False)
+    assert a.text == "üsse 1,6 km'de en az 120 dk'dır duruyor"
+    assert a.rejection is not None and "zaten sayıldı" in a.rejection
+    assert contact(brief, "T0032").adjustment_rejected == a.rejection
+
+
+def test_a_threat_warning_that_already_raised_the_level_cannot_raise_it_again() -> None:
+    brief = run(
+        FakeProvider(draft([item("T0032", "tehdit_uyarisi", [9], "critical")])),
+        claims=[THREAT_ABOUT_T0032],
+    )
+
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama", "tehdit_uyarisi"]
+    assert level_of(brief, "T0032") == ("medium", "high")
+    [a] = attention(brief, "T0032")
+    assert a.level_accepted is False
+    assert a.rejection is not None and "zaten sayıldı" in a.rejection
+
+
+def test_the_rules_basis_is_given_to_the_llm() -> None:
+    primary = FakeProvider(draft([]))
+    run(primary)
+
+    [user] = primary.users
+    assert "  seviye: ORTA (kuralların saydığı neden: uzun_duraklama)" in user
+
+
+# --- kayıt dışı temas -----------------------------------------------------------------
+
+# PARKED üssün 1 km'sinden uzakta, track'i olmayan araç (ADR-0003: düşük).
+FAR_PARKED = PARKED
+
+
+def near_base_contact() -> ContactFinding:
+    return ContactFinding(
+        kind="unregistered",
+        label="car",
+        effective_label="car",
+        confidence=0.9,
+        bbox=(1, 2, 3, 4),
+        location=LatLon(lat=39.9, lon=32.8),
+        distance_to_base_m=600,
+        base_level="medium",
+        final_level="medium",
+        level_basis=["kayit_disi"],
+        certainty="likely",
+    )
+
+
+def test_unregistered_reason_is_verified_from_the_contact_kind() -> None:
+    brief = run(
+        FakeProvider(
+            draft([item("kayit_disi_1", "kayit_disi", ["tur"]), item("T0122", "kayit_disi")])
+        ),
+        detector=FakeDetector(FAR_PARKED),
+    )
+
+    [parked] = attention(brief, "kayit_disi_1")
+    assert parked.accepted is True
+    assert parked.text is not None and parked.text.startswith("track'i yok (kayıt dışı)")
+    [t0122] = attention(brief, "T0122")
+    assert t0122.accepted is False
+    assert t0122.rejection is not None and "track'i var" in t0122.rejection
+    assert "kayıt dışı temas 1: track'i yok" in brief.text
+
+
+def test_unregistered_reason_alone_cannot_raise_the_level() -> None:
+    """ADR-0003: track'in yokluğu kendi başına risk değildir; kurallar onu zaten sayıyor."""
+    brief = run(
+        FakeProvider(draft([item("kayit_disi_1", "kayit_disi", ["tur"], "medium")])),
+        detector=FakeDetector(FAR_PARKED),
+    )
+
+    [parked] = [c for c in brief.contacts if c.kind == "unregistered"]
+    assert parked.level_basis == ["kayit_disi"]
+    assert (parked.base_level, parked.final_level) == ("low", "low")
+    [a] = attention(brief, "kayit_disi_1")
+    assert (a.accepted, a.level_accepted) == (True, False)
+
+
+def test_far_parked_unregistered_car_may_need_no_attention() -> None:
+    brief = run(
+        FakeProvider(draft([item("kayit_disi_1", "dikkat_gerekmiyor")])),
+        detector=FakeDetector(FAR_PARKED),
+    )
+
+    [a] = attention(brief, "kayit_disi_1")
+    assert a.accepted is True
+
+
+def test_no_attention_is_rejected_for_an_unregistered_contact_near_the_base() -> None:
+    levels = load_rules().levels
+    near = near_base_contact()
+    assert near.distance_to_base_m < levels.unregistered_alert_m
+    proposal = DecisionDraft.model_validate(draft([item("kayit_disi_1", "dikkat_gerekmiyor")]))
+
+    _, [a], _, _ = apply_attention([near], proposal, [], levels)
+
+    assert a.accepted is False
+    assert a.rejection is not None and "kayıt dışı" in a.rejection
+
+
+# --- LLM girdisi: kodla yazılmış Türkçe olgular (madde 7) ------------------------------
+
+# Girdide geçmemesi gereken kod değerleri: alan adları ve İngilizce enum değerleri.
+ENGLISH_CODES = re.compile(
+    r"\b(approaching|receding|stationary|passing|unknown|low|medium|high|critical|matched|"
+    r"unregistered|missed|car|van|truck|bus|certain|likely|weak|unverified|consistent|"
+    r"contradicts|unverifiable|irrelevant|official|third_party|observation|friendly_claim|"
+    r"threat_warning|rumor|ok|mismatch|true|false|null|none|trend|kind|stops|heading_deg|"
+    r"distance_to_base_km|recent_speed_mps|level_reasons|level_basis)\b",
+    re.IGNORECASE,
+)
+DOTTED_DECIMAL = re.compile(r"\d\.\d")
+
+
+def llm_input(**kwargs: Any) -> str:
+    primary = FakeProvider(draft([]))
+    run(primary, **kwargs)
+    [user] = primary.users
+    return user
+
+
+def contact_block(user: str, label: str) -> list[str]:
+    lines = user.splitlines()
+    start = lines.index(f"Temas {label}")
+    block: list[str] = []
+    for line in lines[start + 1 :]:
+        if not line.startswith("  "):
+            break
+        block.append(line)
+    return block
+
+
+def test_llm_input_has_no_english_code_values_or_dotted_decimals() -> None:
+    user = llm_input(
+        detector=FakeDetector(PARKED), claims=[CONSISTENT_CLAIM, ABOUT_T0122, CONTRADICTS_T0032]
+    )
+
+    assert ENGLISH_CODES.findall(user) == []
+    assert DOTTED_DECIMAL.findall(user) == []
+    assert "{" not in user  # ham JSON değil
+
+
+def test_llm_input_writes_the_reference_contact_as_turkish_fact_lines() -> None:
+    """Referans örnek (CLAUDE.md): img_000860, 14:10, T0122 kamyonu üsse 1,6 km'de yaklaşıyor."""
+    user = llm_input(claims=[ABOUT_T0122])
+
+    assert user.splitlines()[0] == "Görüntü img_000860 · çekim anı 14:10"
+    assert contact_block(user, "T0122") == [
+        "  tur: eşleşmiş (tespit ve track)",
+        "  tip: kamyon (ağır araç)",
+        "  kesinlik: kesin",
+        "  uzaklik: 1 saat önce 5,6 km → 30 dk önce 5,5 km → şimdi 1,6 km",
+        "  hareket: son 30 dk üsse yaklaşıyor, 2,1 m/s, yön batı; 2 saatlik ortalama 1,1 m/s",
+        "  duraklamalar: 12:10–12:50 (40 dk, üsse 6,7 km); 12:55–13:05 (10 dk, üsse 5,9 km); "
+        "13:15–14:00 (45 dk, üsse 5,5 km)",
+        "  yakin_duraklama: yok",
+        "  cevrede_dolasma: yok",
+        "  seviye: KRİTİK (kuralların saydığı neden: yaklasma, tehdit_uyarisi)",
+        "  raporlar:",
+        "    [3] 14:00 resmi tehdit uyarısı — karar: tutarlı; saat kontrolü: araç rapor "
+        "saatinde başka yerdeydi; gerekçe: T0122 hakkında tehdit uyarısı; araç rapor saatinde "
+        "başka yerdeydi",
+    ]
+
+
+def test_llm_input_says_a_stop_is_ongoing_and_compares_it_with_the_threshold() -> None:
+    """T0032 yaklaşmıyor, duruyor: sayıları LLM karşılaştırmaz, kod "eşiği aşıyor" der."""
+    user = llm_input(claims=[CONSISTENT_CLAIM])
+
+    assert contact_block(user, "T0032") == [
+        "  tur: kaçırılmış (track karede, tespit yok)",
+        "  tip: bilinmiyor",
+        "  kesinlik: olası",
+        "  uzaklik: 1 saat önce 1,6 km → 30 dk önce 1,6 km → şimdi 1,6 km",
+        "  hareket: son 30 dk yerinde duruyor; 2 saatlik ortalama 0,0 m/s",
+        "  duraklamalar: 12:10–14:10 (en az 120 dk, sürüyor, üsse 1,6 km)",
+        "  yakin_duraklama: en az 120 dk, eşik 30 dk: aşıyor",
+        "  cevrede_dolasma: yok",
+        "  seviye: ORTA (kuralların saydığı neden: uzun_duraklama)",
+        "  raporlar:",
+        "    [2] 12:35 resmi gözlem — karar: tutarlı; saat kontrolü: tutuyor; gerekçe: T0032 "
+        "iddianın konumunda ve saat 12:35 itibarıyla uyuşuyor",
+    ]
+
+
+def test_llm_input_for_an_unregistered_contact_has_no_motion_lines() -> None:
+    user = llm_input(detector=FakeDetector(PARKED))
+
+    assert contact_block(user, "kayit_disi_1") == [
+        "  tur: kayıt dışı (track'i yok, hareket geçmişi bilinmiyor)",
+        "  tip: otomobil",
+        "  kesinlik: olası",
+        "  uzaklik: şimdi 1,6 km",
+        "  hareket: kayıt yok",
+        "  seviye: DÜŞÜK (kuralların saydığı neden: kayit_disi)",
+    ]
+
+
+def test_every_key_in_the_llm_input_is_a_basis_key_the_llm_may_cite() -> None:
+    user = llm_input(
+        detector=FakeDetector(PARKED), claims=[CONSISTENT_CLAIM, ABOUT_T0122, CONTRADICTS_T0032]
+    )
+
+    keys = {
+        line.strip().split(":", 1)[0]
+        for line in user.splitlines()
+        if line.startswith("  ") and not line.startswith("    ")
+    }
+    assert keys <= set(get_args(FactKey))
+    assert {"tur", "uzaklik", "hareket", "seviye", "raporlar"} <= keys
+
+
+def test_basis_with_the_new_turkish_keys_is_accepted() -> None:
     brief = run(
         FakeProvider(
             draft(
                 [
-                    {
-                        "contact": "K2",
-                        "level": "high",
-                        "reason": "başka temasın raporu",
-                        "evidence_claim_ids": [3],
-                    },
+                    item("T0122", "yaklasma", ["hareket", "uzaklik"]),
+                    item("T0032", "uzun_duraklama", ["duraklamalar", "yakin_duraklama"]),
                 ]
             )
-        ),
-        claims=[CONSISTENT_CLAIM, ABOUT_T0122],
+        )
     )
-    assert [f.track_id for f in brief.report_findings if f.claim_id == 3] == ["T0122"]
-    [t0032] = [c for c in brief.contacts if c.track_id == "T0032"]
-    assert t0032.final_level == "medium"
-    assert t0032.adjustment_rejected is not None
-    assert "bu temasa ait değil" in t0032.adjustment_rejected
+
+    assert [a.accepted for a in brief.attention] == [True, True]
+    assert brief.attention[0].basis == ["hareket", "uzaklik"]
+
+
+def test_an_unknown_basis_key_is_rejected_by_the_schema() -> None:
+    """Eski İngilizce alan adı artık girdide yok; şemaya uymayan cevap zincirde ilerler."""
+    schema = draft_schema(["T0122"])
+    with pytest.raises(ValidationError):
+        schema.model_validate(draft([item("T0122", "yaklasma", ["trend"])]))
+
+    brief = run(FakeProvider(draft([item("T0122", "yaklasma", ["trend"])])))
+    assert brief.is_fallback is True
+
+
+def test_vehicle_types_inside_report_reasoning_are_turkish_in_the_llm_input() -> None:
+    """Rapor gerekçesi brief'te aynen kalır; yalnızca LLM girdisinde tip adı Türkçeleşir."""
+    finding = ReportFinding(
+        claim_id=196,
+        report_time="09:35",
+        source="official",
+        text="bolgede yalnizca hafif arac",
+        claim_type="observation",
+        track_id=None,
+        verdict="contradicts",
+        certainty="certain",
+        effect="none",
+        time_check="unknown",
+        reasoning="karede ağır araç var (T0062, truck); tespit esas alındı",
+    )
+
+    user = build_input("img_008333", "10:10", [], [finding], load_rules().levels)
+
+    assert "(T0062, kamyon)" in user
+    assert ENGLISH_CODES.findall(user) == []
+
+
+def test_reports_without_a_track_are_not_called_unlinked_to_any_contact() -> None:
+    """Rapor kayıt dışı bir temasa bağlanabilir; track'i olmadığı için ayrı bölümde durur."""
+    finding = ReportFinding(
+        claim_id=41,
+        report_time="10:00",
+        source="official",
+        text="dost arac",
+        claim_type="friendly_claim",
+        track_id=None,
+        verdict="unverifiable",
+        certainty="unverified",
+        effect="none",
+        time_check="unknown",
+        reasoning="dostluk iddiası doğrulanamadı: kayıt dışı temasın hareket kaydı yok",
+    )
+
+    user = build_input("img_000860", "14:10", [], [finding], load_rules().levels)
+
+    assert "Hiçbir temasa bağlanmayan" not in user
+    assert (
+        "Track'e bağlanmayan raporlar (bölge düzeyinde ya da kayıt dışı bir temasla ilgili)" in user
+    )

@@ -467,3 +467,52 @@
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.
 - Embedding modeli ve boyutu hâlâ belirsiz.
 - EVREN anahtarı çalışıyor; `report_claims` 6 iddiayla dolu. Organizatörlerin GLM anahtarı yarın gelecek, o zaman `GLM_API_KEY`/`GLM_API_BASE` ve model adı doğrulanacak.
+
+### Kol B eşleşmeden ayrıldı (27 Eylül, pipeline iyileştirmesi madde 1)
+- `EvaluationService.track_branch(image)` → `TrackBranch(positions, motions)`: aday track'ler (çekim anında karenin içinde ya da kareye eşleşme eşiği + 1 m kadar yakın) ve her birinin hareket özeti. Görev tanımı s3: her track kendi görüntüsünün çekim anında biter, tespiti beklemeye gerek yok.
+- Değerlendirmede track kolu tespitle aynı anda çalışıyor (thread); eşleşme ve temas oluşturma hazır sonucu kullanıyor, `_motion` temas başına ayrıca çağrılmıyor. Tip geçmişi de aynı aday tanımını kullanıyor.
+- Ölçüm: 40 gerçek görüntünün kurallarla, LLM'siz bütün SSE olayları (360 olay, veriler dahil) önce ve sonra byte düzeyinde aynı.
+- Testler: `tests/test_track_branch.py` (aday tanımı, hareketin yeniden okunmaması, tespitle paralellik); toplam 277.
+
+### Görsel doğrulama tek paralel dalgada (27 Eylül, pipeline iyileştirmesi madde 3)
+- Önceden zayıf kutular paralel soruluyordu, ama renk/yük iddialarının kutuları rapor değerlendirmesi sırasında tek tek ve sırayla VLM'e gidiyordu (her biri ~10 sn).
+- `reports.visual_track_ids(...)`: renk ya da yük belirten iddiaların bağlanacağı track'li temaslar; `evaluate_claims` ile aynı bağlama kuralını (`_bind`) kullanıyor. Servis (`_inspect_all`) eşleşmeden hemen sonra bu kutuları zayıf kutularla birlikte tek bir paralel dalgada (en fazla 4) soruyor; rapor değerlendirmesi yalnızca sonucu okuyor.
+- Ölçüm: 40 gerçek görüntü, kurallar + belirlenimci sahte VLM: 360 olayın hepsi ve 17 VLM çağrısının kutuları önce ve sonra aynı.
+- Testler: renk iddiası ile zayıf kutunun aynı dalgada aynı anda sorulması, bağlanmayan ya da ilgisiz iddianın VLM'e gitmemesi; toplam 279.
+
+### Değerlendirme tipli aşamalara bölündü (27 Eylül, refactor)
+- `EvaluationService.evaluate` (~260 satırlık tek üreteç) ince bir orkestratör oldu: aşamaları sırayla çağırıp her birinden sonra SSE adımını yayıyor. Kol A (`detect`) ve Kol B (`track_branch`) yine `concurrent.futures` ile paralel.
+- `app/agent/stages.py`: her aşama saf ya da yan etkisi imzasında açık (`repo`, `detector`, `verifier`, `router`) bir fonksiyon; girdi/çıktılar dondurulmuş dataclass: `ImageContext`, `Detections`, `TrackBranch`, `Matches`, `Contacts`, `ClaimEvaluations`, `RiskResult`, `FinalDecision` → `Brief`.
+- `app/agent/events.py`: adımların özet ve `data` yükleri (frontend sözleşmesi) tek yerde. `app/agent/brief_text.py`: brief ve özet metinleri.
+- Ölçüm: 40 gerçek görüntünün bütün olayları ve brief'leri önce ve sonra byte düzeyinde aynı; üç koşuda: kurallar, kurallar + belirlenimci sahte VLM, sahte VLM + kabul/red üreten sahte LLM.
+- Testler: `tests/test_stages.py` (eşleşme; rapor etkilerinin bağlanması, ADR-0002); toplam 285.
+
+### Storage indirmesinde yarış düzeltildi (27 Eylül, uçtan uca test)
+- Uçtan uca test: Supabase'ten `img_003201` (14:55, Güney Kapısı Yaklaşımı), boş bir `DATA_DIR` ile `POST /evaluations` üzerinden çalıştırıldı. Görüntü yerelde yokken değerlendirme 3. adımdan sonra `FileNotFoundError` ile düşüyordu. Sebep: görsel doğrulamanın paralel işçileri dosyayı aynı anda indirip aynı `.part` dosyasına yazıyordu; ilk işçi dosyayı taşıyınca diğerlerinin `replace` çağrısı patlıyordu.
+- `storage.resolve_image_file`: hedef dosya başına bir kilit. Bekleyen çağrı kilidi alınca dosyayı yeniden kontrol ediyor, bu yüzden indirme tek sefer yapılıyor.
+- Ölçüm: aynı temiz başlangıçla 8 adımın hepsi ve brief geliyor (~23 sn, GLM + EVREN VLM).
+- Testler: `test_concurrent_callers_share_one_download` (4 eşzamanlı çağrı, tek istek, artık `.part` kalmıyor); 279 test geçiyor.
+
+### Görüntü ucu dosyayı bucket'tan sunuyor (27 Eylül)
+- `GET /images/{id}/file` yalnızca `DATA_DIR/images` klasörüne bakıyordu. Yerelde dosya yoksa 404 dönüyor, ön yüzde görüntü analiz yapılana kadar görünmüyordu.
+- Supabase modunda uç artık `images.file_path` ile `drone-images` bucket'ından okuyup sunuyor, yerel klasöre hiç bakmıyor. Ağsız demoda (`DATA_SOURCE=package`) yerel klasör kullanılmaya devam ediyor (`app.state.image_storage = None`).
+- `SupabaseStorage.fetch`: içerik ve içerik tipi. Supabase olmayan nesne için 400 döndürüyor, asıl kod gövdede (`"statusCode": "404"`); `StorageError.not_found` bunu ayırıyor. Nesne yoksa 404, Storage'a ulaşılamazsa 502.
+- Ölçüm: boş görüntü klasörüyle üç görüntü 200 `image/jpeg` döndü (0,5–1,4 sn). `img_000860` `stage2` kopyasıyla byte düzeyinde aynı. Yerel klasöre bir şey yazılmadı.
+- Testler: `test_data_api.py` içinde bucket'tan sunma (yerel dosya varken bile), olmayan nesne → 404, ulaşılamayan Storage → 502.
+
+### Karar: aynı olgu iki kez sayılmıyor, kayıt dışı temas nedeni (27 Eylül)
+- Sorun: canlı testte `img_003201` aynı girdiyle bir koşuda ORTA, bir koşuda YÜKSEK çıkıyordu. T0213 ve T0156'nın ORTA'sı zaten yaklaşmadan geliyordu; LLM "yaklaşma" ile yükseltiyor, kod nedeni doğru bulup kabul ediyordu.
+- `risk.base_level` seviyeyi belirleyen satırın nedenini de döndürüyor (`LevelDecision.basis`); temas bunu `level_basis` olarak taşıyor. Rapor etkisiyle yükselen temasa `tehdit_uyarisi` ekleniyor. `level_basis`'teki bir nedenle yükseltme reddediliyor ("zaten sayıldı"). Kuralların görmediği bir birleşim (ör. yaklaşan araç + kaçırılmış temas) hâlâ yükseltebilir.
+- Yeni neden `kayit_disi`: temasın `kind`'ı "unregistered" olmalı. Seviye yükseltme gerekçesi olamaz (ADR-0003); üssün `unregistered_alert_m` yakınındaki kayıt dışı temas için "dikkat gerekmiyor" reddediliyor, uzaktaki park halindeki araç için geçerli.
+- Prompt (`prompts/brief.md`): `level_basis` ve `kayit_disi` kuralları; özet bölümü yeniden yazıldı (araç tip ve davranışla tarif edilir, ikinci cümle bağlam verir, niyet yorumu ve olmayanı sıralamak yasak, kod filtresinden geçen iyi/kötü örnekler).
+- Ölçüm: `img_003201` üç kez canlı: üçü de ORTA, hiç yükseltme önerisi yok; üç özet de filtreden geçti.
+- Testler: `level_basis` ile yükseltmenin reddi, tehdit uyarısının ikinci kez yükseltememesi, `kayit_disi` doğrulaması, yakın/uzak kayıt dışı temas; mevcut yükseltme testleri kuralın saymadığı nedene çevrildi. 313 test geçiyor.
+
+### Karar LLM'inin girdisi Türkçe olgu satırları (27 Eylül, madde 7)
+- Sorun: `build_input` ham JSON veriyordu (İngilizce alan adları, "approaching"/"high", noktalı ondalık, `level_reasons` tekrarı). Uçtan uca testte LLM "son 30 dakikada yaklaştı" dedi (yaklaşma 60–30 dk önceydi), İngilizce terim sızdırdı.
+- `decision.contact_facts`: temas başına sabit anahtarlı Türkçe satırlar (`tur`, `tip`, `kesinlik`, `uzaklik`, `hareket`, `duraklamalar`, `yakin_duraklama`, `cevrede_dolasma`, `seviye`, varsa `dost`, `gorsel`, `notlar`, `raporlar`). Sayılar `formatting` ile virgüllü; yön sekiz yön adıyla; eşik karşılaştırmasını ("aşıyor"/"altında") ve dolaşmayı kod yapıyor. Rapor iddiaları karar, saat kontrolü ve gerekçeyle; bağlanmayanlar ayrı bölümde. Bölge adı ve geçilen bölgeler girdiden çıktı (hiçbir neden kullanmıyor, özette yasak). Rapor gerekçesindeki tip adları (ör. "truck") yalnızca LLM girdisinde Türkçeleşiyor; brief ve SSE aynen.
+- `FactKey` (eski `FactField`): `dayanak`'ın gösterebileceği anahtarlar, girdideki anahtarlarla aynı liste. Neden doğrulaması `ContactFinding`'e bakmaya devam ediyor. Prompt yeni anahtarlara göre güncellendi ("sayıları yeniden hesaplama, zaman penceresini değiştirme").
+- Ölçüm: 40 gerçek görüntü LLM'siz (stage2, `detections_evren.json`): 360 SSE olayı önce ve sonra byte düzeyinde aynı. LLM girdisi 319.209 → 148.792 karakter (%53 az; kelime 30.073 → 21.850), 40 girdide İngilizce kod değeri ve noktalı ondalık yok. Sistem prompt'u 7,5K → 9,5K karakter büyüdü (anahtar açıklamaları).
+- Canlı (glm-5.3-flash, VLM kapalı, img_000860/006388/006444): seviyeler ve kabul edilen seviye değişiklikleri önce ve sonra aynı; `dayanak`'ta yeni anahtarlar doğru kullanıldı; img_006444 önce 45 sn zaman aşımına düşmüştü, sonra cevap verdi. Özetin sayı/kimlik yüzünden atılması rastgele: sonra 3'te 2 atıldı, aynı iki görüntünün tekrarında ikisi de geçti. Atılan özetin metni saklanmıyor.
+- Testler: girdide İngilizce kod ve noktalı ondalık yok; T0122 referans örneği, süren duraklama ve kayıt dışı temasın beklenen satırları; girdideki her anahtar `FactKey`'de; yeni anahtarlı `dayanak` kabul, eski anahtar şemada red; rapor gerekçesinde tip adı; track'siz raporların başlığı. 322 test geçiyor.
+- Kod incelemesi: track'i olmayan iddialar "hiçbir temasa bağlanmayan" diye veriliyordu; oysa kayıt dışı temasa bağlanmış olabilirler (ADR-0003). Başlık "Track'e bağlanmayan raporlar (bölge düzeyinde ya da kayıt dışı bir temasla ilgili)" oldu.
