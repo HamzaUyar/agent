@@ -266,7 +266,10 @@ def build_detector(settings: Settings) -> Detector:
         mock_path = settings.resolved_mock_path
         if mock_path is not None:
             # Sürüm dosyayı taşır: farklı tespit dosyalarının kayıtları önbellekte karışmasın.
-            return MockDetector(load_mock_detections(mock_path), version=f"file:{mock_path.name}")
+            # Dosya, 1. gün modelinin önceden alınmış çıktısıdır (scripts/export_detections.py).
+            return MockDetector(
+                load_mock_detections(mock_path), version=f"model çıktısı dosyadan: {mock_path.name}"
+            )
         return MockDetector()
     images_dir = settings.resolved_data_dir / "images"
     storage = build_storage(settings)

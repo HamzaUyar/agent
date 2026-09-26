@@ -120,6 +120,8 @@ FIXTURE_CLAIMS = [
 
 
 class FakeDetector:
+    version = "test"
+
     def __init__(self, detections: dict[str, list[Detection]]) -> None:
         self._detections = detections
 

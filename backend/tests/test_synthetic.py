@@ -12,7 +12,7 @@ import pytest
 from PIL import Image
 
 from app.agent.service import EvaluationService
-from app.data_package import read_package
+from app.data_package import load_claims, read_package
 from app.db.repositories import InMemoryRepository
 from app.eval_set import load_labels, run_eval_set
 from app.pipelines.detection import MockDetector, load_mock_detections
@@ -20,7 +20,6 @@ from scripts.make_synthetic_data import (
     PATTERN,
     SyntheticPackage,
     generate_with_retries,
-    load_claims,
     read_annotations,
     write_outputs,
 )

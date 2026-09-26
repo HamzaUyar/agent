@@ -12,10 +12,9 @@ from app.agent.chat import ChatAgent
 from app.agent.runner import EvaluationRunner
 from app.agent.service import EvaluationService, ImageNotFoundError
 from app.agent.tools import ChatTools
-from app.api.data import RepoDep
-from app.db.models import ChatRecorder, RunRecorder
+from app.api.data import RepoDep, get_stores
+from app.api.stores import Stores
 from app.db.repositories import DataRepository
-from app.db.session import connect
 from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector
 from app.schemas.api import Brief, ChatRequest, EvaluationRecord, EvaluationRequest
@@ -41,11 +40,15 @@ def _sse(event: str, payload: dict[str, object]) -> str:
 
 
 def _stream(
-    service: EvaluationService, image_id: str, detector_version: str, recompute: bool
+    service: EvaluationService,
+    stores: Stores,
+    image_id: str,
+    detector_version: str,
+    recompute: bool,
 ) -> Iterator[str]:
     """Kaydederek ya da önbellekten akıtır. Senkron üreteç; Starlette thread havuzunda yürütür."""
-    with connect() as conn:
-        runner = EvaluationRunner(service, RunRecorder(conn), detector_version=detector_version)
+    with stores.open() as (runs, _):
+        runner = EvaluationRunner(service, runs, detector_version=detector_version)
         # İç üreteç bağlantı kapanmadan kapatılsın ki kopmada kayıt 'failed' işaretlenebilsin.
         with closing(runner.stream(image_id, recompute=recompute)) as events:
             for kind, payload in events:
@@ -76,7 +79,9 @@ def start_evaluation(
             status.HTTP_404_NOT_FOUND, f"Görüntü veri setinde yok: {payload.image_id}"
         ) from exc
     return StreamingResponse(
-        _stream(service, payload.image_id, detector.version, payload.recompute),
+        _stream(
+            service, get_stores(request), payload.image_id, detector.version, payload.recompute
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -87,10 +92,10 @@ def start_evaluation(
     response_model=EvaluationRecord,
     responses={404: {"description": "Değerlendirme bulunamadı"}},
 )
-def read_evaluation(run_id: str) -> EvaluationRecord:
+def read_evaluation(run_id: str, request: Request) -> EvaluationRecord:
     """Kayıtlı bir değerlendirmeyi bütün adımları ve brief'iyle döndürür."""
-    with connect() as conn:
-        run = RunRecorder(conn).get(run_id)
+    with get_stores(request).open() as (runs, _):
+        run = runs.get(run_id)
     if run is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Değerlendirme bulunamadı: {run_id}")
     return EvaluationRecord(
@@ -105,6 +110,7 @@ def read_evaluation(run_id: str) -> EvaluationRecord:
 
 def _chat_stream(
     service: EvaluationService,
+    stores: Stores,
     run_id: str,
     image_id: str,
     brief: Brief,
@@ -112,8 +118,8 @@ def _chat_stream(
     llm: LLMRouter,
     detector_version: str,
 ) -> Iterator[str]:
-    with connect() as conn:
-        runner = EvaluationRunner(service, RunRecorder(conn), detector_version=detector_version)
+    with stores.open() as (runs, chats):
+        runner = EvaluationRunner(service, runs, detector_version=detector_version)
 
         def evaluate_image(other_id: str) -> Brief:
             final: Brief | None = None
@@ -127,7 +133,7 @@ def _chat_stream(
 
         image = service.require_image(image_id)
         tools = ChatTools(service.repository, image, brief, evaluate_image=evaluate_image)
-        agent = ChatAgent(llm, tools, brief, ChatRecorder(conn), run_id=run_id)
+        agent = ChatAgent(llm, tools, brief, chats, run_id=run_id)
         for kind, payload in agent.ask(question):
             yield _sse(kind, payload)
 
@@ -147,14 +153,16 @@ def chat(
     run_id: str, payload: ChatRequest, request: Request, repo: RepoDep, detector: DetectorDep
 ) -> StreamingResponse:
     """Değerlendirme hakkında takip sorusu; agent salt okuma araçlarıyla cevaplar."""
-    with connect() as conn:
-        run = RunRecorder(conn).get(run_id)
+    stores = get_stores(request)
+    with stores.open() as (runs, _):
+        run = runs.get(run_id)
     if run is None or run.brief is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Tamamlanmış değerlendirme yok: {run_id}")
     service = _service(request, repo, detector)
     return StreamingResponse(
         _chat_stream(
             service,
+            stores,
             run.run_id,
             run.image_id,
             run.brief,

@@ -29,6 +29,7 @@ dev = [
 [project.scripts]
 make-mock-data = "scripts.make_mock_data:main"
 load-data = "scripts.load_data:main"
+export-claims = "scripts.export_claims:main"
 upload-images = "scripts.upload_images:main"
 run-eval-set = "scripts.run_eval_set:main"
 

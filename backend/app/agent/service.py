@@ -366,7 +366,7 @@ class EvaluationService:
                 assessment,
                 automatic=model is None,
             ),
-            sources=_sources(contacts, findings),
+            sources=_sources(self._detector.version, contacts, findings),
         )
         yield emit(BRIEF_STEP, f"Risk: {LEVEL_TR[level]} · {action}", **brief.model_dump())
 
@@ -738,8 +738,10 @@ def _brief_text(
     return "\n".join(lines)
 
 
-def _sources(contacts: list[ContactFinding], findings: list[ReportFinding]) -> list[str]:
-    sources = ["tespit: tespit modeli", "konum: köşe koordinatları"]
+def _sources(
+    detector: str, contacts: list[ContactFinding], findings: list[ReportFinding]
+) -> list[str]:
+    sources = [f"tespit: {detector}", "konum: köşe koordinatları"]
     sources += [f"hareket: {c.track_id}" for c in contacts if c.track_id]
     sources += sorted({f"görsel: {c.visual.model}" for c in contacts if c.visual})
     sources += sorted({f"rapor: {f.report_time}" for f in findings})

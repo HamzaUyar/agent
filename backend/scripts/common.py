@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.agent.service import EvaluationService
 from app.core.config import get_settings
-from app.data_package import read_package
+from app.data_package import load_claims, read_package
 from app.db.models import fetch_claims, fetch_package
 from app.db.repositories import InMemoryRepository
 from app.db.session import connect
@@ -13,7 +13,6 @@ from app.llm.client import build_router
 from app.pipelines.detection import Detector, MockDetector, build_detector, load_mock_detections
 from app.pipelines.vision import VlmVerifier
 from app.storage import build_storage
-from scripts.make_synthetic_data import load_claims
 
 
 def add_source_args(parser: argparse.ArgumentParser) -> None:

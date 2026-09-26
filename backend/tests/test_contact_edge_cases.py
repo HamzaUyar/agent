@@ -55,6 +55,8 @@ def image_at(image_id: str, at: time, center: GeoPoint) -> ImageMeta:
 
 
 class FakeDetector:
+    version = "test"
+
     def __init__(self, detections: dict[str, list[Detection]]) -> None:
         self._detections = detections
 

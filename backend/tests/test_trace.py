@@ -17,6 +17,8 @@ TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58,
 
 
 class FakeDetector:
+    version = "test"
+
     def detect(self, image: ImageMeta) -> list[Detection]:
         return [TRUCK] if image.image_id == "img_000860" else []
 

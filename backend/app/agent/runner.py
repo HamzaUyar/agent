@@ -7,12 +7,14 @@ bir otomatik özete tercih edilir (ör. demo sırasında 503 yüzünden düşmü
 
 import itertools
 import logging
+import threading
 from collections.abc import Generator, Mapping
 from typing import Any, Literal, Protocol
 from uuid import uuid4
 
 from app.agent.service import BRIEF_STEP, EvaluationService
 from app.schemas.api import Brief, StepEvent
+from app.schemas.domain import RiskLevel
 from app.schemas.runs import StoredRun
 
 logger = logging.getLogger(__name__)
@@ -37,21 +39,27 @@ class RunStore(Protocol):
         otomatik özete tercih edilir."""
         ...
 
+    def latest_levels(self) -> dict[str, RiskLevel]:
+        """Her görüntünün tamamlanmış son değerlendirmesinin seviyesi."""
+        ...
+
 
 class InMemoryRunStore:
-    """Testler için kayıt deposu."""
+    """Bellek içi kayıt deposu: testler ve veritabanısız (çevrimdışı) demo için."""
 
     def __init__(self) -> None:
         self._runs: dict[str, StoredRun] = {}
         self._order: dict[str, int] = {}
         self._versions: dict[str, str] = {}
         self._counter = itertools.count()
+        self._lock = threading.Lock()
 
     def start(self, image_id: str, detector_version: str, models: Mapping[str, Any]) -> str:
         run_id = str(uuid4())
-        self._runs[run_id] = StoredRun(run_id, image_id, "running")
-        self._order[run_id] = next(self._counter)
-        self._versions[run_id] = detector_version
+        with self._lock:
+            self._runs[run_id] = StoredRun(run_id, image_id, "running")
+            self._order[run_id] = next(self._counter)
+            self._versions[run_id] = detector_version
         return run_id
 
     def add_step(self, run_id: str, event: StepEvent) -> None:
@@ -81,6 +89,14 @@ class InMemoryRunStore:
         written = [r for r in done if r.brief is not None and not r.brief.is_fallback]
         candidates = written or done
         return candidates[0] if candidates else None
+
+    def latest_levels(self) -> dict[str, RiskLevel]:
+        with self._lock:
+            done = sorted(
+                (r for r in self._runs.values() if r.status == "done" and r.brief is not None),
+                key=lambda r: self._order[r.run_id],
+            )
+        return {r.image_id: r.brief.risk_level for r in done if r.brief is not None}
 
 
 def _payload(event: StepEvent) -> RunEvent:

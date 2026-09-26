@@ -77,6 +77,8 @@ def box_on(image: ImageMeta, point: GeoPoint, label: VehicleClass) -> Detection:
 
 
 class FakeDetector:
+    version = "test"
+
     def __init__(self, detections: dict[str, list[Detection]]) -> None:
         self._detections = detections
 

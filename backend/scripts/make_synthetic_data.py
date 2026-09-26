@@ -40,6 +40,7 @@ from app.core.rules import RiskRules, default_rules
 from app.data_package import (
     TRACK_STEP_MINUTES,
     check_consistency,
+    dump_claims,
     format_hhmm,
     from_minutes,
     to_minutes,
@@ -778,39 +779,6 @@ def labels_toml(result: SyntheticPackage, rules: RiskRules | None = None) -> str
                 f"  verdict = {_toml_str(r.expected)}",
             ]
     return "\n".join(lines) + "\n"
-
-
-def dump_claims(claims: list[ClaimRecord], path: Path) -> None:
-    payload = [
-        {
-            "claim_id": c.claim_id,
-            "report": {
-                "time": format_hhmm(c.report.time),
-                "source": c.report.source.value,
-                "text": c.report.text,
-            },
-            "claim": c.claim.model_dump(),
-        }
-        for c in claims
-    ]
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-
-
-def load_claims(path: Path) -> list[ClaimRecord]:
-    from app.data_package import parse_hhmm
-
-    return [
-        ClaimRecord(
-            int(item["claim_id"]),
-            FieldReport(
-                parse_hhmm(item["report"]["time"]),
-                ReportSource(item["report"]["source"]),
-                item["report"]["text"],
-            ),
-            ReportClaim.model_validate(item["claim"]),
-        )
-        for item in json.loads(path.read_text(encoding="utf-8"))
-    ]
 
 
 def write_outputs(result: SyntheticPackage, out: Path, *, copy_images: bool = True) -> None:

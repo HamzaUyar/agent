@@ -38,6 +38,8 @@ T0032_AT_1235 = next(
 
 
 class FakeDetector:
+    version = "test"
+
     def detect(self, image: ImageMeta) -> list[Detection]:
         return [TRUCK] if image.image_id == "img_000860" else []
 

@@ -43,6 +43,8 @@ OFFICIAL, THIRD = ReportSource.OFFICIAL, ReportSource.THIRD_PARTY
 
 
 class FakeDetector:
+    version = "test"
+
     def __init__(self, detections: list[Detection]) -> None:
         self._detections = detections
 

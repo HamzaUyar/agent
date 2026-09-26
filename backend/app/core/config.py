@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     evren_api_base: str = "https://evren-llmapi.ssyz.org.tr/v1"
 
     data_dir: Path = Path("../../stage2")
+    data_source: Literal["supabase", "package"] = "supabase"
+    """package: veri `data_dir`'den, iddialar `claims_path`'ten; kayıtlar bellekte (çevrimdışı)."""
+    claims_path: str = ""
+    """Ayrıştırılmış iddiaların JSON'u (`scripts/export_claims.py`); `data_source=package` için."""
     detector_mode: Literal["mock", "evren", "model"] = "mock"
     detector_weights_path: str = ""
     evren_model_api_key: SecretStr = SecretStr("")
@@ -56,6 +60,10 @@ class Settings(BaseSettings):
     def resolved_weights_path(self) -> Path | None:
         """Model ağırlıkları, backend klasörüne göre çözümlenmiş; tanımlı değilse `None`."""
         return _resolve(Path(self.detector_weights_path)) if self.detector_weights_path else None
+
+    @property
+    def resolved_claims_path(self) -> Path | None:
+        return _resolve(Path(self.claims_path)) if self.claims_path else None
 
     @property
     def resolved_mock_path(self) -> Path | None:
