@@ -486,3 +486,17 @@
 - `app/agent/events.py`: adımların özet ve `data` yükleri (frontend sözleşmesi) tek yerde. `app/agent/brief_text.py`: brief ve özet metinleri.
 - Ölçüm: 40 gerçek görüntünün bütün olayları ve brief'leri önce ve sonra byte düzeyinde aynı; üç koşuda: kurallar, kurallar + belirlenimci sahte VLM, sahte VLM + kabul/red üreten sahte LLM.
 - Testler: `tests/test_stages.py` (eşleşme; rapor etkilerinin bağlanması, ADR-0002); toplam 285.
+
+### Storage indirmesinde yarış düzeltildi (27 Eylül, uçtan uca test)
+- Uçtan uca test: Supabase'ten `img_003201` (14:55, Güney Kapısı Yaklaşımı), boş bir `DATA_DIR` ile `POST /evaluations` üzerinden çalıştırıldı. Görüntü yerelde yokken değerlendirme 3. adımdan sonra `FileNotFoundError` ile düşüyordu. Sebep: görsel doğrulamanın paralel işçileri dosyayı aynı anda indirip aynı `.part` dosyasına yazıyordu; ilk işçi dosyayı taşıyınca diğerlerinin `replace` çağrısı patlıyordu.
+- `storage.resolve_image_file`: hedef dosya başına bir kilit. Bekleyen çağrı kilidi alınca dosyayı yeniden kontrol ediyor, bu yüzden indirme tek sefer yapılıyor.
+- Ölçüm: aynı temiz başlangıçla 8 adımın hepsi ve brief geliyor (~23 sn, GLM + EVREN VLM).
+- Testler: `test_concurrent_callers_share_one_download` (4 eşzamanlı çağrı, tek istek, artık `.part` kalmıyor); 279 test geçiyor.
+
+### Görüntü ucu dosyayı bucket'tan sunuyor (27 Eylül)
+- `GET /images/{id}/file` yalnızca `DATA_DIR/images` klasörüne bakıyordu. Yerelde dosya yoksa 404 dönüyor, ön yüzde görüntü analiz yapılana kadar görünmüyordu.
+- Supabase modunda uç artık `images.file_path` ile `drone-images` bucket'ından okuyup sunuyor, yerel klasöre hiç bakmıyor. Ağsız demoda (`DATA_SOURCE=package`) yerel klasör kullanılmaya devam ediyor (`app.state.image_storage = None`).
+- `SupabaseStorage.fetch`: içerik ve içerik tipi. Supabase olmayan nesne için 400 döndürüyor, asıl kod gövdede (`"statusCode": "404"`); `StorageError.not_found` bunu ayırıyor. Nesne yoksa 404, Storage'a ulaşılamazsa 502.
+- Ölçüm: boş görüntü klasörüyle üç görüntü 200 `image/jpeg` döndü (0,5–1,4 sn). `img_000860` `stage2` kopyasıyla byte düzeyinde aynı. Yerel klasöre bir şey yazılmadı.
+- Testler: `test_data_api.py` içinde bucket'tan sunma (yerel dosya varken bile), olmayan nesne → 404, ulaşılamayan Storage → 502.
+

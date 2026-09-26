@@ -1,5 +1,7 @@
 """Supabase Storage: görüntünün yerelde yoksa indirilmesi."""
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import time
 from pathlib import Path
 
@@ -48,6 +50,31 @@ def test_missing_local_file_is_downloaded_once(tmp_path: Path) -> None:
     assert len(requests) == 1
     assert str(requests[0].url) == f"{URL}/storage/v1/object/drone-images/img_000860.jpg"
     assert requests[0].headers["Authorization"] == f"Bearer {KEY}"
+
+
+def test_concurrent_callers_share_one_download(tmp_path: Path) -> None:
+    # Görsel doğrulama kutuları paralel inceler; ilk ihtiyaçta hepsi aynı dosyayı ister.
+    workers = 4
+    arrived = threading.Barrier(workers, timeout=5)
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=b"jpeg")
+
+    store = storage(httpx.MockTransport(handle))
+
+    def resolve(_: int) -> Path | None:
+        arrived.wait()
+        return resolve_image_file(tmp_path, image(), store)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        paths = list(pool.map(resolve, range(workers)))
+
+    assert paths == [tmp_path / "img_000860.jpg"] * workers
+    assert (tmp_path / "img_000860.jpg").read_bytes() == b"jpeg"
+    assert len(requests) == 1
+    assert list(tmp_path.glob(".*.part")) == []
 
 
 def test_local_file_wins_without_storage_call(tmp_path: Path) -> None:

@@ -6,6 +6,8 @@ oraya yazılır, sonraki okumalar yerelden yapılır.
 """
 
 import logging
+import mimetypes
+import threading
 from pathlib import Path
 from urllib.parse import quote
 
@@ -19,9 +21,34 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_S = 30.0
 
+# Görsel doğrulama kutuları paralel inceler; aynı dosyayı isteyenler tek indirmeyi beklesin.
+_download_locks: dict[Path, threading.Lock] = {}
+_download_locks_guard = threading.Lock()
+
+
+def _download_lock(target: Path) -> threading.Lock:
+    with _download_locks_guard:
+        return _download_locks.setdefault(target, threading.Lock())
+
 
 class StorageError(RuntimeError):
     """Storage isteği başarısız oldu."""
+
+    def __init__(self, message: str, *, not_found: bool = False) -> None:
+        super().__init__(message)
+        self.not_found = not_found
+        """Nesne bucket'ta yok (ağ ya da yetki hatası değil)."""
+
+
+def _is_not_found(response: httpx.Response) -> bool:
+    # Supabase olmayan nesne için 400 döndürür; asıl kod gövdededir ("statusCode": "404").
+    if response.status_code == httpx.codes.NOT_FOUND:
+        return True
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+    return isinstance(body, dict) and str(body.get("statusCode")) == "404"
 
 
 def storage_path(bucket: str, file_name: str) -> str:
@@ -59,10 +86,20 @@ class SupabaseStorage:
         return f"{self._base}/{quote(bucket)}/{quote(name)}"
 
     def download(self, file_path: str) -> bytes:
+        return self.fetch(file_path)[0]
+
+    def fetch(self, file_path: str) -> tuple[bytes, str]:
+        """Nesnenin içeriği ve Storage'ın bildirdiği içerik tipi."""
         response = self._client.get(self._url(file_path), headers=self._headers)
         if response.status_code != httpx.codes.OK:
-            raise StorageError(f"{file_path} indirilemedi: {response.status_code} {response.text}")
-        return response.content
+            raise StorageError(
+                f"{file_path} indirilemedi: {response.status_code} {response.text}",
+                not_found=_is_not_found(response),
+            )
+        content_type = response.headers.get("content-type", "")
+        if not content_type or content_type == "application/octet-stream":
+            content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+        return response.content, content_type
 
     def upload(self, file_path: str, data: bytes, content_type: str) -> None:
         """Nesneyi yazar; varsa üzerine yazar."""
@@ -95,14 +132,23 @@ def resolve_image_file(
         return local
     try:
         _, name = _split(image.file_path)
-        data = storage.download(image.file_path)
-    except (StorageError, httpx.HTTPError) as exc:
+    except StorageError as exc:
         logger.warning("%s Storage'dan alınamadı: %s", image.image_id, exc)
         return None
     target = images_dir / Path(name).name
-    images_dir.mkdir(parents=True, exist_ok=True)
-    partial = target.with_name(f".{target.name}.part")
-    partial.write_bytes(data)
-    partial.replace(target)
+    with _download_lock(target):
+        # Beklerken başka bir çağrı indirmiş olabilir.
+        local = find_image_file(images_dir, image.image_id)
+        if local is not None:
+            return local
+        try:
+            data = storage.download(image.file_path)
+        except (StorageError, httpx.HTTPError) as exc:
+            logger.warning("%s Storage'dan alınamadı: %s", image.image_id, exc)
+            return None
+        images_dir.mkdir(parents=True, exist_ok=True)
+        partial = target.with_name(f".{target.name}.part")
+        partial.write_bytes(data)
+        partial.replace(target)
     logger.info("%s Storage'dan indirildi: %s", image.image_id, target)
     return target

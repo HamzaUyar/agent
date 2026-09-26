@@ -71,7 +71,7 @@ Python 3.11+ (ortam: `.venv`, Python 3.14, pip), FastAPI (SSE), Pydantic v2, psy
   - **Model çıktısı:** `model_detections` (USE_INFERENCE=DEMO; yükleme `python -m scripts.load_detections`)
   - **Analiz:** `analysis_runs`, `detections`, `track_matches`, `motion_analyses`, `report_evaluations`, `risk_assessments`, `agent_steps`
 - Migration'lar: `01_extensions_and_enums` … `10_model_detections` (`supabase/migrations/`).
-- **Storage:** görüntü dosyaları özel `drone-images` bucket'ında; `images.file_path` = `drone-images/<id>.jpg`. Yerelde (`DATA_DIR/images`) olmayan görüntü, tespit ve VLM ilk ihtiyaç duyduğunda `service_role` ile indirilip oraya yazılır (`app/storage.py`). Yükleme: `upload-images [klasör]`.
+- **Storage:** görüntü dosyaları özel `drone-images` bucket'ında; `images.file_path` = `drone-images/<id>.jpg`. Yerelde (`DATA_DIR/images`) olmayan görüntü, tespit ve VLM ilk ihtiyaç duyduğunda `service_role` ile indirilip oraya yazılır (`app/storage.py`). Arayüzün görüntü ucu (`GET /images/{id}/file`) Supabase modunda dosyayı yerel klasöre bakmadan doğrudan bucket'tan sunar; yalnızca ağsız demoda (`DATA_SOURCE=package`) yerelden okur. Yükleme: `upload-images [klasör]`.
 
 ## Dizin yapısı
 ```

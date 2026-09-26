@@ -5,15 +5,18 @@ bağımlılık olarak değiştirilir.
 """
 
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.data import get_images_dir, get_repository
+from app.api.data import get_image_storage, get_images_dir, get_repository
 from app.data_package import read_package
 from app.db.repositories import InMemoryRepository
 from app.main import app
+from app.storage import SupabaseStorage
 
 FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 JPEG = b"\xff\xd8\xff\xe0 sahte jpeg"
@@ -30,7 +33,31 @@ def client(images_dir: Path) -> Iterator[TestClient]:
     repo = InMemoryRepository(read_package(FIXTURE))
     app.dependency_overrides[get_repository] = lambda: repo
     app.dependency_overrides[get_images_dir] = lambda: images_dir
+    app.dependency_overrides[get_image_storage] = lambda: None
     yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+BUCKET_JPEG = b"\xff\xd8\xff\xe0 bucket jpeg"
+
+
+def storage_client(images_dir: Path, handle: httpx.MockTransport) -> TestClient:
+    """Supabase modu: görüntülerin `file_path`'i var, dosyalar bucket'tan gelir."""
+    package = read_package(FIXTURE)
+    images = [replace(m, file_path=f"drone-images/{m.image_id}.jpg") for m in package.images]
+    repo = InMemoryRepository(replace(package, images=images))
+    storage = SupabaseStorage(
+        "https://proje.supabase.co", "service-role", client=httpx.Client(transport=handle)
+    )
+    app.dependency_overrides[get_repository] = lambda: repo
+    app.dependency_overrides[get_images_dir] = lambda: images_dir
+    app.dependency_overrides[get_image_storage] = lambda: storage
+    return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _clear_overrides() -> Iterator[None]:
+    yield
     app.dependency_overrides.clear()
 
 
@@ -84,3 +111,43 @@ def test_image_in_the_data_set_without_a_file_is_404(client: TestClient) -> None
 
     assert response.status_code == 404
     assert "dosyası" in response.json()["detail"]
+
+
+def test_with_storage_the_file_comes_from_the_bucket_not_the_local_folder(
+    images_dir: Path,
+) -> None:
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=BUCKET_JPEG)
+
+    # Yerelde aynı adlı bir dosya olsa da kullanılmaz.
+    response = storage_client(images_dir, httpx.MockTransport(handle)).get(
+        "/images/img_000860/file"
+    )
+
+    assert response.status_code == 200
+    assert response.content == BUCKET_JPEG
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["cache-control"] == "public, max-age=86400"
+    assert [r.url.path for r in requests] == ["/storage/v1/object/drone-images/img_000860.jpg"]
+
+
+def test_with_storage_a_missing_object_is_404(tmp_path: Path) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"statusCode": "404", "error": "not_found"})
+
+    response = storage_client(tmp_path, httpx.MockTransport(handle)).get("/images/img_000860/file")
+
+    assert response.status_code == 404
+    assert "dosyası" in response.json()["detail"]
+
+
+def test_with_storage_an_unreachable_bucket_is_502(tmp_path: Path) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("ağ yok", request=request)
+
+    response = storage_client(tmp_path, httpx.MockTransport(handle)).get("/images/img_000860/file")
+
+    assert response.status_code == 502
