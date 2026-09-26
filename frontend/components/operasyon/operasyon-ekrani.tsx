@@ -1,5 +1,6 @@
 "use client"
 
+import { HaritaPaneli } from "@/components/harita/harita-paneli"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useOperasyon, type RiskTab } from "@/store/operasyon"
 
@@ -39,10 +40,7 @@ export function OperasyonEkrani() {
         </Cekmece>
 
         <main className="flex min-w-0 flex-1 p-[var(--harita-paneli-bosluk)]">
-          <section
-            aria-label="Harita paneli"
-            className="relative flex-1 overflow-hidden rounded-lg border border-[var(--harita-paneli-cerceve)] bg-[var(--harita-paneli-zemin)]"
-          />
+          <HaritaPaneli />
         </main>
 
         <Cekmece side="right" title="Risk & Temaslar" panelKey={right.panel} state={right.state}>

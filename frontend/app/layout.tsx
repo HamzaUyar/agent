@@ -3,6 +3,7 @@ import { Atkinson_Hyperlegible, JetBrains_Mono } from "next/font/google"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 
+import "maplibre-gl/dist/maplibre-gl.css"
 import "./globals.css"
 
 const atkinson = Atkinson_Hyperlegible({

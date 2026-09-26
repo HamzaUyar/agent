@@ -44,3 +44,6 @@ next-env.d.ts
 /playwright-report/
 /test-results/
 /blob-report/
+
+# MapLibre worker (scripts/copy-maplibre-worker.mjs üretir)
+/public/maplibre/

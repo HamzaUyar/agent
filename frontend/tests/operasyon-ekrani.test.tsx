@@ -1,14 +1,7 @@
-import { render, screen, within } from "@testing-library/react"
-import userEvent from "@testing-library/user-event"
+import { screen, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 
-import { OperasyonEkrani } from "@/components/operasyon/operasyon-ekrani"
-
-function setup() {
-  const user = userEvent.setup()
-  render(<OperasyonEkrani />)
-  return { user }
-}
+import { renderEkran as setup } from "./render"
 
 const drawer = (name: string) => screen.queryByRole("region", { name })
 
@@ -16,7 +9,7 @@ describe("Operasyon ekranı kabuğu", () => {
   it("açılışta üst çubuk, harita paneli ve zaman akışı var; henüz kare seçilmedi", () => {
     setup()
 
-    expect(screen.getByRole("status")).toHaveTextContent("Zaman akışından bir kare seçin")
+    expect(screen.getByText("Zaman akışından bir kare seçin")).toBeInTheDocument()
     expect(screen.getByRole("region", { name: "Harita paneli" })).toBeInTheDocument()
     expect(screen.getByRole("region", { name: "Zaman akışı" })).toBeInTheDocument()
     expect(drawer("Risk & Temaslar")).not.toBeInTheDocument()

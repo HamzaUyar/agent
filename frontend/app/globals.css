@@ -160,3 +160,66 @@
     }
   }
 }
+
+/* Harita işaretleri (MapLibre DOM işaretleri) ve lejant simgeleri */
+@layer components {
+  .harita-isaret {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: none;
+    border: 0;
+    padding: 0;
+    color: var(--metin);
+    font-size: 12px;
+    line-height: 1.1;
+    text-shadow: 0 0 3px var(--zemin), 0 0 2px var(--zemin);
+    pointer-events: auto;
+  }
+  .harita-isaret__etiket {
+    white-space: nowrap;
+  }
+  /* Etiket simgenin altında; işaretin merkezi simgede kalsın diye etiket akış dışında. */
+  .harita-isaret--us,
+  .harita-isaret--bolgeler {
+    position: relative;
+  }
+  .harita-isaret--us .harita-isaret__etiket,
+  .harita-isaret--bolgeler .harita-isaret__etiket {
+    position: absolute;
+    top: calc(100% + 2px);
+  }
+  .harita-isaret--us .harita-isaret__etiket {
+    font-weight: 700;
+  }
+  .harita-isaret--us .harita-isaret__simge,
+  .harita-lejant__us {
+    display: block;
+    width: 14px;
+    height: 14px;
+    transform: rotate(45deg);
+    border: 2px solid var(--metin);
+    background: var(--zemin);
+  }
+  .harita-isaret--bolgeler .harita-isaret__simge,
+  .harita-lejant__bolge {
+    display: block;
+    width: 10px;
+    height: 10px;
+    border-radius: 9999px;
+    border: 2px solid var(--metin-ikincil);
+    background: color-mix(in srgb, var(--zemin) 60%, transparent);
+  }
+  .harita-isaret--halka-etiketleri {
+    color: var(--metin-ikincil);
+    font-size: 11px;
+    pointer-events: none;
+  }
+  .harita-isaret--halka-etiketleri .harita-isaret__simge {
+    display: none;
+  }
+  .maplibregl-ctrl-attrib {
+    font-size: 10px;
+  }
+}

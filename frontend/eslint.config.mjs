@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     // Dışarıdan alınan Claude Code skill'leri ve üretilen dosyalar.
     ".claude/**",
     "lib/api/schema.d.ts",
+    "public/maplibre/**",
     "playwright-report/**",
     "test-results/**",
   ]),

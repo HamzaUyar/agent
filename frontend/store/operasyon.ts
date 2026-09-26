@@ -1,8 +1,12 @@
 /**
- * Operasyon ekranının tek seçim deposu. Sonraki biletlerde seçili Görüntü, değerlendirme
- * ve seçili Temas da burada tutulur; şimdilik çekmecelerin hâli.
+ * Operasyon ekranının tek seçim deposu: sahne verisi, harita zemini ve çekmecelerin hâli.
+ * Sonraki biletlerde seçili Görüntü, değerlendirme ve seçili Temas da burada tutulur.
  */
 import { create } from "zustand"
+
+import { getZones } from "@/lib/api/client"
+import type { ZonesResponse } from "@/lib/api/types"
+import type { Basemap } from "@/lib/harita/types"
 
 export type Side = "left" | "right"
 /** Kapalı: yalnız sekme · göz atma: dar şerit · yarım: liste · tam: ayrıntı. */
@@ -13,7 +17,18 @@ export type RiskTab = "temaslar" | "brief"
 
 export type Drawer<P extends string> = { panel: P | null; state: DrawerState }
 
+export type Load<T> =
+  | { status: "idle" | "loading" }
+  | { status: "ready"; data: T }
+  | { status: "error"; message: string }
+
 type OperasyonState = {
+  zones: Load<ZonesResponse>
+  loadZones: () => Promise<void>
+  basemap: Basemap
+  basemapFailed: boolean
+  setBasemap: (basemap: Basemap) => void
+  basemapError: () => void
   left: Drawer<LeftPanel>
   right: Drawer<RightPanel>
   riskTab: RiskTab
@@ -28,7 +43,22 @@ type OperasyonState = {
 
 const closed = { panel: null, state: "closed" } as const
 
+const errorMessage = (e: unknown) => (e instanceof Error ? e.message : "Bilinmeyen hata")
+
 export const useOperasyon = create<OperasyonState>()((set) => ({
+  zones: { status: "idle" },
+  loadZones: async () => {
+    set({ zones: { status: "loading" } })
+    try {
+      set({ zones: { status: "ready", data: await getZones() } })
+    } catch (e) {
+      set({ zones: { status: "error", message: errorMessage(e) } })
+    }
+  },
+  basemap: "uydu",
+  basemapFailed: false,
+  setBasemap: (basemap) => set({ basemap, basemapFailed: false }),
+  basemapError: () => set({ basemap: "duz", basemapFailed: true }),
   left: closed,
   right: closed,
   riskTab: "temaslar",
