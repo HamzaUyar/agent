@@ -155,8 +155,8 @@ Brief'ten sonra operatör takip soruları sorabilir ("T0122 nereden geldi?", "12
 - **Tespit güveni:** ≥ 0,50 normal; 0,25–0,50 zayıf (yalnızca track'le eşleşirse temas); < 0,25 yok sayılır.
 - **Temel seviye tablosu** (ilk uyan geçerli; eşikler ayarlanabilir):
   - *Kritik:* yaklaşıyor ve < 1 km; ya da ağır araç (truck/bus), yaklaşıyor ve < 2 km.
-  - *Yüksek:* yaklaşıyor ve < 3 km; ya da kayıt dışı temas ve < 2 km; ya da temasla ilgili bir rapor kendi track'iyle çelişiyor.
-  - *Orta:* yaklaşıyor; ya da ≥ 30 dk duraklama ve < 3 km; ya da kayıt dışı temas.
+  - *Yüksek:* yaklaşıyor ve < 3 km; ya da temasla ilgili bir rapor kendi track'iyle çelişiyor.
+  - *Orta:* yaklaşıyor; ya da ≥ 30 dk duraklama ve < 3 km; ya da kayıt dışı temas ve < 1 km (ADR-0003; önceki kural: kayıt dışı ≥ orta, < 2 km yüksek).
   - *Düşük:* diğer bütün durumlar, doğrulanmış dost dahil.
   - "Yaklaşıyor": son 30 dakikada üsse mesafe > 300 m azalmış.
 - **Görüntü seviyesi:** Temaslar içindeki en yüksek seviye.

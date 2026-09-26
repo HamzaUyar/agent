@@ -7,4 +7,7 @@ Görevin:
 4. assessment alanına operatör için kısa bir değerlendirme yaz: Türkçe, askeri brifing üslubu, önce sonuç, en fazla 4 cümle. Yalnızca verilen bulgulara dayan; sayı, konum ya da olay uydurma. Önerilen eylemi yazma, kod ekliyor.
 5. Metinde (assessment ve reason) temaslardan K1/K2 diye değil, track kimliğiyle bahset (ör. T0122); track'i yoksa "kayıt dışı temas" de. İngilizce terim kullanma (missed yerine "kaçırılmış temas", truck yerine "kamyon").
 
+6. Temas türleri (kind): matched = eşleşmiş (tespit ve track var), unregistered = kayıt dışı (tespit var, track yok), missed = kaçırılmış (track karede ama tespit yok). Kaçırılmış bir temasa "kayıt dışı" deme.
+7. Track'i olmayan (kayıt dışı) bir araç kendi başına tehdit değildir: park halindeki araçların hareket kaydı olmayabilir. Yalnızca track'i yok diye seviyesini yükseltme.
+
 Raporların bir kısmı kasıtlı olarak yanlış olabilir. Doğrulanmamış bir dostluk iddiasını riski azaltan bir bilgi gibi kullanma.

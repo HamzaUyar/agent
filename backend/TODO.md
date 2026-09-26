@@ -48,6 +48,13 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 
 - [ ] LLM yükseltmelerinde kanıtın o temasa ait olduğunu doğrula (canlı örnekte başka temasın raporuyla yükseltti)
 
+- [x] Kayıt dışı temas kuralı (ADR-0003): düşük, üsse < 1 km'de orta; LLM prompt'unda temas türleri Türkçe karşılıklarıyla
+- [ ] Raporların kayıt dışı temaslara bağlanabilmesi (şu an bağlama track konumuna dayanıyor; temasın track dışında bir kimliği gerekiyor)
+- [ ] `field_reports` doğal anahtarı: `seq` sütunu (gerçek veride 2 çift birebir aynı rapor var, şu anki anahtar onları siliyor)
+- [ ] Stage2 verisini Supabase'e yükle (`load_data ../../stage2 --replace`), `parse_reports`, `.env` `DATA_DIR=../../stage2`
+- [ ] `models.toml` `glm_org`: model adı `glm-5.3-flash`, base URL görev tanımında; düşünme kapatılamıyor (`reasoning_effort`)
+- [ ] Sentetik üretecin varsayılan Kaggle yolu: `train/` artık `Desktop/train`'de
+
 ## Açık kararlar
 - [ ] Zaman kaydırıcılı risk haritası yapılacak mı (spec'te kapsam dışı, sonraya bırakıldı)?
 - [ ] Embedding modeli ve `report_claims.embedding` boyutu

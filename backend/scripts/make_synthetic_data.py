@@ -285,7 +285,7 @@ def _distance_km(archetype: Archetype, rng: random.Random, rules: RiskRules) -> 
     """Görüntünün üsse mesafesi; seviye eşiklerine 60 m'den yakın değerler atlanır."""
     lo, hi = (1.0, 2.8) if archetype == "loiter" else (0.9, 4.5)
     edges = [rules.levels.critical_m, rules.levels.critical_heavy_m, rules.levels.loiter_m]
-    edges += [rules.levels.high_approach_m, rules.levels.high_unregistered_m]
+    edges += [rules.levels.high_approach_m, rules.levels.unregistered_alert_m]
     while True:
         d = rng.uniform(lo, hi)
         if all(abs(d * 1000 - e) > 60 for e in edges):

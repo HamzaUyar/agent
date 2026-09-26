@@ -38,7 +38,7 @@ Değerlendirilen tek varlık: bir Tespit ile onu çekim anında karşılayan Tra
 _Avoid_: araç, hedef, nesne
 
 **Kayıt dışı temas**:
-Track'i bulunmayan bir Tespit'ten oluşan Temas; hareket geçmişi bilinmez.
+Track'i bulunmayan bir Tespit'ten oluşan Temas; hareket geçmişi bilinmez. Park halindeki araçların track'i olmayabileceği için kendi başına risk sayılmaz (ADR-0003).
 
 **Kaçırılmış temas**:
 Çekim anında görüntünün alanında olduğu halde Tespit'i bulunmayan bir Track'ten oluşan Temas; tipi bilinmez.

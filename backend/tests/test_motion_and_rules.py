@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from app.agent.service import EvaluationService
-from app.core.rules import LevelRules, RiskRules, load_rules
+from app.core.rules import DEFAULT_RULES_PATH, LevelRules, RiskRules, load_rules
 from app.data_package import from_minutes, read_package, to_minutes
 from app.db.repositories import InMemoryRepository
 from app.schemas.api import Brief
@@ -127,15 +127,38 @@ def test_rule_table_row(label: VehicleClass, start_m: float, now_m: float, expec
 @pytest.mark.parametrize(
     ("now_m", "expected"),
     [
-        pytest.param(1_500, "high", id="kayit-disi-2km-alti-yuksek"),
-        pytest.param(2_500, "medium", id="kayit-disi-uzak-orta"),
+        pytest.param(800, "medium", id="kayit-disi-1km-alti-orta"),
+        pytest.param(1_500, "low", id="kayit-disi-1km-ustu-dusuk"),
+        pytest.param(2_500, "low", id="kayit-disi-uzak-dusuk"),
     ],
 )
 def test_rule_table_row_for_unregistered_contacts(now_m: float, expected: str) -> None:
+    """Park halindeki araçların hareket kaydı olmayabilir (görev tanımı): track'siz araç
+    kendi başına risk değildir; yalnızca üssün hemen yakınındaysa dikkat gerektirir."""
     [contact] = scenario(VehicleClass.CAR, now_m, now_m, with_track=False).contacts
 
     assert contact.kind == "unregistered"
     assert contact.base_level == expected
+
+
+def test_unregistered_contact_reason_says_it_may_be_parked() -> None:
+    [contact] = scenario(VehicleClass.CAR, 2_500, 2_500, with_track=False).contacts
+
+    assert any("park halinde olabilir" in r for r in contact.level_reasons)
+
+
+def test_unregistered_threshold_comes_from_the_rules_file(tmp_path: Path) -> None:
+    text = DEFAULT_RULES_PATH.read_text(encoding="utf-8").replace(
+        "unregistered_alert_m = 1000", "unregistered_alert_m = 3000"
+    )
+    custom = tmp_path / "rules.toml"
+    custom.write_text(text, encoding="utf-8")
+
+    [contact] = scenario(
+        VehicleClass.CAR, 2_500, 2_500, with_track=False, rules=load_rules(custom)
+    ).contacts
+
+    assert contact.base_level == "medium"
 
 
 def test_missed_contact_approaching_close_is_critical_without_a_type() -> None:

@@ -111,7 +111,7 @@ def test_strong_detection_without_a_track_is_an_unregistered_contact() -> None:
     contact = only(brief, "unregistered")
     assert contact.track_id is None
     assert contact.motion is None
-    assert contact.base_level == "high"  # kayıt dışı ve üsse < 2 km
+    assert contact.base_level == "low"  # kayıt dışı, üsse ~1,6 km: park halinde olabilir
 
 
 def test_track_inside_the_frame_without_a_detection_is_a_missed_contact() -> None:

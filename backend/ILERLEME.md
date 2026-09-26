@@ -321,6 +321,14 @@
 - **Canlı örnek (img_002724, Supabase + EVREN, 6–8 sn):** 11 araç. VLM zayıf kutulardan birini onayladı (beyaz otomobil), diğerini reddetti; o gerçek bir minibüstü, çatı gölgesinde kısmen görünüyordu, T0314 kaçırılmış temasa döndü. 13:15 resmi tehdit uyarısı, 7,5 km ötedeki bir noktayı gösterdiği halde aracın rapor saatindeki konumu üzerinden doğru araca (T0316) bağlandı; seviye yüksek → kritik.
 - **Bulgu:** İlk çalıştırmada LLM, T0316 hakkındaki tehdit uyarısını gerekçe gösterip T0314'ü orta seviyeye çıkardı; değerlendirme paragrafında da T0316'ya "kayıt dışı temas" dedi. Yükseltmeler kanıt istemediği için kod bunu kabul etti. İkinci çalıştırmada LLM hiç ayar yapmadı, ama kaçırılmış temas T0314'e yine "kayıt dışı" dedi (R14 ve brief prompt'u maddesi).
 
+### Stage2 verisi geldi: analiz ve kayıt dışı temas kuralı (ADR-0003)
+- **Veri analizi** (`stage2/`): 40 görüntü, 226 track (her biri tam 25 nokta / 120 dk, boşluk ve tekrar yok), 137 rapor (98 resmi, 39 üçüncü taraf, 72'si koordinatlı, 4 ve 5 basamaklı koordinatlar). Bütün çekim saatleri 5 dk adımında; bütün kareler kuzeye hizalı. **Her track tam olarak bir görüntünün çekim anında bitiyor**; görev tanımı da bunu söylüyor. Her karede yalnızca 3–7 track var. Stage2 görüntüleri Kaggle eğitim etiketlerinde yok (0/40); tespit için ekibin modeli gerekiyor.
+- **Şema bulguları:** `field_reports` doğal anahtarı `(time, source, text)`, gerçek verideki iki çift birebir aynı raporu sessizce siliyor (137 → 135); `seq` sütunu önerildi. Analiz tabloları hâlâ boş; `match_status` enum'u koddaki temas türleriyle aynı değil. Enum'lar, koordinat biçimleri ve kısıtlar veriyle uyumlu.
+- **Görev tanımı** (`stage2/gorev_tanimi.pdf`): park halindeki araçların hareket kaydı olmayabilir; eşleşmede "makul bir mesafe sınırı"; organizatör GLM'i `glm-5.3-flash`, düşünme kapatılamıyor.
+- **Kural değişikliği (ADR-0003):** Kayıt dışı temas artık düşük ("hareket kaydı yok, park halinde olabilir"); yalnızca üsse `unregistered_alert_m`'den (1 km) yakınsa orta. Önceki kural: en az orta, < 2 km yüksek. Karar prompt'una temas türlerinin Türkçe karşılıkları ve "track'i yok diye yükseltme" kuralı eklendi.
+- **Etki (sentetik paketler, aynı veri):** %60 kapsamada 217 kayıt dışı temasın 216'sı düşük; düşük görüntü 0 → 6, yüksek 15 → 10, kritik değişmedi (8). Tam kapsamada düşük 5 → 8.
+- Testler: kural tablosu satırları (< 1 km orta, 1,5 ve 2,5 km düşük), gerekçe metni, eşiğin dosyadan okunması; toplam 178.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

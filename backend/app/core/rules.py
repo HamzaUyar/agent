@@ -41,7 +41,7 @@ class LevelRules:
     critical_m: float
     critical_heavy_m: float
     high_approach_m: float
-    high_unregistered_m: float
+    unregistered_alert_m: float
     loiter_minutes: int
     loiter_m: float
 

@@ -33,7 +33,9 @@ max_tokens = 4096
 critical_m = 1000
 critical_heavy_m = 2000
 high_approach_m = 3000
-high_unregistered_m = 2000
+# Track'i olmayan araç kendi başına risk değildir (park halinde olabilir, ADR-0003); yalnızca
+# üsse bu mesafeden yakınsa orta.
+unregistered_alert_m = 1000
 # Üsse `loiter_m`'den yakın bir yerde en az `loiter_minutes` duraklama: orta.
 loiter_minutes = 30
 loiter_m = 3000

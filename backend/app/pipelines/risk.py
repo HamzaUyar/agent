@@ -46,8 +46,10 @@ def base_level(
         return LevelDecision("critical", [f"ağır araç ({label}) üsse yaklaşıyor, {km}"])
     if approaching and distance_to_base_m < t.high_approach_m:
         return LevelDecision("high", [f"üsse yaklaşıyor, {km}"])
-    if not registered and distance_to_base_m < t.high_unregistered_m:
-        return LevelDecision("high", [f"kayıt dışı temas, {km}"])
+    if not registered and distance_to_base_m < t.unregistered_alert_m:
+        return LevelDecision(
+            "medium", [f"kayıt dışı temas üssün hemen yakınında, hareket geçmişi bilinmiyor, {km}"]
+        )
     if approaching:
         return LevelDecision("medium", [f"üsse yaklaşıyor, {km}"])
     if loiter_minutes_near_base >= t.loiter_minutes:
@@ -55,7 +57,10 @@ def base_level(
             "medium", [f"üsse yakın {loiter_minutes_near_base} dk duraklama, {km}"]
         )
     if not registered:
-        return LevelDecision("medium", [f"kayıt dışı temas, {km}"])
+        # Görev tanımı: park halindeki araçların hareket kaydı olmayabilir (ADR-0003).
+        return LevelDecision(
+            "low", [f"kayıt dışı temas: hareket kaydı yok, park halinde olabilir, {km}"]
+        )
     return LevelDecision("low", [f"yaklaşma yok, {km}"])
 
 
