@@ -42,7 +42,7 @@ def build_service(args: argparse.Namespace) -> EvaluationService:
     else:
         with connect() as conn:
             repo = InMemoryRepository(fetch_package(conn), claims=fetch_claims(conn))
-    router = None if args.no_llm else build_router(settings)
+    router = None if args.no_llm else build_router(settings, check_budget=True)
     verifier = (
         None
         if router is None

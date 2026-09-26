@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.repository = await run_in_threadpool(_load_repository)
     settings = get_settings()
     app.state.detector = build_detector(settings)
-    app.state.router = build_router()
+    app.state.router = build_router(check_budget=True)
     app.state.verifier = VlmVerifier(
         app.state.router,
         settings.resolved_data_dir / "images",

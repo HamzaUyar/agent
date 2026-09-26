@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
 import anthropic
+import httpx
 import openai
 from pydantic import BaseModel
 
@@ -187,6 +188,11 @@ def strip_code_fence(text: str) -> str:
     return match.group(1) if match else text
 
 
+# Karar ve VLM çağrıları 45 / 30 sn'de bırakılır, ama istek arka planda sürer ve gateway'in
+# 4 eşzamanlı yerinden birini tutar; SDK varsayılanı (600 sn) yerine bu sürede kesilir.
+REQUEST_TIMEOUT_S = 60.0
+
+
 UsageHook = Callable[[int, int], None]
 """Cevaptaki girdi ve çıktı (düşünme dahil) token sayıları."""
 
@@ -200,11 +206,13 @@ class OpenAICompatibleProvider:
         base_url: str,
         *,
         max_retries: int = openai.DEFAULT_MAX_RETRIES,
+        timeout_s: float = REQUEST_TIMEOUT_S,
         on_usage: UsageHook | None = None,
     ) -> None:
         self._api_key = api_key
         self._base_url = base_url
         self._max_retries = max_retries
+        self._timeout_s = timeout_s
         self._on_usage = on_usage
         self._client: openai.OpenAI | None = None
 
@@ -214,7 +222,10 @@ class OpenAICompatibleProvider:
     def _get_client(self) -> openai.OpenAI:
         if self._client is None:
             self._client = openai.OpenAI(
-                api_key=self._api_key, base_url=self._base_url, max_retries=self._max_retries
+                api_key=self._api_key,
+                base_url=self._base_url,
+                max_retries=self._max_retries,
+                timeout=self._timeout_s,
             )
         return self._client
 
@@ -305,10 +316,34 @@ class OpenAICompatibleProvider:
 RATE_LIMIT_RETRIES = 4
 RATE_LIMIT_BACKOFF_S = 2.0
 
+# Geçici hatalar (görev tanımı s10): 429, 5xx, bağlantı ve zaman aşımı. Aynı modelde
+# beklenip yeniden denenir.
+TRANSIENT_ERRORS = (openai.RateLimitError, openai.InternalServerError, openai.APIConnectionError)
+
+
+def permanent_failure(exc: Exception) -> str | None:
+    """Süreç boyunca düzelmeyecek gateway hatasıysa sebebi (görev tanımı s10).
+
+    400 "Budget has been exceeded", 400 "key not allowed to access model" ve 401 (geçersiz
+    anahtar): bunlardan sonra her çağrı aynı hatayı alır.
+    """
+    if isinstance(exc, openai.AuthenticationError):
+        return "anahtar geçersiz (401)"
+    if isinstance(exc, openai.BadRequestError):
+        text = str(exc).lower()
+        if "budget" in text:
+            return "bütçe tükendi (400)"
+        if "not allowed to access model" in text:
+            return "model adına izin yok (400)"
+    return None
+
 
 class LimitedProvider:
-    """Sağlayıcıyı gateway limitleriyle sarar; 429'da aynı modelde üstel beklemeyle yeniden dener.
+    """Sağlayıcıyı gateway limitleriyle sarar.
 
+    Geçici hatalarda (429, 5xx, bağlantı) aynı modelde üstel beklemeyle yeniden dener. Kalıcı
+    bir hatada (bütçe bitti, geçersiz anahtar, izinsiz model) sağlayıcıyı süreç boyunca kapatır;
+    zincir sıradaki modele geçer ve gateway'e boşuna istek gitmez.
     İçteki SDK'nın kendi yeniden denemesi kapalı olmalı (`max_retries=0`); böylece her deneme
     dakikalık sayaca girer. Beklerken eşzamanlılık yeri bırakılır.
     """
@@ -327,21 +362,32 @@ class LimitedProvider:
         self._retries = retries
         self._backoff_s = backoff_s
         self._sleep = sleep
+        self.disabled_reason: str | None = None
 
     def is_available(self) -> bool:
-        return self._inner.is_available()
+        return self.disabled_reason is None and self._inner.is_available()
+
+    def disable(self, reason: str) -> None:
+        if self.disabled_reason is None:
+            logger.error("gateway devre dışı: %s", reason)
+        self.disabled_reason = reason
 
     def _call(self, fn: Callable[[], R]) -> R:
-        for attempt in range(self._retries):
+        for attempt in range(self._retries + 1):
             try:
                 with self._limits.slot():
                     return fn()
-            except openai.RateLimitError:
+            except TRANSIENT_ERRORS as exc:
+                if attempt == self._retries:
+                    raise
                 wait = self._backoff_s * 2**attempt
-                logger.warning("429: %.0f sn sonra yeniden denenecek", wait)
+                logger.warning("%s: %.0f sn sonra yeniden denenecek", type(exc).__name__, wait)
                 self._sleep(wait)
-        with self._limits.slot():
-            return fn()
+            except openai.APIStatusError as exc:
+                if reason := permanent_failure(exc):
+                    self.disable(reason)
+                raise
+        raise AssertionError("unreachable")
 
     def complete_json(
         self,
@@ -457,7 +503,28 @@ class LLMRouter:
         return self._run_chain(task, call)
 
 
-def build_router(settings: Settings | None = None, config: ModelConfig | None = None) -> LLMRouter:
+def fetch_gateway_budget(base_url: str, api_key: str) -> tuple[float, float] | None:
+    """Gateway'in gerçek harcaması ve bütçesi (`/key/info`, görev tanımı s4); okunamazsa `None`."""
+    root = base_url.rstrip("/").removesuffix("/v1")
+    try:
+        response = httpx.get(
+            f"{root}/key/info", headers={"Authorization": f"Bearer {api_key}"}, timeout=10
+        )
+        response.raise_for_status()
+        info = response.json().get("info", response.json())
+        return float(info["spend"]), float(info["max_budget"])
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        logger.warning("gateway bütçesi okunamadı: %s", exc)
+        return None
+
+
+def build_router(
+    settings: Settings | None = None,
+    config: ModelConfig | None = None,
+    *,
+    check_budget: bool = False,
+) -> LLMRouter:
+    """`check_budget`: gateway'in gerçek harcaması açılışta bir kez `/key/info`'dan okunur."""
     s = settings or get_settings()
     glm_limits = GatewayLimits(
         max_concurrent=s.glm_max_concurrent,
@@ -472,9 +539,17 @@ def build_router(settings: Settings | None = None, config: ModelConfig | None = 
         max_retries=0,
         on_usage=glm_limits.record_usage,
     )
+    gateway = LimitedProvider(glm, glm_limits)
+    if glm.is_available() and check_budget:
+        budget = fetch_gateway_budget(s.glm_api_base, s.glm_api_key.get_secret_value())
+        if budget is not None:
+            spend, max_budget = budget
+            logger.info("gateway bütçesi: %.2f / %.2f USD harcandı", spend, max_budget)
+            if spend >= max_budget:
+                gateway.disable(f"bütçe tükendi ({spend:.2f} / {max_budget:.2f} USD)")
     providers: dict[str, Provider] = {
         "evren": OpenAICompatibleProvider(s.evren_api_key.get_secret_value(), s.evren_api_base),
-        "glm": LimitedProvider(glm, glm_limits),
+        "glm": gateway,
         "anthropic": AnthropicProvider(s.anthropic_api_key.get_secret_value()),
     }
     return LLMRouter(config or load_model_config(), providers)

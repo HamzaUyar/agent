@@ -20,6 +20,7 @@ from app.llm.client import (
     LLMRouter,
     OpenAICompatibleProvider,
     build_router,
+    fetch_gateway_budget,
     load_model_config,
 )
 from app.llm.limits import BudgetExceededError, GatewayLimits
@@ -295,3 +296,117 @@ def test_json_wrapped_in_a_code_fence_is_accepted(content: str) -> None:
     provider, _ = provider_with(completion(content))
 
     assert provider.complete_json("m", "s", "u", Answer, 4096) == Answer(ok=True)
+
+
+# --- Geçici ve kalıcı gateway hataları (görev tanımı s10) -------------------------------
+
+
+def status_error(cls: type[openai.APIStatusError], code: int, message: str) -> Exception:
+    request = httpx.Request("POST", "https://gateway/v1/chat/completions")
+    return cls(message, response=httpx.Response(code, request=request), body=None)
+
+
+def connection_error() -> openai.APIConnectionError:
+    return openai.APIConnectionError(
+        request=httpx.Request("POST", "https://gateway/v1/chat/completions")
+    )
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(lambda: status_error(openai.InternalServerError, 503, "busy"), id="5xx"),
+        pytest.param(connection_error, id="baglanti"),
+    ],
+)
+def test_server_and_connection_errors_are_retried_on_the_same_model(error: Any) -> None:
+    fake = FakeClock()
+    inner = ScriptedProvider(error(), True)
+    provider = LimitedProvider(inner, GatewayLimits(), backoff_s=2.0, sleep=fake.sleep)
+
+    assert provider.complete_json("glm-5.3-flash", "s", "u", Answer, 4096) == Answer(ok=True)
+    assert inner.calls == 2
+    assert fake.sleeps == [2.0]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(
+            status_error(openai.BadRequestError, 400, "Budget has been exceeded! Current cost"),
+            id="butce",
+        ),
+        pytest.param(status_error(openai.AuthenticationError, 401, "invalid key"), id="anahtar"),
+        pytest.param(
+            status_error(openai.BadRequestError, 400, "key not allowed to access model"),
+            id="model-adi",
+        ),
+    ],
+)
+def test_permanent_gateway_error_switches_the_gateway_off_for_the_process(error: Any) -> None:
+    gateway_inner = ScriptedProvider(error, True)
+    gateway = LimitedProvider(gateway_inner, GatewayLimits(), sleep=FakeClock().sleep)
+    router = LLMRouter(CONFIG, {"glm": gateway, "evren": ScriptedProvider(True, True)})
+
+    _, first = router.complete_json("reasoning", "s", "u", Answer)
+    _, second = router.complete_json("reasoning", "s", "u", Answer)
+
+    assert (first, second) == ("evren/glm-5.3", "evren/glm-5.3")
+    assert gateway_inner.calls == 1  # ikinci çağrı gateway'e hiç gitmedi
+    assert gateway.disabled_reason is not None
+
+
+def test_other_bad_requests_do_not_switch_the_gateway_off() -> None:
+    gateway = LimitedProvider(
+        ScriptedProvider(status_error(openai.BadRequestError, 400, "invalid schema")),
+        GatewayLimits(),
+    )
+    router = LLMRouter(CONFIG, {"glm": gateway, "evren": ScriptedProvider(True)})
+
+    router.complete_json("reasoning", "s", "u", Answer)
+
+    assert gateway.is_available()
+
+
+def test_gateway_client_times_out_before_the_sdk_default() -> None:
+    provider = OpenAICompatibleProvider("sk-test", "https://gateway/v1")
+
+    assert provider._get_client().timeout == 60.0
+
+
+# --- Gerçek harcama: /key/info (görev tanımı s4) -----------------------------------------
+
+
+def key_info(monkeypatch: pytest.MonkeyPatch, payload: Any, status: int = 200) -> list[str]:
+    urls: list[str] = []
+
+    def fake_get(url: str, **kwargs: Any) -> httpx.Response:
+        urls.append(url)
+        return httpx.Response(status, json=payload, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    return urls
+
+
+def test_budget_is_read_from_the_gateway_key_info(monkeypatch: pytest.MonkeyPatch) -> None:
+    urls = key_info(monkeypatch, {"info": {"spend": 3.2, "max_budget": 15.0}})
+
+    assert fetch_gateway_budget("https://gateway/v1", "sk-test") == (3.2, 15.0)
+    assert urls == ["https://gateway/key/info"]
+
+
+def test_unreadable_key_info_does_not_stop_the_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    key_info(monkeypatch, {"error": "nope"}, status=500)
+
+    assert fetch_gateway_budget("https://gateway/v1", "sk-test") is None
+
+
+def test_gateway_is_off_from_the_start_when_the_budget_is_spent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key_info(monkeypatch, {"info": {"spend": 15.01, "max_budget": 15.0}})
+    settings = Settings(_env_file=None, glm_api_key="sk-test", evren_api_key="ev-test")  # type: ignore[call-arg]
+
+    router = build_router(settings, check_budget=True)
+
+    assert not router._providers["glm"].is_available()
