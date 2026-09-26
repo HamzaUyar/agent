@@ -65,6 +65,23 @@ def test_img_000860_truck_is_located_matched_and_critical(service: EvaluationSer
     assert brief.risk_level == "critical"
 
 
+def test_route_points_carry_their_time_and_stop_at_the_capture_time(
+    service: EvaluationService,
+) -> None:
+    brief = service.run("img_000860")
+
+    [contact] = [c for c in brief.contacts if c.kind == "matched"]
+    assert contact.motion is not None
+    route = contact.motion.route
+    times = [p.time for p in route if p.time is not None]
+    assert len(times) == len(route)
+    # T0122'nin 14:10'dan sonra da noktaları var; rota çekim anında biter (ADR-0001).
+    assert times[0] == "12:10"
+    assert times[-1] == "14:10"
+    assert times == sorted(times)
+    assert (route[-1].lat, route[-1].lon) == pytest.approx((39.92531, 32.87183), abs=1e-5)
+
+
 def _service_for(package: DataPackage) -> EvaluationService:
     return EvaluationService(InMemoryRepository(package), FakeDetector({"img_000860": [TRUCK]}))
 

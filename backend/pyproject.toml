@@ -17,10 +17,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# 1. aşama tespit modeli (DETECTOR_MODE=model); torch'u da kurar.
-model = [
-    "ultralytics>=8.3",
-]
 dev = [
     "pytest>=8",
     "ruff>=0.6",

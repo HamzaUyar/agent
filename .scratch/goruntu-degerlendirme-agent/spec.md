@@ -200,6 +200,7 @@ Brief'ten sonra operatör takip soruları sorabilir ("T0122 nereden geldi?", "12
 - **İkinci test noktası, sohbet agent'ının araçlarıdır.** Aynı sahte veri deposu üzerinde, her aracın doğru veriyi döndürdüğü ve çekim anından sonrasını göstermediği doğrulanır.
 - **Tek başına testler istisnadır:** Yalnızca hesabın kendisinin karmaşık olduğu yerlerde (interpolasyon, yön hesabı) küçük ek testler yazılır. Konumlandırma, hareket analizi ve eşleştirici ayrıca test edilmez; ana test noktasından test edilir.
 - **HTTP/SSE katmanı** ince bir katman olduğu için ayrıca test edilmez.
+  - İstisna: arkasında servis olmayan, salt veri okuyan uçlar (`/zones`, `/images/{id}`, `/images/{id}/file`) HTTP seviyesinde test edilir; depo ve görüntü klasörü bağımlılık olarak değiştirilir, açılış (Supabase) çalışmaz.
 - **Gerçek LLM ve gerçek model** birim testlerinde kullanılmaz; bunların doğruluğu elle etiketlenmiş değerlendirme setiyle ölçülür.
 - **Önceki örnek:** Kod tabanında henüz test yok. Bu testler ilk örnek olacak; referans değerleri organizatörlerin uçtan uca demosundan gelir.
 

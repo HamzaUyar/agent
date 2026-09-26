@@ -44,6 +44,7 @@ from app.schemas.api import (
     LatLon,
     MotionFinding,
     ReportFinding,
+    RoutePoint,
     StopFinding,
     TrackCandidate,
     VisualFinding,
@@ -261,7 +262,10 @@ def motion_finding(
         distance_to_base_30min_ago_m=m.distance_to_base_window_ago_m,
         distance_to_base_60min_ago_m=m.distance_to_base_hour_ago_m,
         trend=m.trend,
-        route=[latlon(p) for p in m.route],
+        route=[
+            RoutePoint(lat=p.location.lat, lon=p.location.lon, time=format_hhmm(p.time))
+            for p in m.route
+        ],
         total_distance_m=m.total_distance_m,
         avg_speed_mps=m.avg_speed_mps,
         recent_speed_mps=m.recent_speed_mps,

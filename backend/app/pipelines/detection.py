@@ -1,9 +1,8 @@
 """KOL A: tespit arayüzü ve gerçekleştirimleri.
 
-Hangisinin kullanılacağı ayarla seçilir. `USE_INFERENCE=DEMO` modelin önceden alınmış
-çıktısını (Supabase `model_detections` ya da CSV), `USE_INFERENCE=REAL` EVREN'deki modeli
-kullanır; tanımlı değilse `DETECTOR_MODE` (mock / evren / model). Hepsi aynı `Detector`
-arayüzünü gerçekleştirir: görüntü → sınıf, güven ve piksel kutusu.
+Hangisinin kullanılacağı `USE_INFERENCE` ile seçilir: `DEMO` modelin önceden alınmış
+çıktısını (Supabase `model_detections` ya da CSV), `REAL` EVREN'deki modeli kullanır. İkisi de
+aynı `Detector` arayüzünü gerçekleştirir: görüntü → sınıf, güven ve piksel kutusu.
 """
 
 import csv
@@ -11,7 +10,6 @@ import importlib
 import json
 import logging
 import threading
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -42,15 +40,7 @@ class ImageFileMissingError(FileNotFoundError):
     """Görüntünün dosyası yok; model çalıştırılamaz (boş kare sayılmaz)."""
 
 
-# Organizatör örneğindeki tespit: img_000860'ta kutu (727, 284, 58, 34), truck.
-MOCK_DETECTIONS: dict[str, list[Detection]] = {
-    "img_000860": [
-        Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34),
-    ],
-}
-
-
-def load_mock_detections(path: Path) -> dict[str, list[Detection]]:
+def load_detections_json(path: Path) -> dict[str, list[Detection]]:
     """`{image_id: [{label, confidence, x, y, w, h}, ...]}` biçimindeki JSON dosyasını okur."""
     raw: dict[str, list[dict[str, float | str]]] = json.loads(path.read_text(encoding="utf-8"))
     return {
@@ -69,7 +59,7 @@ def load_mock_detections(path: Path) -> dict[str, list[Detection]]:
     }
 
 
-def dump_mock_detections(detections: dict[str, list[Detection]], path: Path) -> None:
+def dump_detections_json(detections: dict[str, list[Detection]], path: Path) -> None:
     payload = {
         image_id: [
             {
@@ -118,13 +108,11 @@ def read_detections_csv(
     return detections
 
 
-class MockDetector:
-    """Görüntü kimliğine göre sabit tespitler döndürür; model hazır olana kadar kullanılır."""
+class RecordedDetector:
+    """Modelin önceden alınmış çıktısını görüntü kimliğine göre döndürür (USE_INFERENCE=DEMO)."""
 
-    def __init__(
-        self, detections: dict[str, list[Detection]] | None = None, *, version: str = "mock-1"
-    ) -> None:
-        self._detections = MOCK_DETECTIONS if detections is None else detections
+    def __init__(self, detections: dict[str, list[Detection]], *, version: str) -> None:
+        self._detections = detections
         self.version = version
 
     def detect(self, image: ImageMeta) -> list[Detection]:
@@ -143,18 +131,9 @@ CLASS_ALIASES: dict[str, VehicleClass] = {
     "otobus": VehicleClass.BUS,
 }
 
-ModelFactory = Callable[[Path], Any]
-"""Ağırlık dosyasından `predict(source, **kwargs)` veren bir model yükler."""
-
-
-def _load_yolo(weights: Path) -> Any:
-    # Ultralytics (torch ile) isteğe bağlı bağımlılık: yalnızca model modunda gerekir.
-    ultralytics = importlib.import_module("ultralytics")
-    return ultralytics.YOLO(str(weights))
-
 
 class _FileModelDetector:
-    """Görüntü dosyasını bir modele veren detektörlerin ortak kısmı.
+    """Görüntü dosyasını bir modele veren detektörün ortak kısmı.
 
     Görüntüler statik olduğu için her görüntü bir kez çalıştırılıp sonucu saklanır; tip
     geçmişi için önceki karelerin tekrar tespiti böylece ucuzdur. Değerlendirmeler thread
@@ -192,46 +171,6 @@ class _FileModelDetector:
             return None
         x1, y1, x2, y2 = box
         return Detection(label=label, confidence=conf, x=x1, y=y1, w=x2 - x1, h=y2 - y1)
-
-
-class UltralyticsDetector(_FileModelDetector):
-    """1. aşama modeli, yerel ağırlık dosyasından (Ultralytics YOLO). İlk tespitte yüklenir."""
-
-    def __init__(
-        self,
-        weights: Path,
-        images_dir: Path,
-        *,
-        imgsz: int | None = None,
-        model_factory: ModelFactory = _load_yolo,
-        storage: SupabaseStorage | None = None,
-    ) -> None:
-        super().__init__(images_dir, storage)
-        self.weights = weights
-        self.imgsz = imgsz
-        self._factory = model_factory
-        self._model: Any = None
-
-    @property
-    def version(self) -> str:
-        return f"yolo:{self.weights.name}"
-
-    def _infer(self, image: ImageMeta, path: Path) -> list[Detection]:
-        if self._model is None:
-            self._model = self._factory(self.weights)
-        options: dict[str, Any] = {"conf": MIN_CONFIDENCE, "verbose": False}
-        if self.imgsz is not None:
-            options["imgsz"] = self.imgsz
-        detections: list[Detection] = []
-        for result in self._model.predict(str(path), **options):
-            boxes = result.boxes
-            for (x1, y1, x2, y2), conf, cls in zip(
-                boxes.xyxy.tolist(), boxes.conf.tolist(), boxes.cls.tolist(), strict=True
-            ):
-                name = str(result.names.get(int(cls), ""))
-                if (d := self._detection(image, name, conf, (x1, y1, x2, y2))) is not None:
-                    detections.append(d)
-        return detections
 
 
 EVREN_IMAGE_SIZE = 1280
@@ -296,7 +235,7 @@ def _demo_detector(settings: Settings) -> Detector:
         path = settings.resolved_detections_csv_path
         if not path.is_file():
             raise ValueError(f"USE_INFERENCE=DEMO için tespit dosyası bulunamadı: {path}")
-        return MockDetector(read_detections_csv(path), version=f"demo:{path.name}")
+        return RecordedDetector(read_detections_csv(path), version=f"demo:{path.name}")
     source = settings.detections_source
     with connect(settings) as conn:
         detections = fetch_model_detections(conn, source, MIN_CONFIDENCE)
@@ -305,44 +244,23 @@ def _demo_detector(settings: Settings) -> Detector:
             f"USE_INFERENCE=DEMO: model_detections tablosunda '{source}' kaynağı boş "
             "(python -m scripts.load_detections)"
         )
-    return MockDetector(detections, version=f"demo:{source}")
+    return RecordedDetector(detections, version=f"demo:{source}")
 
 
 def build_detector(settings: Settings) -> Detector:
-    """Ayara göre tespit bileşeni.
+    """`USE_INFERENCE`'a göre tespit bileşeni: DEMO kayıtlı çıktı, REAL EVREN'deki model.
 
-    `USE_INFERENCE` tanımlıysa o seçer (DEMO: kayıtlı çıktı, REAL: EVREN); değilse
-    `DETECTOR_MODE` (mock, evren ya da model: yerel YOLO). Kimlik bilgisi ve ağırlık dosyası
-    açılışta doğrulanır.
+    Kimlik bilgisi ve tespit kaynağı açılışta doğrulanır.
     """
     if settings.use_inference == "DEMO":
         return _demo_detector(settings)
-    mode = "evren" if settings.use_inference == "REAL" else settings.detector_mode
-    if mode == "mock":
-        mock_path = settings.resolved_mock_path
-        if mock_path is not None:
-            # Sürüm dosyayı taşır: farklı tespit dosyalarının kayıtları önbellekte karışmasın.
-            # Dosya, 1. gün modelinin önceden alınmış çıktısıdır (scripts/export_detections.py).
-            return MockDetector(
-                load_mock_detections(mock_path), version=f"model çıktısı dosyadan: {mock_path.name}"
-            )
-        return MockDetector()
-    images_dir = settings.resolved_data_dir / "images"
-    storage = build_storage(settings)
-    if mode == "evren":
-        key = settings.evren_model_api_key.get_secret_value()
-        if not key:
-            raise ValueError("EVREN tespit modeli için EVREN_MODEL_API_KEY tanımlanmalı")
-        return EvrenDetector(
-            settings.evren_detector_model,
-            images_dir,
-            api_key=key,
-            image_size=settings.detector_imgsz or EVREN_IMAGE_SIZE,
-            storage=storage,
-        )
-    weights = settings.resolved_weights_path
-    if weights is None:
-        raise ValueError("DETECTOR_MODE=model için DETECTOR_WEIGHTS_PATH tanımlanmalı")
-    if not weights.is_file():
-        raise ValueError(f"Model ağırlıkları bulunamadı: {weights}")
-    return UltralyticsDetector(weights, images_dir, imgsz=settings.detector_imgsz, storage=storage)
+    key = settings.evren_model_api_key.get_secret_value()
+    if not key:
+        raise ValueError("USE_INFERENCE=REAL için EVREN_MODEL_API_KEY tanımlanmalı")
+    return EvrenDetector(
+        settings.evren_detector_model,
+        settings.resolved_data_dir / "images",
+        api_key=key,
+        image_size=settings.detector_imgsz or EVREN_IMAGE_SIZE,
+        storage=build_storage(settings),
+    )

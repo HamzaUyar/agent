@@ -10,7 +10,12 @@ from app.db.models import fetch_claims, fetch_package
 from app.db.repositories import InMemoryRepository
 from app.db.session import connect
 from app.llm.client import build_router
-from app.pipelines.detection import Detector, MockDetector, build_detector, load_mock_detections
+from app.pipelines.detection import (
+    Detector,
+    RecordedDetector,
+    build_detector,
+    load_detections_json,
+)
 from app.pipelines.vision import VlmVerifier
 from app.storage import build_storage
 
@@ -21,7 +26,7 @@ def add_source_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument("--package", type=Path, help="Supabase yerine yerel veri paketi")
     parser.add_argument("--claims", type=Path, help="--package ile: iddialar (claims.json)")
-    parser.add_argument("--detections", type=Path, help="Sahte tespitler (detections.json)")
+    parser.add_argument("--detections", type=Path, help="Kayıtlı tespitler (detections.json)")
 
 
 def images_dir(args: argparse.Namespace) -> Path:
@@ -48,7 +53,9 @@ def build_service(args: argparse.Namespace) -> EvaluationService:
         else VlmVerifier(router, images_dir(args), storage=build_storage(settings))
     )
     detector: Detector = (
-        MockDetector(load_mock_detections(args.detections))
+        RecordedDetector(
+            load_detections_json(args.detections), version=f"dosya:{args.detections.name}"
+        )
         if args.detections
         else build_detector(settings)
     )

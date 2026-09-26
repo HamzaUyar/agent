@@ -77,7 +77,8 @@ class Motion:
     """Bir saat önceki (ya da kayıt daha kısaysa ilk) konumun üsse uzaklığı; görev tanımı s2
     örneği yaklaşmayı bu farkla anlatır."""
     trend: Trend
-    route: list[GeoPoint]
+    route: list[TrackPoint]
+    """Çekim anına kadarki kayıtlı noktalar (saatleriyle); ileri kestirim içermez."""
     total_distance_m: float
     avg_speed_mps: float
     recent_speed_mps: float
@@ -188,7 +189,7 @@ def analyze_motion(
             distance_m(hour[0].location, base) if hour and hour[0] is not current else None
         ),
         trend=trend,
-        route=[p.location for p in history],
+        route=list(history),
         total_distance_m=total,
         avg_speed_mps=total / elapsed if elapsed else 0.0,
         recent_speed_mps=recent_speed,

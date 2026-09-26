@@ -10,7 +10,7 @@ from app.data_package import read_package
 from app.db.repositories import InMemoryRepository
 from app.pipelines.detection import (
     EvrenDetector,
-    MockDetector,
+    RecordedDetector,
     build_detector,
     read_detections_csv,
 )
@@ -54,12 +54,11 @@ def test_demo_with_a_local_package_reads_the_csv(tmp_path: Path) -> None:
         use_inference="DEMO",
         data_source="package",
         detections_csv_path=str(path),
-        detector_mode="model",  # USE_INFERENCE tanımlıyken dikkate alınmaz
     )
 
     built = build_detector(settings)
 
-    assert isinstance(built, MockDetector)
+    assert isinstance(built, RecordedDetector)
     assert built.version == "demo:detections_all.csv"
     assert [d.label for d in built.detect(IMG_000860)] == [VehicleClass.TRUCK, VehicleClass.CAR]
 
@@ -76,16 +75,21 @@ def test_demo_without_the_csv_fails_at_startup(tmp_path: Path) -> None:
         build_detector(settings)
 
 
-def test_real_sends_images_to_evren_regardless_of_detector_mode(tmp_path: Path) -> None:
+def test_real_sends_images_to_evren(tmp_path: Path) -> None:
     settings = Settings(
         _env_file=None,
         use_inference="REAL",
-        detector_mode="mock",
         evren_model_api_key="gizli",
-        data_dir=tmp_path,
+        evren_detector_model="ekip/d2-y26l",
+        data_dir=tmp_path / "data",
     )
 
-    assert isinstance(build_detector(settings), EvrenDetector)
+    built = build_detector(settings)
+
+    assert isinstance(built, EvrenDetector)
+    assert built.version == "evren:ekip/d2-y26l"
+    assert built.images_dir == tmp_path / "data" / "images"
+    assert built.image_size == 1280
 
 
 def test_real_without_a_key_fails_at_startup() -> None:

@@ -354,6 +354,15 @@
 - **Bulgu — brief'teki rapor gürültüsü:** 273 rapor bulgusunun 209'u doğrulanamaz; gün boyu geçerli "tatbikat" dostluk iddiası 81 kez, söylentiler 60 kez her görüntüde listeleniyor.
 - Model sınıf dağılımı (260 kutu): 206 otomobil, 26 minibüs, 24 kamyon, 4 otobüs.
 
+### B1: Arayüz için backend ek uçları (26 Eylül)
+- `GET /zones`: üs ve 8 bölge merkezi, `zones.json` biçiminde (`base {name, lat, lon}`, `zones [{name, center [lat, lon]}]`). Bölge sınırı yok, uydurulmadı.
+- `GET /images/{image_id}`: `image_meta.json` kaydı (`width_px`, `height_px`, `capture_time`, `corner_coordinates` `[lat, lon]`) + `center` (dört köşenin ortası) + `zone` (`/images` ile aynı en yakın merkez kuralı). Veri setinde yoksa 404.
+- `GET /images/{image_id}/file`: `DATA_DIR/images`'tan dosya; `content-type` uzantıdan, `Cache-Control: public, max-age=86400`, `ETag`/`Last-Modified`. Görüntü veri setinde yoksa ya da dosyası eksikse ayrı mesajla 404. Dosya adı veri setindeki kimlikten kurulur.
+- `contacts[].motion.route` noktalarına `time` ("HH:MM") eklendi; `lat`/`lon` aynı, alan isteğe bağlı (önbellekteki eski brief'lerde `null`). Rota çekim anına kadarki kayıtlı noktalardır; ileri kestirilen konum rotaya girmez (ADR-0001). Demo öncesi `recompute: true` ile ısıtılan kayıtlarda saatler dolu gelir.
+- Yeni uçlar bellek içi depodan okur; veritabanı sorgusu eklenmedi.
+- Testler: rota saatleri servis üzerinden (T0122 rotası 12:10–14:10, sonrası yok); üç uç `TestClient` ile, depo ve görüntü klasörü bağımlılık olarak değiştirilerek (spec'e istisna olarak eklendi). Toplam 194.
+- Ortam: `backend/.venv` Anaconda'nın Python 3.12'siyle kuruldu (`/opt/anaconda3/bin/python3.12 -m venv .venv`); zsh'te conda PATH'te değil.
+
 ### Rapor bağlama çekim anına taşındı, saat ayrı kontrol (27 Eylül, R15/R7)
 - **Değişiklik** (`pipelines/reports.py`, ADR-0002 notu): Koordinatlı iddia, **çekim anında** noktasına en yakın temasa bağlanıyor (`risk_rules.toml` `[reports] bind_now_m = 60`). Kaçırılmış ve kayıt dışı temaslar da aday. Saat ayrı bir özellik: `time_check` (ok, mismatch, unknown) bağlanan temasın rapor saatindeki track konumunu `match_m` (150 m) ile karşılaştırıyor. Rapor çekim anındaysa temasın şimdiki (gerekirse kestirilmiş) konumu kullanılıyor.
   - Dostluk iddiası: saat tutmuyor ya da bilinmiyorsa "doğrulanamaz", risk düşmüyor. Düşürme için konum + saat + belirtilen her özellik.
@@ -442,6 +451,11 @@
 - Gerçek veride: 206 track noktasının 191'i eşleşiyor, ortanca 0,13 m, en uzak 1,85 m (`tests/test_matching.py`, paket yerelde varsa). Tam pipeline da (VLM'siz) 191/206 veriyor.
 - img_000860'taki kamyonun CSV'deki skoru 0,037: eşiğin altında kaldığı için T0122 kaçırılmış temas, görüntü kritik yerine yüksek (R5'le aynı).
 - Testler: 12 yeni (eşleşme, USE_INFERENCE, CSV okuma); eşik değişen 5 test güncellendi. Toplam 274; ruff ve mypy temiz.
+
+### Tespit kaynağı yalnızca USE_INFERENCE (27 Eylül)
+- `DETECTOR_MODE` ve onunla gelen `mock` (sahte tespit, `DETECTOR_MOCK_PATH`, yerleşik img_000860 örneği) ile `model` (yerel Ultralytics YOLO, `DETECTOR_WEIGHTS_PATH`, `[model]` ek paketi) kaldırıldı. Tespit kaynağı tek ayar: `USE_INFERENCE=DEMO` (varsayılan, kayıtlı çıktı) ya da `REAL` (EVREN).
+- `MockDetector` → `RecordedDetector` (sürüm zorunlu, yerleşik örnek yok); `load_mock_detections` / `dump_mock_detections` → `load_detections_json` / `dump_detections_json`. JSON biçimi yalnızca `run_eval_set --detections`, `export_detections` ve sentetik üreteçte kullanılıyor.
+- Testler: YOLO testleri çıkarıldı; sınıf eşlemesi (Türkçe adlar dahil) ve önceki karesi eksik görüntü EVREN detektörüyle sınanıyor.
 
 ### VLM zincirinden GLM çıkarıldı (27 Eylül)
 - `models.toml` `vision`: `qwen3-vl-30b → gemma-4-31b → deepseek-v4.1-flash → Sonnet 5`. glm-5.3-flash görüntülü istekte istenen JSON yerine şemanın kendisini döndürüyordu; her VLM çağrısı önce onu deneyip hata alıyor, 10-15 sn kaybediyordu. Claude anahtarı şu an yok; Sonnet anahtar gelene kadar atlanır.

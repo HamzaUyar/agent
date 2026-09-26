@@ -15,7 +15,7 @@ from app.agent.service import EvaluationService
 from app.data_package import load_claims, read_package
 from app.db.repositories import InMemoryRepository
 from app.eval_set import load_labels, run_eval_set
-from app.pipelines.detection import MockDetector, load_mock_detections
+from app.pipelines.detection import RecordedDetector, load_detections_json
 from scripts.make_synthetic_data import (
     PATTERN,
     SyntheticPackage,
@@ -73,14 +73,16 @@ def test_written_package_round_trips(written: Path, synthetic: SyntheticPackage)
     assert {m.image_id for m in package.images} == package.image_files
     assert len(package.track_points) == len(synthetic.package.track_points)
     assert len(load_claims(written / "claims.json")) == len(synthetic.claims)
-    assert load_mock_detections(written / "detections.json") == synthetic.detections
+    assert load_detections_json(written / "detections.json") == synthetic.detections
     assert len(load_labels(written / "labels.toml").images) == N_IMAGES
 
 
 def test_pipeline_recovers_the_scenario_exactly(written: Path) -> None:
     package = read_package(written / "package")
     repo = InMemoryRepository(package, claims=load_claims(written / "claims.json"))
-    detector = MockDetector(load_mock_detections(written / "detections.json"))
+    detector = RecordedDetector(
+        load_detections_json(written / "detections.json"), version="sentetik"
+    )
     service = EvaluationService(repo, detector)
 
     result = run_eval_set(service, load_labels(written / "labels.toml"))

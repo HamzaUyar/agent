@@ -27,6 +27,9 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [x] `backend/CLAUDE.md`'deki dizin yapısını güncelle (`data_package.py`, `agent/service.py`, `supabase/migrations/`)
 - [ ] Boş test dosyalarını (`test_geo.py`, `test_motion.py`, `test_matching.py`) kaldır ya da doldur. Onaylanan test noktalarına göre bunlar ayrı test edilmiyor; istisna interpolasyon gibi karmaşık hesaplar.
 - [ ] Ayrıntılı analiz tablolarını (`detections`, `track_matches`, `risk_assessments`) doldur; şu an sonuç yalnızca `brief_json` içinde
+- [x] B1 · Arayüz için ek uçlar: `GET /zones`, `GET /images/{id}`, `GET /images/{id}/file`, rota noktalarına `time`
+- [ ] Demo öncesi demo görüntülerini `recompute: true` ile yeniden değerlendir (rota saatleri eski önbellek kayıtlarında `null`)
+- [ ] `tests/` altındaki önceden var olan 30 mypy hatası (`FakeDetector.version`, `SwitchableLLM` → `Provider`); `app/` temiz
 - [x] 40 görüntüyü `drone-images` bucket'ına yükle ve `images.file_path`'i güncelle
 - [ ] `docker-compose.yml`: backend, frontend ve isteğe bağlı yerel Supabase
 - [x] Tip geçmişi için önceki karelerin tespitini önbelleğe al (`UltralyticsDetector` her görüntüyü bir kez çalıştırıyor)
@@ -37,7 +40,6 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] Gerçek görüntüler gelince VLM'i birkaç kırpmada gözle kontrol et (renk paleti, "araç değil" oranı; R11)
 - [ ] Mevcut raporlarda yük geçiyorsa `parse_reports --force` ile `cargo` alanını doldur
 
-- [ ] Model ağırlıkları gelince: `pip install -e '.[model]'`, `.env`'de `DETECTOR_MODE=model` + `DETECTOR_WEIGHTS_PATH` (+ eğitim boyutu `DETECTOR_IMGSZ`), img_000860'ta kutunun (727, 284, 58, 34) civarında truck çıktığını doğrula; sınıf adları `CLASS_ALIASES`'ta yoksa ekle
 
 - [x] LLM'in boş ya da "..." değerlendirme paragrafı geçersiz sayılıyor, sıradaki modele geçiliyor
 - [x] Sentetik 2. aşama paketi (Kaggle eğitim görüntülerinden 40 kare, track'ler, bilerek yanlış raporlar, otomatik etiketler) ve bütün pipeline'ın onunla koşturulması
