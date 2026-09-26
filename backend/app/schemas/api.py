@@ -47,6 +47,11 @@ class MotionFinding(BaseModel):
     current_stop_minutes: int | None
     # Süren duraklama bilinen ilk noktadan beri sürüyor: gerçek süre en az bu kadar.
     stop_open_ended: bool
+    # Kaydın tamamında üsse en yakın ve en uzak mesafe (m).
+    base_distance_min_m: float
+    base_distance_max_m: float
+    # Kaydın kapsadığı alan: birbirine en uzak iki noktanın arası (m).
+    extent_m: float
 
 
 class LabelObservation(BaseModel):

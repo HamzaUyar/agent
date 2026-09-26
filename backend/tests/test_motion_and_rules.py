@@ -7,7 +7,7 @@ görüntünün ortasındaki tek bir temastan oluşur.
 import json
 from dataclasses import replace
 from datetime import time
-from math import cos, radians
+from math import cos, radians, sin
 from pathlib import Path
 
 import pytest
@@ -275,3 +275,62 @@ def test_llm_input_and_brief_carry_the_whole_track_motion_not_a_single_step() ->
 
     assert f"2 saatlik ortalama {motion.avg_speed_mps:.1f} m/s" in brief.text
     assert f"30 dk önce {motion.distance_to_base_30min_ago_m / 1000:.1f} km" in brief.text
+
+
+# --- Üs çevresinde dolaşma (görev tanımı s3) -------------------------------------
+
+
+def around_base(radius_m: float, arc_m: float) -> list[TrackPoint]:
+    """12:10–14:10 arası, üssü `radius_m` uzaklıkta, `arc_m` uzunluğunda bir yay üzerinde
+    gidip gelen track: üsse mesafesi hiç değişmez."""
+    first, last = to_minutes(START), to_minutes(NOW)
+    points = []
+    for i, m in enumerate(range(first, last + 1, 5)):
+        # 0 → arc → 0 → arc ... her 6 adımda bir yön değiştirir.
+        leg, step = divmod(i, 6)
+        along = (step if leg % 2 == 0 else 6 - step) / 6 * arc_m
+        angle = along / radius_m
+        points.append(
+            TrackPoint(
+                "T9000",
+                from_minutes(m),
+                east_of_base(radius_m * cos(angle), radius_m * sin(angle)),
+            )
+        )
+    return points
+
+
+def circling_scenario(radius_m: float, arc_m: float) -> Brief:
+    points = around_base(radius_m, arc_m)
+    now = points[-1].location
+    image = image_on(now)
+    package = replace(PACKAGE, images=[image], track_points=points, reports=[])
+    service = EvaluationService(
+        InMemoryRepository(package),
+        FakeDetector({image.image_id: [box_on(image, now, VehicleClass.CAR)]}),
+    )
+    return service.run(image.image_id)
+
+
+def test_vehicle_circling_the_base_at_a_steady_distance_is_medium() -> None:
+    """Gerçek veride T0035, T0146, T0181: üsse ~1,7 km'de, mesafesi 20 m oynayarak 20 km yol."""
+    [contact] = circling_scenario(radius_m=1_800, arc_m=3_000).contacts
+
+    assert contact.motion is not None
+    assert contact.motion.trend != "approaching"
+    assert contact.motion.base_distance_max_m - contact.motion.base_distance_min_m < 50
+    assert contact.base_level == "medium"
+    assert "üs çevresinde sabit mesafede dolaşıyor" in contact.level_reasons[0]
+
+
+def test_local_back_and_forth_traffic_is_not_circling() -> None:
+    """Yerinde gidip gelen yerel trafik (600 m içinde) üssü dolaşmıyor."""
+    [contact] = circling_scenario(radius_m=1_800, arc_m=500).contacts
+
+    assert contact.base_level == "low"
+
+
+def test_circling_far_from_the_base_is_not_circling_the_base() -> None:
+    [contact] = circling_scenario(radius_m=4_000, arc_m=3_000).contacts
+
+    assert contact.base_level == "low"

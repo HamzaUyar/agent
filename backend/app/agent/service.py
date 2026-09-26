@@ -454,6 +454,9 @@ class EvaluationService:
             zones_passed=m.zones_passed,
             current_stop_minutes=ongoing.minutes if ongoing else None,
             stop_open_ended=ongoing is not None and ongoing.start == history[0].time,
+            base_distance_min_m=m.base_distance_min_m,
+            base_distance_max_m=m.base_distance_max_m,
+            extent_m=m.extent_m,
         )
 
     def _loiter_minutes(self, motion: MotionFinding | None) -> int:
@@ -464,6 +467,23 @@ class EvaluationService:
             s.minutes for s in motion.stops if s.distance_to_base_m < self._rules.levels.loiter_m
         ]
         return max(near, default=0)
+
+    def _circling_path_m(self, motion: MotionFinding | None) -> float:
+        """Üssün çevresinde dar bir mesafe bandında kalarak gidilen yol; dolaşmıyorsa 0.
+
+        Görev tanımı s3: araçlar üs çevresinde dolaşır. Üsse mesafesi kayıt boyunca
+        `circle_band_m` içinde kalan, `loiter_m`'den yakın ve en az `circle_min_extent_m`
+        genişliğinde bir yay çizen araç dolaşıyordur; yerinde gidip gelen yerel trafik değil.
+        """
+        t = self._rules.levels
+        if (
+            motion is None
+            or motion.base_distance_max_m >= t.loiter_m
+            or motion.base_distance_max_m - motion.base_distance_min_m > t.circle_band_m
+            or motion.extent_m < t.circle_min_extent_m
+        ):
+            return 0.0
+        return motion.total_distance_m
 
     def _detection_contact(
         self,
@@ -489,6 +509,7 @@ class EvaluationService:
             motion.trend if motion else None,
             registered=track_id is not None,
             loiter_minutes_near_base=self._loiter_minutes(motion),
+            circling_path_m=self._circling_path_m(motion),
             rules=self._rules.levels,
         )
         position_estimated = track_id in estimated
@@ -534,6 +555,7 @@ class EvaluationService:
             motion.trend,
             registered=True,
             loiter_minutes_near_base=self._loiter_minutes(motion),
+            circling_path_m=self._circling_path_m(motion),
             rules=self._rules.levels,
         )
         return ContactFinding(

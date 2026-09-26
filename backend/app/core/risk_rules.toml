@@ -23,7 +23,8 @@ window_minutes = 120
 # İddianın konumu görüntüye ya da bir temasa bu kadar yakınsa ilgili sayılır.
 relevance_m = 500
 # İddia, çekim anında konumu iddia noktasına bu kadar yakın olan en yakın temasa bağlanır.
-# Gerçek veride koordinatlı raporların hepsi çekim anında bir temasa ≤ 54 m.
+# Gerçek veride koordinatlı raporların hepsi çekim anında bir temasa ≤ 54 m. Bu eşiğe ve
+# `match_m`'ye koordinatın yuvarlama payı eklenir (3 ondalıkta ~70 m, 5 ondalıkta < 1 m).
 bind_now_m = 60
 # Bağlanan temasın rapor saatindeki konumu iddia noktasına bu kadar yakınsa saat tutar.
 match_m = 150
@@ -49,3 +50,10 @@ unregistered_alert_m = 1000
 # Üsse `loiter_m`'den yakın bir yerde en az `loiter_minutes` duraklama: orta.
 loiter_minutes = 30
 loiter_m = 3000
+# Üs çevresinde dolaşma (görev tanımı s3): üsse mesafesi kayıt boyunca `circle_band_m` içinde
+# kalan, `loiter_m`'den yakın, en az `circle_min_extent_m` genişliğinde bir yay çizen ve en az
+# `circle_min_path_m` yol yapan araç: orta. Gerçek veride 6 track 1,6-2,6 km'de, mesafesi
+# 20 m'den az oynayarak 16-29 km yol yapıyor (yay 3,2-4,5 km); yerel trafik 600 m içinde kalır.
+circle_band_m = 300
+circle_min_path_m = 3000
+circle_min_extent_m = 1500

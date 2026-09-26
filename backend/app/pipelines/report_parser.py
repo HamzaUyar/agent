@@ -29,6 +29,23 @@ def coordinates_in(text: str) -> list[GeoPoint]:
     return [GeoPoint(float(lat), float(lon)) for lat, lon in COORDINATE.findall(text)]
 
 
+def rounding_error_m(text: str, point: GeoPoint) -> float:
+    """Metinde `point`'e karşılık gelen koordinatın yuvarlama payı (m).
+
+    "39.944N 32.863E" 3 ondalıklı: gerçek nokta her eksende ±0,0005° içinde, köşegende
+    ~70 m. 5 ondalıklıda pay 1 m'nin altında. Koordinat metinde yoksa 0.
+    """
+    found = [
+        (GeoPoint(float(lat), float(lon)), min(len(lat.split(".")[1]), len(lon.split(".")[1])))
+        for lat, lon in COORDINATE.findall(text)
+    ]
+    if not found:
+        return 0.0
+    written, decimals = min(found, key=lambda f: distance_m(f[0], point))
+    half = 0.5 * 10**-decimals
+    return distance_m(written, GeoPoint(written.lat + half, written.lon + half))
+
+
 @dataclass(frozen=True)
 class ParseResult:
     claims: list[ReportClaim]

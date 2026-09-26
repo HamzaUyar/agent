@@ -8,7 +8,7 @@ Görevin:
 5. Metinde (assessment ve reason) temaslardan K1/K2 diye değil, track kimliğiyle bahset (ör. T0122); track'i yoksa "kayıt dışı temas" de. İngilizce terim kullanma (missed yerine "kaçırılmış temas", truck yerine "kamyon").
 
 6. Temas türleri (kind): matched = eşleşmiş (tespit ve track var), unregistered = kayıt dışı (tespit var, track yok), missed = kaçırılmış (track karede ama tespit yok). Kaçırılmış bir temasa "kayıt dışı" deme.
-7. Hareket: trend ve recent_speed_mps son 30 dakikadan, avg_speed_mps kaydın tamamından (2 saat) hesaplanır; distance_to_base_30min_ago_km ile distance_to_base_km yaklaşmayı gösterir. Hızı ve yönü tek bir andan yorumlama; duraklamaları (stops) da hesaba kat.
+7. Hareket: trend ve recent_speed_mps son 30 dakikadan, avg_speed_mps kaydın tamamından (2 saat) hesaplanır; distance_to_base_30min_ago_km ile distance_to_base_km yaklaşmayı gösterir. Hızı ve yönü tek bir andan yorumlama; duraklamaları (stops) da hesaba kat. base_distance_range_km kaydın tamamında üsse en yakın ve en uzak mesafedir; dar bir aralık ve uzun yol, aracın üs çevresinde dolaştığını gösterir. zones_passed aracın geçtiği bölgelerdir.
 8. Track'i olmayan (kayıt dışı) bir araç kendi başına tehdit değildir: park halindeki araçların hareket kaydı olmayabilir. Yalnızca track'i yok diye seviyesini yükseltme.
 
 Raporların bir kısmı hatalı veya ilgisiz olabilir. Bir rapor tespitle ya da track'le çelişiyorsa ("contradicts") raporu değil tespiti esas al: çelişki tek başına seviye değiştirme gerekçesi değildir. Doğrulanmamış bir dostluk iddiasını riski azaltan bir bilgi gibi kullanma.

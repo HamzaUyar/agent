@@ -11,6 +11,8 @@ from math import cos, radians
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from app.agent.service import EvaluationService
 from app.data_package import read_package
 from app.db.repositories import InMemoryRepository
@@ -786,3 +788,83 @@ def test_claimed_stop_duration_is_unverified_when_no_stop_is_recorded() -> None:
 
     f = finding(brief, 10)
     assert (f.verdict, f.certainty) == ("consistent", "likely")
+
+
+# --- Görev tanımındaki uçtan uca örnek (gorev_tanimi.pdf s2) ---------------------
+
+
+def pdf_example_scene() -> tuple[DataPackage, dict[str, list[Detection]]]:
+    """img_000123, 13:25: kutu (610, 380, 60, 28) → 39.94439, 32.86350; T0187 ~2,5 m."""
+    image = ImageMeta(
+        "img_000123",
+        1360,
+        765,
+        time(13, 25),
+        Corners(
+            GeoPoint(39.94510, 32.86200),
+            GeoPoint(39.94510, 32.86519),
+            GeoPoint(39.94373, 32.86200),
+            GeoPoint(39.94373, 32.86519),
+        ),
+    )
+    end = GeoPoint(39.94441, 32.86353)
+    # Kuzeyden gelip çekim anında kutunun konumunda biten iz.
+    points = [
+        TrackPoint(
+            "T0187", time(11 + (25 + 5 * i) // 60, (25 + 5 * i) % 60), end_minus(end, 24 - i)
+        )
+        for i in range(25)
+    ]
+    package = replace(PACKAGE, images=[image], track_points=points, reports=[])
+    truck = Detection(VehicleClass.TRUCK, 0.9, 610, 380, 60, 28)
+    return package, {"img_000123": [truck]}
+
+
+def end_minus(end: GeoPoint, steps: int) -> GeoPoint:
+    return GeoPoint(end.lat + steps * 0.0015, end.lon)
+
+
+def test_pdf_example_report_with_three_decimal_coordinates_binds_to_the_truck() -> None:
+    """ "39.944N 32.863E" 3 ondalıklı: nokta tespitten ~61 m uzakta, yuvarlama payı içinde.
+
+    Görev tanımı bu raporu tespitle uyumlu sayıyor; eskiden 60 m eşiğini aşıp
+    "doğrulanamaz" kalıyordu.
+    """
+    package, detections = pdf_example_scene()
+    report = record(
+        10,
+        time(12, 40),
+        THIRD,
+        "39.944N 32.863E civarinda bir kamyon",
+        at(GeoPoint(39.944, 32.863), vehicle_type="truck", vehicle_count=1),
+    )
+
+    brief = evaluate([report], package, detections, "img_000123")
+
+    [truck] = brief.contacts
+    assert truck.track_id == "T0187"
+    assert (truck.location.lat, truck.location.lon) == (
+        pytest.approx(39.94439, abs=1e-5),
+        pytest.approx(32.86350, abs=1e-5),
+    )
+    # PDF "~2,5 m" diyor; yuvarlanmış örnek değerlerle 3,0 m.
+    assert truck.match_distance_m is not None and truck.match_distance_m < 5
+    f = finding(brief, 10)
+    assert (f.track_id, f.verdict, f.effect) == ("T0187", "consistent", "none")
+
+
+def test_five_decimal_coordinates_keep_the_tight_binding_radius() -> None:
+    """5 ondalıklı koordinatta pay 1 m'nin altında: 61 m uzaktaki temasa bağlanmaz."""
+    package, detections = pdf_example_scene()
+    report = record(
+        10,
+        time(12, 40),
+        THIRD,
+        "39.94400N 32.86300E civarinda bir kamyon",
+        at(GeoPoint(39.944, 32.863), vehicle_type="truck", vehicle_count=1),
+    )
+
+    brief = evaluate([report], package, detections, "img_000123")
+
+    f = finding(brief, 10)
+    assert (f.track_id, f.verdict) == (None, "unverifiable")

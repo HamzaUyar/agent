@@ -21,6 +21,7 @@ from typing import Literal
 from app.core.rules import ReportRules
 from app.data_package import format_hhmm, to_minutes
 from app.pipelines.geo import distance_m
+from app.pipelines.report_parser import rounding_error_m
 from app.pipelines.vision import normalize_color
 from app.schemas.api import (
     Certainty,
@@ -255,18 +256,21 @@ def _time_check(
     now: time,
     rules: ReportRules,
     position_at: PositionAt,
+    slack_m: float,
 ) -> TimeCheck:
     """Bağlanan temasın rapor saatinde iddia noktasında olup olmadığı.
 
     Rapor çekim anındaysa temasın şimdiki konumu kullanılır: çekim saati 5 dakikalık
     adıma denk gelmiyorsa `position_at` bir önceki adımın konumunu verir.
+    `slack_m`: rapordaki koordinatın yuvarlama payı.
     """
+    limit = rules.match_m + slack_m
     if when == now:
-        return "ok" if distance_m(contact.location, point) <= rules.match_m else "mismatch"
+        return "ok" if distance_m(contact.location, point) <= limit else "mismatch"
     pos = position_at(contact.track_id, when) if contact.track_id else None
     if pos is None:
         return "unknown"
-    return "ok" if distance_m(pos, point) <= rules.match_m else "mismatch"
+    return "ok" if distance_m(pos, point) <= limit else "mismatch"
 
 
 def _evaluate_located(
@@ -282,14 +286,20 @@ def _evaluate_located(
     claim, report = record.claim, record.report
     when = format_hhmm(report.time)
 
-    near = [(d, c) for c in contacts if (d := distance_m(c.location, point)) <= rules.bind_now_m]
+    # Az ondalıklı koordinat (ör. "39.944N") gerçek noktadan onlarca metre sapabilir.
+    slack = rounding_error_m(report.text, point)
+    near = [
+        (d, c) for c in contacts if (d := distance_m(c.location, point)) <= rules.bind_now_m + slack
+    ]
     if distance_m(image_center, point) > rules.relevance_m and not near:
         return None
 
     linked = min(near, key=lambda x: x[0])[1] if near else None
     track_id = linked.track_id if linked else None
     time_check = (
-        _time_check(linked, point, report.time, now, rules, position_at) if linked else "unknown"
+        _time_check(linked, point, report.time, now, rules, position_at, slack)
+        if linked
+        else "unknown"
     )
 
     def result(

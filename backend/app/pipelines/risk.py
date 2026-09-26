@@ -28,12 +28,14 @@ def base_level(
     *,
     registered: bool,
     loiter_minutes_near_base: int,
+    circling_path_m: float = 0.0,
     rules: LevelRules,
 ) -> LevelDecision:
     """Temel seviye tablosu; ilk uyan satır geçerli.
 
     `label` None ise tip bilinmiyor (kaçırılmış temas); `trend` None ise hareket kaydı yok.
     `loiter_minutes_near_base`: üsse `rules.loiter_m`'den yakın en uzun duraklamanın süresi.
+    `circling_path_m`: üs çevresinde dar bir mesafe bandında kalarak gidilen yol (dolaşma).
     """
     t = rules
     km = f"{distance_to_base_m / 1000:.1f} km"
@@ -55,6 +57,11 @@ def base_level(
     if loiter_minutes_near_base >= t.loiter_minutes:
         return LevelDecision(
             "medium", [f"üsse yakın {loiter_minutes_near_base} dk duraklama, {km}"]
+        )
+    if circling_path_m >= t.circle_min_path_m:
+        return LevelDecision(
+            "medium",
+            [f"üs çevresinde sabit mesafede dolaşıyor ({circling_path_m / 1000:.1f} km yol), {km}"],
         )
     if not registered:
         # Görev tanımı: park halindeki araçların hareket kaydı olmayabilir (ADR-0003).

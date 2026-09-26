@@ -48,6 +48,9 @@ class LevelRules:
     unregistered_alert_m: float
     loiter_minutes: int
     loiter_m: float
+    circle_band_m: float
+    circle_min_path_m: float
+    circle_min_extent_m: float
 
 
 @dataclass(frozen=True)

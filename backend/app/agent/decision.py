@@ -101,6 +101,13 @@ def _contact_facts(i: int, c: ContactFinding) -> dict[str, object]:
         ]
         if motion
         else [],
+        "base_distance_range_km": [
+            round(motion.base_distance_min_m / 1000, 2),
+            round(motion.base_distance_max_m / 1000, 2),
+        ]
+        if motion
+        else None,
+        "zones_passed": motion.zones_passed if motion else [],
         "level": c.final_level,
         "level_reasons": c.level_reasons,
         "verified_friend": c.verified_friend,
