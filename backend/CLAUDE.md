@@ -21,7 +21,7 @@ Değerlendirme:
 | `field_reports.json` | `time, source (official / third_party), text` (serbest metin, Türkçe karakter kullanılmamış) |
 
 - Track'ler ve raporlar tek bir havuz. Hangi görüntüye ait oldukları verilmiyor. Bağlantı **çekim saati ve koordinatlarla** kuruluyor.
-- **Raporların hepsi doğru değil.** Bazıları yanlış, bazıları kasıtlı yanıltıcı, bazıları ilgisiz. Önce kendi tespitimize ve hareket verisine güveniyoruz; raporları bunlarla karşılaştırıyoruz.
+- **Raporların hepsi doğru değil.** Bazıları doğru, bazıları hatalı veya ilgisiz (görev tanımı s3). Raporları kendi tespitimiz ve hareket verisiyle karşılaştırıyoruz; çelişkide rapor değil tespit esas alınır (s2), çelişki seviyeyi değiştirmez (ADR-0002).
 
 ## Pipeline (üç kol + birleştirme)
 ```

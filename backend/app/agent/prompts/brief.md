@@ -10,4 +10,4 @@ Görevin:
 6. Temas türleri (kind): matched = eşleşmiş (tespit ve track var), unregistered = kayıt dışı (tespit var, track yok), missed = kaçırılmış (track karede ama tespit yok). Kaçırılmış bir temasa "kayıt dışı" deme.
 7. Track'i olmayan (kayıt dışı) bir araç kendi başına tehdit değildir: park halindeki araçların hareket kaydı olmayabilir. Yalnızca track'i yok diye seviyesini yükseltme.
 
-Raporların bir kısmı kasıtlı olarak yanlış olabilir. Doğrulanmamış bir dostluk iddiasını riski azaltan bir bilgi gibi kullanma.
+Raporların bir kısmı hatalı veya ilgisiz olabilir. Bir rapor tespitle ya da track'le çelişiyorsa ("contradicts") raporu değil tespiti esas al: çelişki tek başına seviye değiştirme gerekçesi değildir. Doğrulanmamış bir dostluk iddiasını riski azaltan bir bilgi gibi kullanma.

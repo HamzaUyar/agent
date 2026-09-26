@@ -362,16 +362,22 @@ def test_observation_whose_report_time_does_not_match_the_track_does_not_raise_r
     assert "uyuşmuyor" in f.reasoning
 
 
-def test_observation_with_the_wrong_type_contradicts_and_raises_to_high() -> None:
+def test_observation_with_the_wrong_type_contradicts_but_the_detection_decides_the_level() -> None:
+    """Görev tanımı s2: çelişki varsa raporu değil tespitinizi esas alın."""
     package, detections = parked_scene(parked_since=time(12, 0))
     lie = record(
         10, time(13, 30), OFFICIAL, "burada 1 kamyon", at(east_of_base(4_000), vehicle_type="truck")
     )
 
+    without = evaluate([], package, detections, "img_7000")
     brief = evaluate([lie], package, detections, "img_7000")
 
-    assert contact(brief, "T7000").final_level == "high"
-    assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("contradicts", "raises")
+    c = contact(brief, "T7000")
+    assert c.final_level == contact(without, "T7000").final_level
+    assert "rapor tespitle çelişiyor; tespit esas alındı" in c.level_reasons
+    f = finding(brief, 10)
+    assert (f.verdict, f.effect) == ("contradicts", "none")
+    assert f.reasoning.endswith("tespit esas alındı")
 
 
 def test_threat_warning_about_a_contact_raises_one_level() -> None:
@@ -399,9 +405,11 @@ def test_contradiction_wins_over_a_verified_friendly_claim() -> None:
     # Eskiden saat çelişkisiyle kurulan yalan artık tip çelişkisiyle kuruluyor.
     lie = record(11, time(13, 30), OFFICIAL, "burada 1 kamyon", at(spot, vehicle_type="truck"))
 
+    without = evaluate([], package, detections, "img_7000")
     brief = evaluate([friend, lie], package, detections, "img_7000")
 
-    assert contact(brief, "T7000").final_level == "high"
+    # Çelişki seviyeyi yükseltmez ama dostluk iddiasının riski düşürmesini de engeller.
+    assert contact(brief, "T7000").final_level == contact(without, "T7000").final_level
     assert contact(brief, "T7000").verified_friend is False
 
 
@@ -630,9 +638,10 @@ def test_stationary_claim_about_a_vehicle_approaching_the_base_contradicts() -> 
     brief = evaluate([lie], package, detections, "img_7000")
 
     f = finding(brief, 10)
-    assert (f.track_id, f.verdict, f.effect) == ("T0500", "contradicts", "raises")
+    assert (f.track_id, f.verdict, f.effect) == ("T0500", "contradicts", "none")
     assert "hareket" in f.reasoning
-    assert contact(brief, "T0500").final_level in ("high", "critical")
+    # Seviyeyi track'in kendi hareketi verir (4 km'de yaklaşan kamyon), rapor değil.
+    assert contact(brief, "T0500").final_level == contact(brief, "T0500").base_level
 
 
 def friendly_approach(when: time) -> ClaimRecord:
@@ -652,7 +661,7 @@ def test_friendly_claim_says_approaching_but_the_vehicle_recedes_contradicts() -
     brief = evaluate([friendly_approach(time(14, 10))], package, detections, "img_7000")
 
     f = finding(brief, 10)
-    assert (f.verdict, f.effect) == ("contradicts", "raises")
+    assert (f.verdict, f.effect) == ("contradicts", "none")
     assert "üsse yaklaşıyor diyor, üsten uzaklaşıyor" in f.reasoning
     assert contact(brief, "T0500").verified_friend is False
 
@@ -750,7 +759,7 @@ def test_count_close_to_what_is_seen_is_consistent() -> None:
     assert finding(brief, 10).verdict == "consistent"
 
 
-def test_count_mismatch_alongside_a_movement_mismatch_raises() -> None:
+def test_count_mismatch_alongside_a_movement_mismatch_is_a_certain_contradiction() -> None:
     package, detections = moving_scene(approaching)
     lie = record(
         10,
@@ -762,7 +771,9 @@ def test_count_mismatch_alongside_a_movement_mismatch_raises() -> None:
 
     brief = evaluate([lie], package, detections, "img_7000")
 
-    assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("contradicts", "raises")
+    f = finding(brief, 10)
+    assert (f.verdict, f.certainty, f.effect) == ("contradicts", "certain", "none")
+    assert "hareket" in f.reasoning and "sayı" in f.reasoning
 
 
 def test_claimed_stop_duration_is_unverified_when_no_stop_is_recorded() -> None:

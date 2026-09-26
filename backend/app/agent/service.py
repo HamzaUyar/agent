@@ -554,31 +554,28 @@ class EvaluationService:
         )
 
 
-def _raise(level: RiskLevel, floor: RiskLevel) -> RiskLevel:
-    return max(level, floor, key=LEVELS.index)
-
-
 def _apply_report_effects(
     contact: ContactFinding, evaluations: list[ClaimEvaluation]
 ) -> ContactFinding:
-    """Rapor etkilerini temasın seviyesine uygular; riski artıran etki düşüreni ezer."""
+    """Rapor etkilerini temasın seviyesine uygular; riski artıran etki düşüreni ezer.
+
+    Çelişen rapor seviyeyi değiştirmez (görev tanımı s2: tespit esas alınır), ama aynı temas
+    hakkındaki başka bir raporun riski düşürmesini engeller.
+    """
     linked = [e for e in evaluations if contact.track_id and e.track_id == contact.track_id]
     if not linked:
         return contact
     level = contact.final_level
     reasons = list(contact.level_reasons)
-    raised = False
-    # Yalnızca sayısı uyuşmayan çelişki riski yükseltmez (effect "none", ADR-0002 notu).
-    if any(e.verdict == "contradicts" and e.effect == "raises" for e in linked):
-        level = _raise(level, "high")
-        reasons.append("rapor bu temasla çelişiyor (olası yanıltma)")
-        raised = True
-    if any(e.effect == "raises" and e.verdict != "contradicts" for e in linked):
+    contradicted = any(e.verdict == "contradicts" for e in linked)
+    if contradicted:
+        reasons.append("rapor tespitle çelişiyor; tespit esas alındı")
+    raised = any(e.effect == "raises" for e in linked)
+    if raised:
         level = LEVELS[min(LEVELS.index(level) + 1, len(LEVELS) - 1)]
         reasons.append("tehdit uyarısı")
-        raised = True
     verified_friend = False
-    if not raised and any(e.effect == "lowers" for e in linked):
+    if not raised and not contradicted and any(e.effect == "lowers" for e in linked):
         level, verified_friend = "low", True
         reasons.append("doğrulanmış dost (resmi rapor)")
     return contact.model_copy(

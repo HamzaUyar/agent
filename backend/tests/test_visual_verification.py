@@ -149,21 +149,21 @@ def test_color_claim_about_an_undetected_contact_stays_unverified_without_vlm() 
 # --- Renk ve yük rapor kararına yansır -------------------------------------------
 
 
-def test_color_mismatch_makes_the_report_contradict_and_raises_the_contact() -> None:
+def test_color_mismatch_makes_the_report_contradict() -> None:
     package_level = evaluate([], None)
     blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
 
     brief = evaluate([blue], FakeVerifier(seen("beyaz")))
 
     f = finding(brief, 10)
-    assert (f.verdict, f.effect) == ("contradicts", "raises")
+    assert (f.verdict, f.effect) == ("contradicts", "none")
     assert "renk" in f.reasoning
     assert f.certainty == "likely"  # görsel özellik: VLM'e dayalı çelişki kesin sayılmaz
     assert contact(package_level, "T0122").final_level == "critical"
     assert contact(brief, "T0122").final_level == "critical"
 
 
-def test_color_mismatch_raises_a_low_contact_to_high() -> None:
+def test_color_mismatch_does_not_change_the_contact_level() -> None:
     # T0032 kaçırılmış; kutusunu bu testte zayıf olmayan ikinci bir tespit veriyor.
     verifier = FakeVerifier(seen("beyaz"))
     blue = record(10, time(13, 40), OFFICIAL, claim_at(T0032_AT_1340, color="mavi"))
@@ -172,8 +172,7 @@ def test_color_mismatch_raises_a_low_contact_to_high() -> None:
     brief = evaluate([blue], verifier, [TRUCK, t0032_box])
 
     c = contact(brief, "T0032")
-    assert c.base_level == "medium"
-    assert c.final_level == "high"
+    assert (c.base_level, c.final_level) == ("medium", "medium")  # VLM değil tespit esas
     assert finding(brief, 10).verdict == "contradicts"
 
 

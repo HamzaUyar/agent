@@ -406,6 +406,22 @@
 - Testler: `test_llm_limits.py` 13 senaryo (61. istek bekler, 5. eşzamanlı istek bekler, bütçe, 429 backoff ve yedeğe geçiş, istek gövdesi: model adı / `max_tokens` ≥ 1000 / `reasoning_effort` / `thinking` yok / base64 `image_url`, kesik cevap). Zincir sırasını sabitleyen 3 test güncellendi. Toplam 220; ruff ve mypy temiz.
 - Açık: gateway fiyatı bilinmiyor, bu yüzden bütçe kesicisi fiyatlar `.env`'e girilene kadar devrede değil; gerçek harcama `/key/info`'da.
 
+### Çelişen rapor seviyeyi değiştirmiyor (27 Eylül, görev tanımı s2, ADR-0002 notu)
+- Görev tanımı: "çelişki varsa raporu değil tespitinizi esas alın". Önceden çelişki "olası yanıltma" sayılıp temas en az "yüksek"e çekiliyordu ve LLM düşüremiyordu (kullanıcı kararıyla kaldırıldı).
+- `pipelines/reports.py`: çelişen iddianın etkisi her zaman `none`, gerekçenin sonunda "tespit esas alındı". `service.py` `_apply_report_effects`: çelişki gerekçeye not düşülür, seviye değişmez; aynı temasa ait dostluk iddiasının riski düşürmesini engeller. Tutarlı tehdit uyarısı yine +1.
+- Prompt'lar (`brief.md`, `chat.md`) ve belgeler: "kasıtlı yanıltma" yerine "hatalı veya ilgisiz"; LLM'e çelişkinin tek başına seviye değiştirme gerekçesi olmadığı söyleniyor.
+- Sentetik üreteçte `raises_high` etkisi kaldırıldı; 8 test yeni kurala göre güncellendi. Toplam 220; ruff ve mypy temiz.
+- **Ölçüm (gerçek veri, 40 görüntü, kurallar, LLM'siz):**
+
+  | | Önce | Sonra |
+  |---|---|---|
+  | Görüntüler: kritik / yüksek / orta / düşük | 1 / 28 / 11 / 0 | 1 / 15 / 23 / 1 |
+  | Temaslar: kritik / yüksek / orta / düşük | 1 / 59 / 93 / 92 | 1 / 43 / 105 / 96 |
+  | Çelişkili bulgu | 24 | 24 |
+
+  - 16 temas "yüksek"ten düştü (12'si orta, 4'ü düşük), 13 görüntünün seviyesi düştü. Çelişkiler aynı sayıda yakalanıyor, yalnızca seviyeye etkisi yok.
+  - Dikkat: hareket tuzaklarındaki yaklaşan araçlar (T0078 8,3 m/s, T0112) de ortaya indi, çünkü üsse 3 km'den uzaklar ve temel tablo onları orta veriyor. Bunları yükseltmek artık LLM'in (+1, gerekçeli) ya da temel tablonun işi.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

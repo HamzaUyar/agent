@@ -5,8 +5,10 @@ rapor koordinatlarını aracın çekim anındaki konumundan üretmiş. Saat ayr�
 özelliğidir: bağlanan temasın rapor saatindeki konumu iddia noktasıyla karşılaştırılır.
 Hareket iddiası (duruyor, yaklaşıyor, uzaklaşıyor, geçiyor) temasın çekim anındaki hareketiyle
 karşılaştırılır; track verisine dayandığı için tip gibi kesin bir kontroldür.
-Raporlar riski serbestçe yükseltebilir. Düşürebilmeleri için kaynağın resmi olması ve
-iddianın belirttiği her özelliğin (konum, saat, tip, hareket, renk, yük) doğrulanması gerekir.
+Çelişkide rapor değil tespit esas alınır (görev tanımı s2): çelişen iddia seviyeyi
+değiştirmez, yalnızca not düşülür. Tutarlı bir tehdit uyarısı riski yükseltebilir. Raporların
+riski düşürebilmesi için kaynağın resmi olması ve iddianın belirttiği her özelliğin (konum,
+saat, tip, hareket, renk, yük) doğrulanması gerekir.
 Renk ve yük, yalnızca iddia bunları belirtiyorsa görsel doğrulamaya (VLM) sorulur.
 """
 
@@ -74,8 +76,6 @@ Observe = Callable[[str], VisualFinding | None]
 VISUAL_CHECKS = frozenset({"renk", "yük"})
 # Tespit modelinin gördüğüne dayanan kontroller: uyuşmazlıkları "olası" kesinlikte.
 DETECTOR_CHECKS = VISUAL_CHECKS | {"sayı"}
-# Tek başına uyuşmadığında riski yükseltmeyen kontroller (model araç kaçırabilir).
-NON_RAISING_CHECKS = frozenset({"sayı"})
 
 
 def _no_visual(track_id: str) -> None:
@@ -342,17 +342,18 @@ def _evaluate_located(
 
     if mismatched:
         # Yalnızca VLM'in ya da tespit sayısının dayanağı olan çelişki "olası"; tip ve hareket
-        # çelişkisi kesin. Yalnızca sayı uyuşmuyorsa risk yükselmez.
+        # çelişkisi kesin. Çelişki seviyeyi değiştirmez: tespit esas alınır.
         notes = [behavior_note] if behavior == "mismatch" else []
         if checks["sayı"] == "mismatch":
             notes.append(f"iddia {claim.vehicle_count} araç diyor, çevrede {seen} araç görülüyor")
         return result(
             "contradicts",
             "likely" if set(mismatched) <= DETECTOR_CHECKS else "certain",
-            "none" if set(mismatched) <= NON_RAISING_CHECKS else "raises",
+            "none",
             f"{who} iddianın konumunda ama {', '.join(mismatched)} uyuşmuyor"
             + (f" ({'; '.join(notes)})" if notes else "")
-            + time_note,
+            + time_note
+            + "; tespit esas alındı",
         )
     if friendly and unverified:
         return result(

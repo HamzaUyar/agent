@@ -1,8 +1,8 @@
 # Risk kararı hibrittir, raporlara asimetrik güvenilir
 
-Risk seviyesini kod kurallarla hesaplar. LLM bu seviyeyi gerekçe yazarak en fazla bir kademe değiştirebilir. Raporlar riski serbestçe yükseltebilir. Düşürebilmeleri için ise kendi bulgularımızla doğrulanmaları gerekir: rapor hangi özellikleri belirtiyorsa (konum, zaman, tip, renk) hepsinin tutması şart. Dostluk iddialarında yalnızca resmi kaynak riski düşürebilir.
+Risk seviyesini kod kurallarla hesaplar. LLM bu seviyeyi gerekçe yazarak en fazla bir kademe değiştirebilir. Tespitle ya da track'le çelişen bir rapor seviyeyi değiştirmez: tespit esas alınır, çelişki gerekçede not edilir. Tutarlı bir tehdit uyarısı riski bir kademe yükseltebilir. Raporların riski düşürebilmesi için ise kendi bulgularımızla doğrulanmaları gerekir: rapor hangi özellikleri belirtiyorsa (konum, zaman, tip, renk) hepsinin tutması şart. Dostluk iddialarında yalnızca resmi kaynak riski düşürebilir.
 
-Sebep: brief açıkça bazı raporların kasıtlı olarak yanlış olduğunu söylüyor. Riski yükselten sahte bir raporun bedeli en fazla bir yanlış alarm; riski düşüren sahte bir raporun bedeli gözden kaçan bir tehdit. Kuralların tekrarlanabilir ve denetlenebilir olması mentör değerlendirmesi için de önemli.
+Sebep: görev tanımı raporların bir kısmının hatalı veya ilgisiz olduğunu (s3) ve çelişkide raporun değil tespitin esas alınacağını (s2) söylüyor. Riski düşüren sahte bir raporun bedeli gözden kaçan bir tehdit olduğu için düşürme sıkı koşullara bağlı; çelişen bir rapor ise aynı temas hakkındaki başka bir raporun riski düşürmesini de engeller. Kuralların tekrarlanabilir ve denetlenebilir olması mentör değerlendirmesi için de önemli.
 
 ## Considered Options
 
@@ -22,6 +22,10 @@ Saat, tip ve renk gibi bir özelliktir (`time_check`: ok, mismatch, unknown): ba
 
 ## Not: hareket ve sayı iddiaları (27 Eylül)
 
-- **Hareket** (duruyor, yaklaşıyor, uzaklaşıyor, transit, hareket halinde) temasın **çekim anındaki** hareketiyle karşılaştırılır: 30 dakikalık eğilim ve süren duraklama. Rapor saatindeki hareketle karşılaştırılmaz, çünkü gerçek verideki bildirimlerde araç rapor saatinde başka yerdeydi. Süre ifadesi ("bir saatten uzun", "N dakikadır", "uzun süredir") `time_reference`'tan okunur; duraklama track'in ilk noktasından beri sürüyorsa gerçek süre bilinmez ve kontrol "doğrulanamadı" olur. Hareket uyuşmazlığı track verisine dayandığı için tip gibi kesin bir çelişkidir ve riski yükseltir. Dostluk iddiasının riski düşürmesi için hareket de tutmalıdır.
-- **Sayı** (2 ve üstü) noktanın 30 m içindeki bütün temaslarla tipten bağımsız karşılaştırılır; görülen, iddianın yarısından azsa uyuşmaz. Tespit modeline dayandığı için çelişki "olası" kesinliktedir ve **tek başına riski yükseltmez** (model araç kaçırabilir); başka bir özellik de uyuşmuyorsa o özellik yükseltir.
+- **Hareket** (duruyor, yaklaşıyor, uzaklaşıyor, transit, hareket halinde) temasın **çekim anındaki** hareketiyle karşılaştırılır: 30 dakikalık eğilim ve süren duraklama. Rapor saatindeki hareketle karşılaştırılmaz, çünkü gerçek verideki bildirimlerde araç rapor saatinde başka yerdeydi. Süre ifadesi ("bir saatten uzun", "N dakikadır", "uzun süredir") `time_reference`'tan okunur; duraklama track'in ilk noktasından beri sürüyorsa gerçek süre bilinmez ve kontrol "doğrulanamadı" olur. Hareket uyuşmazlığı track verisine dayandığı için tip gibi kesin bir çelişkidir. Dostluk iddiasının riski düşürmesi için hareket de tutmalıdır.
+- **Sayı** (2 ve üstü) noktanın 30 m içindeki bütün temaslarla tipten bağımsız karşılaştırılır; görülen, iddianın yarısından azsa uyuşmaz. Tespit modeline dayandığı için çelişki "olası" kesinliktedir (model araç kaçırabilir).
 - "Olağan trafik N araç, yoğunluk var" türü yoğunluk iddiaları henüz ayrı bir iddia olarak ayrıştırılmıyor (TODO).
+
+## Not: çelişki seviyeyi değiştirmez (27 Eylül)
+
+Önceden tespitle çelişen bir rapor "olası yanıltma" sayılıp temasın seviyesini en az "yüksek"e çekiyordu ve LLM bunu düşüremiyordu. Görev tanımı s2 ("çelişki varsa raporu değil tespitinizi esas alın") ile çeliştiği için kaldırıldı. Gerçek verideki çelişkilerin çoğu, rapordaki "kamyon" ile modelin otomobil/minibüs dediği araç arasındaki tip uyuşmazlığıydı; bu kural büyük olasılıkla hatalı raporlar yüzünden park halindeki araçları "yüksek"e çıkarıyordu. Artık çelişen iddianın etkisi "none"; brief'te "rapor tespitle çelişiyor; tespit esas alındı" diye görünür ve aynı temasa ait bir dostluk iddiasının riski düşürmesini engeller.

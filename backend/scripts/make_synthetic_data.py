@@ -250,7 +250,7 @@ class ReportPlan:
     claim: ReportClaim
     expected: str
     """Beklenen rapor kararı (etiket biçiminde)."""
-    effect: Literal["raises_high", "raises_one", "lowers", "none"]
+    effect: Literal["raises_one", "lowers", "none"]
 
 
 @dataclass
@@ -464,7 +464,7 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
         source: ReportSource,
         claim: ReportClaim,
         expected: str,
-        effect: Literal["raises_high", "raises_one", "lowers", "none"] = "none",
+        effect: Literal["raises_one", "lowers", "none"] = "none",
         at: time = when,
     ) -> ReportPlan:
         return ReportPlan(kind, FieldReport(at, source, text), claim, expected, effect)
@@ -508,8 +508,7 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
             f"{_coord_text(here)} civarinda 1 {TYPE_TR[wrong]} goruldu.",
             ReportSource.OFFICIAL,
             _claim(**coord, vehicle_type=_claim_type_of(wrong)),
-            "contradicts",
-            "raises_high",
+            "contradicts",  # tespit esas alınır: seviye değişmez
         )
     if kind == "behavior_contradiction":
         # Odak araç üsse yakın park halinde; rapor onu üsse doğru ilerliyor gösteriyor.
@@ -517,11 +516,10 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
             f"{_coord_text(here)} konumundan usse dogru ilerleyen bir {tr_name} goruldu.",
             ReportSource.OFFICIAL,
             _claim(**coord, behavior="approaching"),
-            "contradicts",
-            "raises_high",
+            "contradicts",  # track esas alınır: seviye değişmez
         )
     if kind == "count_contradiction":
-        # Çevrede görülenin iki katından fazlası: sayı uyuşmaz ama tek başına risk yükseltmez.
+        # Çevrede görülenin iki katından fazlası: sayı uyuşmaz.
         seen = sum(
             1
             for v in scene.vehicles
@@ -600,9 +598,7 @@ def expected_level(scene: Scene, rules: RiskRules) -> RiskLevel:
         level = contact_level(v, rules)
         if v.focus and scene.report is not None:
             effect = scene.report.effect
-            if effect == "raises_high":
-                level = max(level, "high", key=LEVELS.index)
-            elif effect == "raises_one":
+            if effect == "raises_one":
                 level = LEVELS[min(LEVELS.index(level) + 1, len(LEVELS) - 1)]
             elif effect == "lowers":
                 level = "low"
