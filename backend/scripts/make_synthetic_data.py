@@ -384,14 +384,18 @@ def _build_scene(
 
     # Eşleştirme en yakın çift önce ve güçlü kutular önce yapıldığı için track'siz güçlü bir
     # kutu, 15 m içindeki zayıf ya da kaçırılmış aracın track'ini kapar. Senaryo bunu kurmaz.
+    # Kaçırılmış aracın yakınındaki komşulara track verilir; zayıf kutular güçlendirilir.
+    missed = [v for v in vehicles if v.behavior is not None and not v.detected]
+    for v in vehicles:
+        near_missed = any(distance_m(v.position, m.position) <= STEAL_RADIUS_M for m in missed)
+        if v.behavior is None and v.detected and near_missed and not v.focus:
+            v.behavior = "parked" if off_step else "local"
     untracked = [v for v in vehicles if v.behavior is None and v.detected]
     for v in vehicles:
         crowded = any(distance_m(v.position, u.position) <= STEAL_RADIUS_M for u in untracked)
-        if not crowded:
-            continue
-        if v.confidence < STRONG_CONFIDENCE:
+        if crowded and v.confidence < STRONG_CONFIDENCE:
             v.confidence = round(rng.uniform(0.6, 0.97), 2)
-        if v.behavior is not None and not v.detected:
+        if crowded and v.behavior is not None and not v.detected:
             raise GenerationError(f"{image_id}: kaçırılmış odak araç track'siz bir araca çok yakın")
 
     scene = Scene(source, meta, nearest_zone(center, ZONES).name, archetype, vehicles)
