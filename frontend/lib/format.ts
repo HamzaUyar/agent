@@ -6,8 +6,9 @@ const oneDecimal = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 })
 const integer = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 })
 const percent = new Intl.NumberFormat(LOCALE, { style: "percent", maximumFractionDigits: 0 })
 
-/** 1 km'nin altı metre, üstü bir ondalıklı kilometre. */
+/** 10 m'nin altı bir ondalıklı metre, 1 km'nin altı metre, üstü bir ondalıklı kilometre. */
 export function formatDistance(meters: number): string {
+  if (meters < 10) return `${oneDecimal.format(meters)} m`
   if (meters < 1000) return `${integer.format(meters)} m`
   return `${oneDecimal.format(meters / 1000)} km`
 }

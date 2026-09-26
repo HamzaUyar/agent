@@ -2,12 +2,14 @@ import { RISK, RISK_LEVELS } from "@/lib/labels"
 
 /**
  * Harita lejantı. Bölge alanının yaklaşık olduğu burada ve Bölge tooltip'inde açıkça yazar.
- * Değerlendirme varsa Temas türleri, seviye şekilleri, rota ve duraklama da açıklanır.
+ * Değerlendirme varsa Temas türleri, seviye şekilleri, rota ve duraklama da açıklanır; o zaman
+ * harita Temas'lara yaklaştığı için lejant katlanmış başlar (üstlerini örtmesin), başlığından açılır.
  */
 export function Lejant({ withContacts = false }: { withContacts?: boolean }) {
   return (
     <details
-      open
+      key={withContacts ? "temaslar" : "sahne"}
+      open={!withContacts}
       aria-label="Lejant"
       className="group absolute bottom-3 left-3 z-10 max-w-80 rounded-md border border-cizgi bg-yuzey/90 px-3 py-2 text-xs text-metin-ikincil"
     >

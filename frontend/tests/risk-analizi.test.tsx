@@ -53,7 +53,10 @@ describe("Risk analizi akışı", () => {
     expect(screen.getByText(/^Adım \d · /)).toBeInTheDocument()
 
     await screen.findByLabelText("Görüntü risk seviyesi", {}, { timeout: 2000 })
-    const items = within(stepsList()).getAllByRole("listitem")
+    // Brief gelince adımlar katlanır bir gruba geçer; sıraları aynı kalır.
+    const done = screen.getByRole("group", { name: "Değerlendirme adımları" })
+    expect(within(done).getByText("Değerlendirme adımları (8)")).toBeInTheDocument()
+    const items = within(done).getAllByRole("listitem")
     expect(items.map((li) => li.textContent)).toEqual(
       steps.map((s) => `${(s.data as { step_no: number }).step_no}${(s.data as { name: string }).name}${(s.data as { summary: string }).summary}`),
     )

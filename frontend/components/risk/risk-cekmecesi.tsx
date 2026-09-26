@@ -1,13 +1,18 @@
 "use client"
 
 import { Loader2 } from "lucide-react"
+import { useEffect, useRef } from "react"
 
 import { SeviyeRozeti, levelText } from "@/components/operasyon/seviye-rozeti"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Brief } from "@/lib/api/types"
+import { keyedContacts } from "@/lib/temas"
 import { useOperasyon, type Evaluation, type RiskTab } from "@/store/operasyon"
+
+import { TemasKarti } from "./temas-karti"
+import { TemasListesi } from "./temas-listesi"
 
 /** Göz atma hâlindeki dar şeridin özeti: "▲ Yüksek · 5 temas". */
 export function RiskOzeti() {
@@ -55,6 +60,26 @@ function DegerlendirmeDurumu({ evaluation }: { evaluation: Evaluation }) {
   const startEvaluation = useOperasyon((s) => s.startEvaluation)
   const brief = evaluation.brief
 
+  const steps = (
+    <ol className="flex flex-col gap-1.5">
+      {evaluation.steps.map((step) => (
+        <li key={step.step_no} className="grid grid-cols-[1.5rem_1fr] gap-x-2 text-xs">
+          <span className="font-mono text-metin-soluk">{step.step_no}</span>
+          <span>
+            <span className="font-mono font-bold">{step.name}</span>
+            <span className="block text-metin-ikincil">{step.summary}</span>
+          </span>
+        </li>
+      ))}
+      {evaluation.status === "streaming" && (
+        <li className="flex items-center gap-2 text-xs text-metin-soluk">
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          {evaluation.slow ? "Model yanıtı bekleniyor (en fazla 45 sn)" : "Sonraki adım bekleniyor…"}
+        </li>
+      )}
+    </ol>
+  )
+
   return (
     <>
       {brief && (
@@ -71,29 +96,43 @@ function DegerlendirmeDurumu({ evaluation }: { evaluation: Evaluation }) {
           </Button>
         </div>
       )}
-      <section aria-label="Değerlendirme adımları">
-        <h3 className="mb-1 text-xs font-bold tracking-wider text-metin-soluk uppercase">
-          Değerlendirme adımları
-        </h3>
-        <ol className="flex flex-col gap-1.5">
-          {evaluation.steps.map((step) => (
-            <li key={step.step_no} className="grid grid-cols-[1.5rem_1fr] gap-x-2 text-xs">
-              <span className="font-mono text-metin-soluk">{step.step_no}</span>
-              <span>
-                <span className="font-mono font-bold">{step.name}</span>
-                <span className="block text-metin-ikincil">{step.summary}</span>
-              </span>
-            </li>
-          ))}
-          {evaluation.status === "streaming" && (
-            <li className="flex items-center gap-2 text-xs text-metin-soluk">
-              <Loader2 aria-hidden className="size-3.5 animate-spin" />
-              {evaluation.slow ? "Model yanıtı bekleniyor (en fazla 45 sn)" : "Sonraki adım bekleniyor…"}
-            </li>
-          )}
-        </ol>
-      </section>
+      {brief && <SeciliTemas brief={brief} />}
+      {brief && <TemasListesi brief={brief} />}
+      {brief ? (
+        // Brief geldikten sonra adımlar katlanır; gerekçe için açılabilir.
+        <details aria-label="Değerlendirme adımları" className="rounded-md border border-cizgi px-2 py-1.5">
+          <summary className="cursor-pointer text-xs font-bold tracking-wider text-metin-soluk uppercase select-none">
+            Değerlendirme adımları ({evaluation.steps.length})
+          </summary>
+          <div className="mt-2">{steps}</div>
+        </details>
+      ) : (
+        <section aria-label="Değerlendirme adımları">
+          <h3 className="mb-1 text-xs font-bold tracking-wider text-metin-soluk uppercase">
+            Değerlendirme adımları
+          </h3>
+          {steps}
+        </section>
+      )}
     </>
+  )
+}
+
+/** Seçili Temas'ın detay kartı; seçilince görünür alana kaydırılır. */
+function SeciliTemas({ brief }: { brief: Brief }) {
+  const key = useOperasyon((s) => s.selectedContactKey)
+  const ref = useRef<HTMLDivElement>(null)
+  const selected = keyedContacts(brief).find((k) => k.key === key)
+
+  useEffect(() => {
+    if (key) ref.current?.scrollIntoView?.({ block: "nearest" })
+  }, [key])
+
+  if (!selected) return null
+  return (
+    <div ref={ref}>
+      <TemasKarti brief={brief} contact={selected.contact} />
+    </div>
   )
 }
 

@@ -5,7 +5,8 @@ import { useMemo } from "react"
 
 import { Button } from "@/components/ui/button"
 import { buildFootprint, buildScene } from "@/lib/harita/sahne"
-import { buildContactLayers } from "@/lib/harita/temaslar"
+import { buildContactLayers, contactBounds } from "@/lib/harita/temaslar"
+import type { MarkerGroup } from "@/lib/harita/types"
 import type { Basemap } from "@/lib/harita/types"
 import { cn } from "@/lib/utils"
 import { useOperasyon } from "@/store/operasyon"
@@ -38,7 +39,19 @@ export function HaritaPaneli() {
     [imageDetail],
   )
   const brief = useOperasyon((s) => (s.evaluation?.status === "done" ? s.evaluation.brief : null))
-  const contactLayers = useMemo(() => (brief ? buildContactLayers(brief) : null), [brief])
+  const selectedContactKey = useOperasyon((s) => s.selectedContactKey)
+  const selectContact = useOperasyon((s) => s.selectContact)
+  const contactLayers = useMemo(
+    () => (brief ? buildContactLayers(brief, selectedContactKey) : null),
+    [brief, selectedContactKey],
+  )
+  const selectedBounds = useMemo(
+    () => (brief && selectedContactKey ? contactBounds(brief, selectedContactKey) : null),
+    [brief, selectedContactKey],
+  )
+  const onMarkerClick = (group: MarkerGroup, id: string) => {
+    if (group === "temaslar") selectContact(id)
+  }
 
   // Her katman her zaman verilir: değerlendirme temizlenince eski Temas'lar da silinsin.
   const areas = useMemo(
@@ -68,9 +81,12 @@ export function HaritaPaneli() {
         basemap={basemap}
         areas={areas}
         markers={markers}
-        // Kare seçiliyken ayak izine yaklaşır; ayrıntısı yüklenirken görünüm yerinde kalır.
-        fitTo={selectedImageId ? (footprint?.bounds ?? null) : (scene?.bounds ?? null)}
+        // Seçili Temas varsa rotasına, yoksa kareye; ikisi de yoksa bütün sahneye.
+        fitTo={
+          selectedBounds ?? (selectedImageId ? (footprint?.bounds ?? null) : (scene?.bounds ?? null))
+        }
         onBasemapError={basemapError}
+        onMarkerClick={onMarkerClick}
       />
 
       <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">

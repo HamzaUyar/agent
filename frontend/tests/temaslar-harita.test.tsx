@@ -80,6 +80,8 @@ describe("Temas'lar ve rotalar haritada", () => {
       "12:10 · 120 dk",
     ])
     expect(screen.getByText("Kaçırılmış temas (tespit yok)")).toBeInTheDocument()
+    // Harita Temas'lara yaklaştığı için lejant katlanmış gelir (üstlerini örtmesin).
+    expect(screen.getByRole("group", { name: "Lejant" })).not.toHaveAttribute("open")
   })
 
   it("çekim anından sonraki rota noktası ve duraklama çizilmez (ADR-0001)", async () => {
@@ -126,14 +128,15 @@ describe("Görüntü üzerinde tespitler", () => {
     await evaluated()
     const drawer = screen.getByRole("region", { name: "Görüntü" })
 
-    const items = within(within(drawer).getByRole("list", { name: "Tespitler" })).getAllByRole("listitem")
-    expect(items.map((li) => li.getAttribute("aria-label"))).toEqual([
+    const list = within(drawer).getByRole("list", { name: "Tespitler" })
+    const boxes = within(list).getAllByRole("button")
+    expect(boxes.map((b) => b.getAttribute("aria-label"))).toEqual([
       "kamyon %91 · T0122 · Kritik",
       "otomobil %83 · track yok · Düşük",
       "T0032 · kaçırılmış temas, kutu yok · Orta",
     ])
     // Kutu, karenin yüzdesi olarak: (727, 284, 58, 34) / (960 × 540).
-    expect(items[0]).toHaveStyle({ left: `${(727 / 960) * 100}%`, top: `${(284 / 540) * 100}%` })
+    expect(within(list).getAllByRole("listitem")[0]).toHaveStyle({ left: `${(727 / 960) * 100}%`, top: `${(284 / 540) * 100}%` })
     expect(within(drawer).getByText(/2 tespit · 1 track'le eşleşti/)).toHaveTextContent(
       "kaçırılmış: T0032 (model görmedi)",
     )
@@ -146,7 +149,7 @@ describe("Görüntü üzerinde tespitler", () => {
     })
     await evaluated()
 
-    const weak = screen.getByRole("listitem", { name: /otomobil %83 · track yok · Düşük · zayıf tespit/ })
+    const weak = screen.getByRole("button", { name: /otomobil %83 · track yok · Düşük · zayıf tespit/ })
     expect(weak).toHaveClass("border-dashed")
   })
 })

@@ -63,6 +63,11 @@ type OperasyonState = {
   evaluation: Evaluation | null
   startEvaluation: (recompute?: boolean) => Promise<void>
 
+  /** Seçili Temas (lib/temas.ts `contactKey`); yalnızca o değerlendirme boyunca geçerli. */
+  selectedContactKey: string | null
+  /** Temas'ı seçer: harita, görüntü ve çekmece ona odaklanır; çekmece yarım açılır. */
+  selectContact: (key: string | null) => void
+
   left: Drawer<LeftPanel>
   right: Drawer<RightPanel>
   riskTab: RiskTab
@@ -128,7 +133,12 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
     selectImage: (imageId) => {
       if (get().selectedImageId === imageId) return
       stopStream()
-      set({ selectedImageId: imageId, imageDetail: { status: "loading" }, evaluation: null })
+      set({
+        selectedImageId: imageId,
+        imageDetail: { status: "loading" },
+        evaluation: null,
+        selectedContactKey: null,
+      })
       getImage(imageId).then(
         (data) => get().selectedImageId === imageId && set({ imageDetail: { status: "ready", data } }),
         (e) =>
@@ -162,6 +172,7 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
         slowTimer = setTimeout(() => patchEvaluation(signal, { slow: true }), SLOW_AFTER_MS)
       }
       set({
+        selectedContactKey: null,
         evaluation: {
           imageId,
           status: "streaming",
@@ -232,6 +243,22 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
         }
       }
     },
+
+    selectedContactKey: null,
+    selectContact: (key) =>
+      set((s) =>
+        key === null
+          ? { selectedContactKey: null }
+          : {
+              selectedContactKey: key,
+              riskTab: "temaslar",
+              lastSide: "right",
+              right: {
+                panel: "risk",
+                state: s.right.panel && s.right.state === "full" ? "full" : "half",
+              },
+            },
+      ),
 
     left: closed,
     right: closed,

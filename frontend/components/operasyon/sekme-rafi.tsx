@@ -21,7 +21,8 @@ export function SekmeRafi({ side }: { side: Side }) {
     label,
     shortcut,
     active: right.panel !== null && riskTab === tab,
-    onClick: () => (right.panel && riskTab === tab ? close("right") : openRight(tab)),
+    onClick: () =>
+      right.panel && right.state !== "peek" && riskTab === tab ? close("right") : openRight(tab),
   })
 
   const tabs =

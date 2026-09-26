@@ -1,5 +1,7 @@
-import { screen, within } from "@testing-library/react"
+import { act, screen, within } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
+
+import { useOperasyon } from "@/store/operasyon"
 
 import { renderEkran as setup } from "./render"
 
@@ -70,6 +72,16 @@ describe("Operasyon ekranı kabuğu", () => {
 
     expect(drawer("Görüntü")).not.toBeInTheDocument()
     expect(drawer("Risk & Temaslar")).toBeInTheDocument()
+  })
+
+  it("göz atma hâlindeki çekmece kısayolla önce yarım açılır, sonra kapanır", async () => {
+    const { user } = setup()
+    act(() => useOperasyon.setState({ right: { panel: "risk", state: "peek" } }))
+
+    await user.keyboard("r")
+    expect(drawer("Risk & Temaslar")).toHaveAttribute("data-state", "half")
+    await user.keyboard("r")
+    expect(drawer("Risk & Temaslar")).not.toBeInTheDocument()
   })
 
   it("Genişlet çekmeceyi tam hâle, Daralt yarım hâle getirir", async () => {

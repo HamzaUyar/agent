@@ -6,7 +6,7 @@ import type { FeatureCollection } from "geojson"
 
 import type { Brief, ContactFinding, RoutePoint } from "@/lib/api/types"
 import { formatDegrees, formatDistance } from "@/lib/format"
-import { toLngLat } from "@/lib/geo"
+import { boundsOf, circleRing, toLngLat, type Bounds } from "@/lib/geo"
 import { CERTAINTY, CONTACT_KIND, RISK, TREND, vehicleClass } from "@/lib/labels"
 import { bySeverity, contactName, keyedContacts } from "@/lib/temas"
 
@@ -43,7 +43,7 @@ export type ContactLayers = {
   routeTimes: MapMarker[]
 }
 
-export function buildContactLayers(brief: Brief): ContactLayers {
+export function buildContactLayers(brief: Brief, selectedKey: string | null = null): ContactLayers {
   const keyed = keyedContacts(brief)
   const routes: FeatureCollection = { type: "FeatureCollection", features: [] }
   const stops: MapMarker[] = []
@@ -56,7 +56,12 @@ export function buildContactLayers(brief: Brief): ContactLayers {
     if (route.length >= 2) {
       routes.features.push({
         type: "Feature",
-        properties: { key, level: contact.final_level },
+        properties: {
+          key,
+          level: contact.final_level,
+          selected: key === selectedKey,
+          dimmed: selectedKey !== null && key !== selectedKey,
+        },
         geometry: { type: "LineString", coordinates: route.map(toLngLat) },
       })
     }
@@ -83,10 +88,23 @@ export function buildContactLayers(brief: Brief): ContactLayers {
       lngLat: toLngLat(contact.location),
       label: `${RISK[contact.final_level].shape} ${contactName(contact)}${m ? ` · ${TREND[m.trend]}` : ""}`,
       description: describe(contact),
-      variant: [contact.kind, contact.final_level],
+      variant: [contact.kind, contact.final_level, ...(key === selectedKey ? ["secili"] : [])],
       headingDeg: heading,
     }
   })
 
   return { routes, contacts, stops, routeTimes }
+}
+
+/** Seçili Temas'a yaklaşırken görünür olacak kutu: konumu ve (varsa) çekim anına kadarki rotası. */
+export function contactBounds(brief: Brief, key: string): Bounds | null {
+  const found = keyedContacts(brief).find((k) => k.key === key)
+  if (!found) return null
+  const { contact } = found
+  const points = [
+    toLngLat(contact.location),
+    ...untilCapture(contact.motion?.route ?? [], brief.capture_time).map(toLngLat),
+  ]
+  // Duran bir Temas için tek nokta: çevresinde ~300 m bırak.
+  return boundsOf([...points, ...circleRing(toLngLat(contact.location), 300, 8)])
 }

@@ -64,3 +64,14 @@ export const EFFECT: Record<Effect, { label: string; symbol: string }> = {
   lowers: { label: "düşürür", symbol: "↓" },
   none: { label: "yok", symbol: "–" },
 }
+
+/** Rapor kaynağı; backend'in `official / third_party` değerleri. */
+export const REPORT_SOURCE: Record<string, string> = {
+  official: "resmi",
+  third_party: "üçüncü taraf",
+}
+
+export const reportSource = (source: string) => REPORT_SOURCE[source] ?? source
+
+/** Görsel doğrulamanın yük durumu. */
+export const CARGO: Record<string, string> = { loaded: "yüklü", empty: "boş" }

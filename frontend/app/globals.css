@@ -356,3 +356,18 @@
     border-right: 3px solid var(--metin);
   }
 }
+
+/* Seçili Temas: seçim renginde halka ve etiket çerçevesi; diğerlerinin üstünde. */
+@layer components {
+  .harita-isaret--secili {
+    z-index: 20 !important;
+  }
+  .harita-isaret--secili .harita-isaret__simge {
+    outline: 3px solid var(--secim);
+    outline-offset: 2px;
+  }
+  .harita-isaret--secili .harita-isaret__etiket {
+    border-color: var(--secim);
+    box-shadow: 0 0 0 2px var(--secim-zemin);
+  }
+}

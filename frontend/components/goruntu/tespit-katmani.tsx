@@ -5,6 +5,7 @@ import { formatConfidence } from "@/lib/format"
 import { RISK, vehicleClass } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import { keyedContacts, toPixel } from "@/lib/temas"
+import { useOperasyon } from "@/store/operasyon"
 
 const TONE = {
   low: "border-risk-dusuk text-risk-dusuk",
@@ -22,6 +23,8 @@ const pct = (value: number, total: number) => `${(value / total) * 100}%`
  */
 export function TespitKatmani({ brief, image }: { brief: Brief; image: ImageDetail }) {
   const { width_px: W, height_px: H } = image
+  const selectedKey = useOperasyon((s) => s.selectedContactKey)
+  const selectContact = useOperasyon((s) => s.selectContact)
 
   return (
     <ul aria-label="Tespitler" className="absolute inset-0">
@@ -36,31 +39,50 @@ export function TespitKatmani({ brief, image }: { brief: Brief; image: ImageDeta
           return (
             <li
               key={key}
-              aria-label={`${label} · ${RISK[level].label}${contact.is_weak ? " · zayıf tespit" : ""}`}
-              className={cn("absolute border-2", TONE[level], contact.is_weak && "border-dashed")}
+              className="absolute"
               style={{ left: pct(x, W), top: pct(y, H), width: pct(w, W), height: pct(h, H) }}
             >
-              <span className="absolute -top-4 left-0 rounded-sm bg-zemin/85 px-1 text-[10px] leading-4 whitespace-nowrap text-metin">
-                {RISK[level].shape} {label}
-              </span>
+              <button
+                type="button"
+                aria-pressed={key === selectedKey}
+                aria-label={`${label} · ${RISK[level].label}${contact.is_weak ? " · zayıf tespit" : ""}`}
+                onClick={() => selectContact(key)}
+                className={cn(
+                  "absolute inset-0 border-2",
+                  TONE[level],
+                  contact.is_weak && "border-dashed",
+                  key === selectedKey && "ring-2 ring-secim ring-offset-1 ring-offset-zemin",
+                )}
+              >
+                <span className="absolute -top-4 left-0 rounded-sm bg-zemin/85 px-1 text-[10px] leading-4 whitespace-nowrap text-metin">
+                  {RISK[level].shape} {label}
+                </span>
+              </button>
             </li>
           )
         }
         // Kaçırılmış temas: kutu yok; track'in çekim anındaki konumu.
         const p = toPixel(image, contact.location.lat, contact.location.lon)
         return (
-          <li
-            key={key}
-            aria-label={`${name} · kaçırılmış temas, kutu yok · ${RISK[level].label}`}
-            className={cn("absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed", TONE[level])}
-            style={{ left: pct(p.x, W), top: pct(p.y, H) }}
-          >
-            <span aria-hidden className="absolute inset-0 flex items-center justify-center text-xs font-bold">
-              ⃠
-            </span>
-            <span className="absolute top-5 left-1/2 -translate-x-1/2 rounded-sm bg-zemin/85 px-1 text-[10px] leading-4 whitespace-nowrap text-metin">
-              {RISK[level].shape} {name} (kutu yok)
-            </span>
+          <li key={key} className="absolute" style={{ left: pct(p.x, W), top: pct(p.y, H) }}>
+            <button
+              type="button"
+              aria-pressed={key === selectedKey}
+              aria-label={`${name} · kaçırılmış temas, kutu yok · ${RISK[level].label}`}
+              onClick={() => selectContact(key)}
+              className={cn(
+                "absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed",
+                TONE[level],
+                key === selectedKey && "ring-2 ring-secim ring-offset-1 ring-offset-zemin",
+              )}
+            >
+              <span aria-hidden className="absolute inset-0 flex items-center justify-center text-xs font-bold">
+                ⃠
+              </span>
+              <span className="absolute top-5 left-1/2 -translate-x-1/2 rounded-sm bg-zemin/85 px-1 text-[10px] leading-4 whitespace-nowrap text-metin">
+                {RISK[level].shape} {name} (kutu yok)
+              </span>
+            </button>
           </li>
         )
       })}

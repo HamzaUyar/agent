@@ -142,7 +142,8 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
               css("--risk-orta"),
               css("--risk-dusuk"),
             ],
-            "line-width": 2.5,
+            "line-width": ["case", ["get", "selected"], 4.5, 2.5],
+            "line-opacity": ["case", ["get", "dimmed"], 0.35, 1],
           },
         },
       ]

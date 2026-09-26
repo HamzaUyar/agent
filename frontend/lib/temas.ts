@@ -2,6 +2,7 @@
  * Temas yardımcıları: seçim anahtarı, sıralama, görünen ad ve görüntü üzerindeki konum.
  */
 import type { Brief, ContactFinding, ImageDetail } from "@/lib/api/types"
+import { haversineM, toLngLat } from "@/lib/geo"
 import { CONTACT_KIND, RISK, vehicleClass } from "@/lib/labels"
 
 /**
@@ -49,4 +50,21 @@ export function toPixel(image: ImageDetail, lat: number, lon: number): { x: numb
     x: ((lon - tlLon) / (trLon - tlLon)) * image.width_px,
     y: ((tlLat - lat) / (tlLat - blLat)) * image.height_px,
   }
+}
+
+export type DistancePoint = { time: string | null; meters: number }
+
+/**
+ * Üs'e mesafenin çekim anına kadarki seyri: rota noktalarından istemcide (haversine) hesaplanır.
+ * Görüntüleme içindir; seviye ve eğilim backend'den gelir.
+ */
+export function distanceSeries(
+  route: { lat: number; lon: number; time?: string | null }[],
+  base: { lat: number; lon: number },
+  captureTime: string,
+): DistancePoint[] {
+  const b = toLngLat(base)
+  return route
+    .filter((p) => !p.time || p.time <= captureTime)
+    .map((p) => ({ time: p.time ?? null, meters: haversineM(toLngLat(p), b) }))
 }

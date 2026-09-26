@@ -47,12 +47,13 @@ export function useKisayollar() {
       }
 
       switch (event.key.toLocaleLowerCase("tr-TR")) {
+        // Göz atma hâlindeki çekmece önce genişler; açık çekmecede aynı kısayol kapatır.
         case "r":
-          if (s.right.panel && s.riskTab === "temaslar") s.close("right")
+          if (s.right.panel && s.right.state !== "peek" && s.riskTab === "temaslar") s.close("right")
           else s.openRight("temaslar")
           break
         case "b":
-          if (s.right.panel && s.riskTab === "brief") s.close("right")
+          if (s.right.panel && s.right.state !== "peek" && s.riskTab === "brief") s.close("right")
           else s.openRight("brief")
           break
         case "g":
