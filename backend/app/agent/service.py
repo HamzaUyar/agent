@@ -592,6 +592,7 @@ def _finding(e: ClaimEvaluation) -> ReportFinding:
         verdict=e.verdict,
         certainty=e.certainty,
         effect=e.effect,
+        time_check=e.time_check,
         reasoning=e.reasoning,
     )
 
@@ -602,6 +603,14 @@ VERDICT_TR = {
     "unverifiable": "doğrulanamaz",
     "irrelevant": "ilgisiz",
 }
+
+
+TIME_TR = {"ok": "saat tutuyor", "mismatch": "saat tutmuyor", "unknown": "saat bilinmiyor"}
+
+
+def _time_tag(f: ReportFinding) -> str:
+    """Bir temasa bağlanmış iddianın rapor saatindeki konum kontrolü."""
+    return f", {TIME_TR[f.time_check]}" if f.track_id else ""
 
 
 def _reports_summary(findings: list[ReportFinding]) -> str:
@@ -690,7 +699,7 @@ def _brief_text(
         lines.append("Raporlar:")
         lines += [
             f"- {f.report_time} ({'resmi' if f.source == 'official' else 'üçüncü taraf'}): "
-            f"{VERDICT_TR[f.verdict]}; {f.reasoning}."
+            f"{VERDICT_TR[f.verdict]}{_time_tag(f)}; {f.reasoning}."
             for f in findings
         ]
     lines.append(f"Önerilen eylem: {action}")

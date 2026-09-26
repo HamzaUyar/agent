@@ -1,8 +1,10 @@
 """KOL C: rapor iddialarını temaslarla karşılaştırır (ADR-0002: asimetrik güven).
 
-Kararı kod verir. Bir iddia, **rapor saatinde** konumuna en yakın temasa bağlanır.
+Kararı kod verir. Bir iddia, **çekim anında** konumuna en yakın temasa bağlanır; organizatör
+rapor koordinatlarını aracın çekim anındaki konumundan üretmiş. Saat ayrı bir doğrulama
+özelliğidir: bağlanan temasın rapor saatindeki konumu iddia noktasıyla karşılaştırılır.
 Raporlar riski serbestçe yükseltebilir. Düşürebilmeleri için kaynağın resmi olması ve
-iddianın belirttiği her özelliğin (konum, zaman, tip, renk, yük) doğrulanması gerekir.
+iddianın belirttiği her özelliğin (konum, saat, tip, renk, yük) doğrulanması gerekir.
 Renk ve yük, yalnızca iddia bunları belirtiyorsa görsel doğrulamaya (VLM) sorulur.
 """
 
@@ -15,7 +17,7 @@ from app.core.rules import ReportRules
 from app.data_package import format_hhmm, to_minutes
 from app.pipelines.geo import distance_m
 from app.pipelines.vision import normalize_color
-from app.schemas.api import Certainty, Effect, Verdict, VisualFinding
+from app.schemas.api import Certainty, Effect, TimeCheck, Verdict, VisualFinding
 from app.schemas.claims import ClaimRecord, ClaimVehicleType
 from app.schemas.domain import CargoState, GeoPoint, ReportSource, VehicleClass
 
@@ -49,6 +51,7 @@ class ClaimEvaluation:
     certainty: Certainty
     effect: Effect
     reasoning: str
+    time_check: TimeCheck = "unknown"
 
 
 PositionAt = Callable[[str, time], GeoPoint | None]
@@ -144,6 +147,7 @@ def evaluate_claims(
             GeoPoint(claim.lat, claim.lon),
             contacts,
             image_center,
+            now,
             rules,
             position_at,
             observe,
@@ -153,11 +157,40 @@ def evaluate_claims(
     return results
 
 
+TIME_NOTE: dict[TimeCheck, str] = {
+    "ok": "",
+    "mismatch": "; rapor saatindeki konumu uyuşmuyor",
+    "unknown": "; rapor saatindeki konumu bilinmiyor",
+}
+
+
+def _time_check(
+    contact: ContactView,
+    point: GeoPoint,
+    when: time,
+    now: time,
+    rules: ReportRules,
+    position_at: PositionAt,
+) -> TimeCheck:
+    """Bağlanan temasın rapor saatinde iddia noktasında olup olmadığı.
+
+    Rapor çekim anındaysa temasın şimdiki konumu kullanılır: çekim saati 5 dakikalık
+    adıma denk gelmiyorsa `position_at` bir önceki adımın konumunu verir.
+    """
+    if when == now:
+        return "ok" if distance_m(contact.location, point) <= rules.match_m else "mismatch"
+    pos = position_at(contact.track_id, when) if contact.track_id else None
+    if pos is None:
+        return "unknown"
+    return "ok" if distance_m(pos, point) <= rules.match_m else "mismatch"
+
+
 def _evaluate_located(
     record: ClaimRecord,
     point: GeoPoint,
     contacts: list[ContactView],
     image_center: GeoPoint,
+    now: time,
     rules: ReportRules,
     position_at: PositionAt,
     observe: Observe,
@@ -165,55 +198,40 @@ def _evaluate_located(
     claim, report = record.claim, record.report
     when = format_hhmm(report.time)
 
-    at_report: list[tuple[float, ContactView]] = []
-    known_at_report: set[str] = set()  # rapor saatinde konumu kayıtlı track'ler
-    for c in contacts:
-        pos = position_at(c.track_id, report.time) if c.track_id else None
-        if pos is not None and c.track_id:
-            known_at_report.add(c.track_id)
-        if pos is not None and (d := distance_m(pos, point)) <= rules.match_m:
-            at_report.append((d, c))
-    now_near = [(d, c) for c in contacts if (d := distance_m(c.location, point)) <= rules.match_m]
-    relevant = distance_m(image_center, point) <= rules.relevance_m or at_report or now_near
-    if not relevant:
+    near = [(d, c) for c in contacts if (d := distance_m(c.location, point)) <= rules.bind_now_m]
+    if distance_m(image_center, point) > rules.relevance_m and not near:
         return None
 
-    linked = min(at_report, key=lambda x: x[0])[1] if at_report else None
+    linked = min(near, key=lambda x: x[0])[1] if near else None
     track_id = linked.track_id if linked else None
+    time_check = (
+        _time_check(linked, point, report.time, now, rules, position_at) if linked else "unknown"
+    )
+
+    def result(
+        verdict: Verdict, certainty: Certainty, effect: Effect, reasoning: str
+    ) -> ClaimEvaluation:
+        if linked is not None and track_id is None and effect != "none":
+            # Rapor etkileri temasa track'i üzerinden uygulanır; kayıt dışı temasın seviyesi
+            # rapordan etkilenmez (ADR-0003).
+            effect = "none"
+            reasoning += "; kayıt dışı temasın seviyesine uygulanmadı"
+        return ClaimEvaluation(record, track_id, verdict, certainty, effect, reasoning, time_check)
 
     if claim.claim_type == "irrelevant":
-        return ClaimEvaluation(
-            record, track_id, "irrelevant", "likely", "none", "üs güvenliğiyle ilgisiz"
-        )
+        return result("irrelevant", "likely", "none", "üs güvenliğiyle ilgisiz")
     if claim.claim_type == "rumor":
-        return ClaimEvaluation(
-            record, track_id, "unverifiable", "unverified", "none", "doğrulanmamış ihbar/söylenti"
-        )
+        return result("unverifiable", "unverified", "none", "doğrulanmamış ihbar/söylenti")
 
     if linked is None:
-        # Çelişki ancak track'in rapor saatinde başka bir yerde olduğu biliniyorsa vardır;
-        # o saatte kaydı olmayan track için veri yok, çelişki de yok.
-        tracked_now = [(d, c) for d, c in now_near if c.track_id in known_at_report]
-        if tracked_now:
-            contact = min(tracked_now, key=lambda x: x[0])[1]
-            return ClaimEvaluation(
-                record,
-                contact.track_id,
-                "contradicts",
-                "likely",
-                "raises",
-                f"rapor saat {when} için bu noktada araç bildiriyor; {contact.track_id} o saatte "
-                "orada değildi (kendi track'iyle çelişiyor)",
-            )
-        return ClaimEvaluation(
-            record,
-            None,
+        return result(
             "unverifiable",
             "unverified",
             "none",
-            f"saat {when} itibarıyla bu noktada kayıtlı bir temas yok; karşılaştırılamadı",
+            "çekim anında bu noktada bir temas yok; karşılaştırılamadı",
         )
 
+    who = track_id or "kayıt dışı temas"
     needs_visual = bool(claim.color) or claim.cargo is not None
     visual = observe(track_id) if needs_visual and track_id else None
     checks = {
@@ -225,62 +243,63 @@ def _evaluate_located(
     unverified = [name for name, v in checks.items() if v == "unverified"]
     friendly = claim.claim_type == "friendly_claim"
     official = report.source == ReportSource.OFFICIAL
+    time_note = TIME_NOTE[time_check]
 
     if mismatched:
         # Yalnızca VLM'in gördüğüne dayanan çelişki "olası"; tip çelişkisi kesin.
         visual_only = set(mismatched) <= VISUAL_CHECKS
-        return ClaimEvaluation(
-            record,
-            track_id,
+        return result(
             "contradicts",
             "likely" if visual_only else "certain",
             "raises",
-            f"{track_id} konum ve saat uyuyor ama {', '.join(mismatched)} uyuşmuyor",
+            f"{who} iddianın konumunda ama {', '.join(mismatched)} uyuşmuyor{time_note}",
         )
     if friendly and unverified:
-        return ClaimEvaluation(
-            record,
-            track_id,
+        return result(
             "unverifiable",
             "unverified",
             "none",
-            f"dostluk iddiası doğrulanamadı: {', '.join(unverified)} kontrol edilemedi",
+            f"dostluk iddiası doğrulanamadı: {', '.join(unverified)} kontrol edilemedi{time_note}",
+        )
+    if friendly and track_id is None:
+        return result(
+            "unverifiable",
+            "unverified",
+            "none",
+            "dostluk iddiası doğrulanamadı: kayıt dışı temasın hareket kaydı yok",
+        )
+    if friendly and time_check != "ok":
+        # Düşürmek için saat de tutmalı (ADR-0002): rapor saatinde araç orada değilse
+        # ya da o saatteki konumu bilinmiyorsa iddia bu araca ait olmayabilir.
+        return result(
+            "unverifiable",
+            "unverified",
+            "none",
+            f"dostluk iddiası doğrulanamadı: {who} konumda ama saat {when} "
+            + ("konumu iddiayla uyuşmuyor" if time_check == "mismatch" else "konumu bilinmiyor"),
         )
     if friendly and not official:
-        return ClaimEvaluation(
-            record,
-            track_id,
+        return result(
             "consistent",
             "likely",
             "none",
-            f"{track_id} ile uyuşuyor ama üçüncü taraf dostluk iddiası riski düşüremez",
+            f"{who} ile uyuşuyor ama üçüncü taraf dostluk iddiası riski düşüremez",
         )
     if friendly:
-        return ClaimEvaluation(
-            record,
-            track_id,
+        return result(
             "consistent",
             "certain",
             "lowers",
-            f"resmi dostluk iddiası {track_id} ile konum, saat ve belirtilen her özellikte "
+            f"resmi dostluk iddiası {who} ile konum, saat ve belirtilen her özellikte "
             "uyuşuyor: doğrulanmış dost",
         )
-    certainty: Certainty = "likely" if unverified else "certain"
+    certainty: Certainty = "likely" if unverified or time_check != "ok" else "certain"
     note = f" ({', '.join(unverified)} doğrulanamadı)" if unverified else ""
     if claim.claim_type == "threat_warning":
-        return ClaimEvaluation(
-            record,
-            track_id,
-            "consistent",
-            certainty,
-            "raises",
-            f"{track_id} hakkında tehdit uyarısı{note}",
+        return result(
+            "consistent", certainty, "raises", f"{who} hakkında tehdit uyarısı{note}{time_note}"
         )
-    return ClaimEvaluation(
-        record,
-        track_id,
-        "consistent",
-        certainty,
-        "none",
-        f"{track_id} ile saat {when} konumunda uyuşuyor{note}",
+    where = f"konumunda ve saat {when} itibarıyla" if time_check == "ok" else "konumunda"
+    return result(
+        "consistent", certainty, "none", f"{who} iddianın {where} uyuşuyor{note}{time_note}"
     )

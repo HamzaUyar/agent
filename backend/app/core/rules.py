@@ -27,6 +27,7 @@ class MotionRules:
 class ReportRules:
     window_minutes: int
     relevance_m: float
+    bind_now_m: float
     match_m: float
 
 

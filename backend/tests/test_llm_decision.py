@@ -338,3 +338,36 @@ def test_llm_cannot_lower_a_contact_that_a_report_has_raised() -> None:
     assert (base, final) == ("medium", "high")  # tehdit uyarısı +1; LLM düşüremedi
     [c] = [c for c in brief.contacts if c.track_id == "T0032"]
     assert c.adjustment_rejected is not None and "yükseltti" in c.adjustment_rejected
+
+
+def test_lowering_citing_a_claim_whose_report_time_does_not_match_is_rejected() -> None:
+    """İddia T0122'nin çekim anındaki noktasını gösteriyor ama T0122 12:35'te orada değildi."""
+    t0122_now = next(
+        p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
+    )
+    stale = ClaimRecord(
+        claim_id=7,
+        report=FieldReport(time(12, 35), ReportSource.OFFICIAL, "1 agir arac, hareketleri olagan"),
+        claim=CONSISTENT_CLAIM.claim.model_copy(
+            update={"lat": t0122_now.lat, "lon": t0122_now.lon}
+        ),
+    )
+    brief = run(
+        FakeProvider(
+            draft(
+                [
+                    {
+                        "contact": "K1",
+                        "level": "high",
+                        "reason": "resmi rapor olağan diyor",
+                        "evidence_claim_ids": [7],
+                    }
+                ]
+            )
+        ),
+        claims=[stale],
+    )
+
+    assert level_of(brief, "T0122") == ("critical", "critical")
+    [c] = [c for c in brief.contacts if c.track_id == "T0122"]
+    assert c.adjustment_rejected is not None and "saat" in c.adjustment_rejected

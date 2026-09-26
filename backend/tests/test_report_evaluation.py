@@ -30,9 +30,12 @@ from app.schemas.domain import (
 FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 PACKAGE = read_package(FIXTURE)
 TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
-T0122_AT_1405 = next(
-    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 5)
+# Dostluk iddiaları çekim anında (14:10) T0122'nin olduğu noktayı ve saati bildirir:
+# konum, saat ve tip tutar.
+T0122_AT_1410 = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
 )
+AT_CAPTURE = time(14, 10)
 OFFICIAL, THIRD = ReportSource.OFFICIAL, ReportSource.THIRD_PARTY
 
 
@@ -160,14 +163,21 @@ def test_day_wide_friendly_claim_without_location_is_listed_as_unverifiable() ->
     assert (f.verdict, f.effect, f.track_id) == ("unverifiable", "none", None)
 
 
-def test_report_is_compared_with_where_the_vehicle_was_at_report_time() -> None:
+def test_claim_is_bound_to_the_contact_at_its_point_at_capture_time() -> None:
+    """Organizatör demosu (12:35): rapor noktası çekim anında T0122'nin konumu.
+
+    Eskiden iddia rapor saatinde o noktada olan araca (park halindeki T0032) bağlanıyordu;
+    gerçek veride rapor koordinatları aracın çekim anındaki konumundan üretilmiş.
+    """
     brief = evaluate(FIXTURE_CLAIMS)
 
-    # 12:35'te o noktada T0122 değil, park halindeki T0032 vardı (~38 m).
     f = finding(brief, 2)
-    assert f.track_id == "T0032"
-    assert f.verdict == "consistent"
-    assert f.certainty == "likely"  # "ağır araç" doğrulanamadı: T0032'nin tipi bilinmiyor
+    assert f.track_id == "T0122"
+    assert (f.verdict, f.effect) == ("consistent", "none")
+    # T0122 12:35'te kilometrelerce uzaktaydı: saat tutmuyor, ama risk yükselmiyor.
+    assert f.time_check == "mismatch"
+    assert contact(brief, "T0122").final_level == contact(brief, "T0122").base_level
+    assert "- 12:35 (resmi): tutarlı, saat tutmuyor;" in brief.text
 
 
 def test_reports_do_not_change_the_reference_levels() -> None:
@@ -224,10 +234,10 @@ def test_irrelevant_and_rumor_claims_do_not_affect_risk() -> None:
 def test_official_friendly_claim_matching_everything_makes_a_verified_friend() -> None:
     friend = record(
         10,
-        time(14, 5),
+        AT_CAPTURE,
         OFFICIAL,
         "T0122 dost devriye, kimlik teyitli",
-        at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="truck"),
+        at(T0122_AT_1410, claim_type="friendly_claim", vehicle_type="truck"),
     )
 
     brief = evaluate([friend])
@@ -242,10 +252,10 @@ def test_official_friendly_claim_matching_everything_makes_a_verified_friend() -
 def test_third_party_friendly_claim_cannot_lower_risk() -> None:
     friend = record(
         10,
-        time(14, 5),
+        AT_CAPTURE,
         THIRD,
         "dost devriye",
-        at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="truck"),
+        at(T0122_AT_1410, claim_type="friendly_claim", vehicle_type="truck"),
     )
 
     brief = evaluate([friend])
@@ -258,10 +268,10 @@ def test_third_party_friendly_claim_cannot_lower_risk() -> None:
 def test_official_friendly_claim_with_unverifiable_color_does_not_lower_risk() -> None:
     friend = record(
         10,
-        time(14, 5),
+        AT_CAPTURE,
         OFFICIAL,
         "mavi kamyon dost",
-        at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="truck", color="mavi"),
+        at(T0122_AT_1410, claim_type="friendly_claim", vehicle_type="truck", color="mavi"),
     )
 
     brief = evaluate([friend])
@@ -273,10 +283,10 @@ def test_official_friendly_claim_with_unverifiable_color_does_not_lower_risk() -
 def test_official_friendly_claim_with_wrong_type_contradicts() -> None:
     friend = record(
         10,
-        time(14, 5),
+        AT_CAPTURE,
         OFFICIAL,
         "binek arac dost",
-        at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="car"),
+        at(T0122_AT_1410, claim_type="friendly_claim", vehicle_type="car"),
     )
 
     brief = evaluate([friend])
@@ -328,17 +338,38 @@ def parked_scene(parked_since: time) -> tuple[DataPackage, dict[str, list[Detect
     return package, {"img_7000": [box]}
 
 
-def test_report_contradicting_the_contacts_own_track_raises_to_high() -> None:
+def test_observation_whose_report_time_does_not_match_the_track_does_not_raise_risk() -> None:
+    """Eskiden "kendi track'iyle çelişiyor → yüksek" sayılıyordu.
+
+    Gerçek veride rapor koordinatları aracın çekim anındaki konumundan üretilmiş; rapor
+    saatinde aracın başka yerde olması tek başına yanıltma kanıtı değil, yalnızca not düşülür.
+    """
     package, detections = parked_scene(parked_since=time(14, 0))
     spot = east_of_base(4_000)
     # 13:30'da bu noktada araç olduğunu söylüyor; T7000 o saatte 8 km ötedeydi.
-    lie = record(10, time(13, 30), OFFICIAL, "burada 1 arac bekliyor", at(spot, vehicle_type="car"))
+    report = record(
+        10, time(13, 30), OFFICIAL, "burada 1 arac bekliyor", at(spot, vehicle_type="car")
+    )
+
+    brief = evaluate([report], package, detections, "img_7000")
+
+    c = contact(brief, "T7000")
+    assert c.final_level == c.base_level == "low"
+    f = finding(brief, 10)
+    assert (f.track_id, f.verdict, f.effect) == ("T7000", "consistent", "none")
+    assert f.time_check == "mismatch"
+    assert "uyuşmuyor" in f.reasoning
+
+
+def test_observation_with_the_wrong_type_contradicts_and_raises_to_high() -> None:
+    package, detections = parked_scene(parked_since=time(12, 0))
+    lie = record(
+        10, time(13, 30), OFFICIAL, "burada 1 kamyon", at(east_of_base(4_000), vehicle_type="truck")
+    )
 
     brief = evaluate([lie], package, detections, "img_7000")
 
-    c = contact(brief, "T7000")
-    assert c.base_level == "low"
-    assert c.final_level == "high"
+    assert contact(brief, "T7000").final_level == "high"
     assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("contradicts", "raises")
 
 
@@ -364,7 +395,8 @@ def test_contradiction_wins_over_a_verified_friendly_claim() -> None:
     friend = record(
         10, time(14, 5), OFFICIAL, "dost", at(spot, claim_type="friendly_claim", vehicle_type="car")
     )
-    lie = record(11, time(13, 30), OFFICIAL, "burada 1 arac", at(spot, vehicle_type="car"))
+    # Eskiden saat çelişkisiyle kurulan yalan artık tip çelişkisiyle kuruluyor.
+    lie = record(11, time(13, 30), OFFICIAL, "burada 1 kamyon", at(spot, vehicle_type="truck"))
 
     brief = evaluate([friend, lie], package, detections, "img_7000")
 
@@ -384,7 +416,7 @@ def test_report_step_is_streamed_before_the_risk_step() -> None:
     assert names.index("raporlar") == names.index("risk") - 1
 
 
-def test_track_without_a_record_at_report_time_is_not_a_contradiction() -> None:
+def test_track_without_a_record_at_report_time_leaves_the_time_unknown() -> None:
     package, detections = parked_scene(parked_since=time(14, 0))
     # T7000'in kaydı ancak 13:40'ta başlıyor; 13:30'daki konumu bilinmiyor.
     package = replace(
@@ -394,5 +426,142 @@ def test_track_without_a_record_at_report_time_is_not_a_contradiction() -> None:
 
     brief = evaluate([claim_], package, detections, "img_7000")
 
-    assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("unverifiable", "none")
+    f = finding(brief, 10)
+    assert (f.track_id, f.effect, f.time_check) == ("T7000", "none", "unknown")
     assert contact(brief, "T7000").final_level == contact(brief, "T7000").base_level
+
+
+# --- Çekim anındaki temasa bağlama ------------------------------------------------
+
+
+def arrival_scene(
+    *, car_detected: bool = True
+) -> tuple[DataPackage, dict[str, list[Detection]], GeoPoint]:
+    """Gerçek verideki 10:20 raporunun kurgusu.
+
+    T0096 (otomobil) 14:10'da noktaya varıyor, öncesinde 8 km batıdaydı. T0019 (kamyon)
+    noktanın 20 m doğusunda bütün gün park halinde: rapor saatinde noktaya yakın olan o.
+    """
+    spot = east_of_base(4_000)
+    truck_spot = east_of_base(4_020)
+    points = [
+        p
+        for h in (12, 13, 14)
+        for m in range(0, 60, 5)
+        if (h, m) <= (14, 10)
+        for p in (
+            TrackPoint("T0096", time(h, m), spot if (h, m) == (14, 10) else east_of_base(-4_000)),
+            TrackPoint("T0019", time(h, m), truck_spot),
+        )
+    ]
+    package, _ = parked_scene(parked_since=time(12, 0))
+    package = replace(package, track_points=points)
+    boxes = [Detection(VehicleClass.TRUCK, 0.9, 620, 255, 40, 30)]  # merkez 20 m doğuda
+    if car_detected:
+        boxes.append(Detection(VehicleClass.CAR, 0.9, 470, 260, 20, 20))
+    return package, {"img_7000": boxes}, spot
+
+
+def test_friendly_claim_binds_to_the_arriving_car_not_the_truck_parked_there() -> None:
+    """10:20 senaryosu: eskiden park halindeki kamyona bağlanıp onu çelişkili sayıyordu."""
+    package, detections, spot = arrival_scene()
+    friend = record(
+        10,
+        time(13, 50),
+        OFFICIAL,
+        "usse gelen otomobil bize bagli unsurdur",
+        at(spot, claim_type="friendly_claim", vehicle_type="car"),
+    )
+
+    brief = evaluate([friend], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert f.track_id == "T0096"
+    # Otomobil 13:50'de orada değildi: saat tutmadığı için dostluk doğrulanamaz.
+    assert (f.verdict, f.effect, f.time_check) == ("unverifiable", "none", "mismatch")
+    assert "saat 13:50" in f.reasoning
+    car, truck = contact(brief, "T0096"), contact(brief, "T0019")
+    assert car.verified_friend is False
+    assert car.final_level == car.base_level
+    assert truck.final_level == truck.base_level
+
+
+def test_claim_can_bind_to_a_missed_contact_whose_type_is_unknown() -> None:
+    package, detections, spot = arrival_scene(car_detected=False)
+    report = record(10, time(13, 50), OFFICIAL, "burada 1 otomobil", at(spot, vehicle_type="car"))
+
+    brief = evaluate([report], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert contact(brief, "T0096").kind == "missed"
+    assert (f.track_id, f.verdict, f.effect) == ("T0096", "consistent", "none")
+    assert "tip doğrulanamadı" in f.reasoning
+
+
+def test_claim_near_the_image_but_far_from_every_contact_is_unverifiable() -> None:
+    package, detections = parked_scene(parked_since=time(12, 0))
+    # Temastan ~100 m kuzeyde: bağlanma eşiğinin (60 m) dışında, görüntüye ise yakın.
+    point = east_of_base(4_000)
+    point = GeoPoint(point.lat + 100 / 111_320, point.lon)
+    report = record(10, time(13, 50), OFFICIAL, "1 kamyon", at(point, vehicle_type="truck"))
+
+    brief = evaluate([report], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert (f.track_id, f.verdict, f.effect) == (None, "unverifiable", "none")
+    assert contact(brief, "T7000").final_level == "low"
+
+
+def test_report_at_an_off_step_capture_time_is_checked_against_the_current_position() -> None:
+    """Çekim 14:12'de: rapor saatindeki konum için 14:10 noktası değil, temasın o anki konumu."""
+    spot = east_of_base(4_000)
+    # 100 m/dk: 14:10'da noktanın 200 m gerisinde, 14:12'ye kestirilen konumu noktada.
+    behind, before = east_of_base(3_800), east_of_base(3_300)
+    points = [
+        TrackPoint("T0096", time(h, m), before if (h, m) < (14, 10) else behind)
+        for h in (12, 13, 14)
+        for m in range(0, 60, 5)
+        if (h, m) <= (14, 10)
+    ]
+    package, detections = parked_scene(parked_since=time(12, 0))
+    [image] = package.images
+    package = replace(
+        package, track_points=points, images=[replace(image, capture_time=time(14, 12))]
+    )
+    friend = record(
+        10,
+        time(14, 12),
+        OFFICIAL,
+        "dost",
+        at(spot, claim_type="friendly_claim", vehicle_type="car"),
+    )
+
+    brief = evaluate([friend], package, detections, "img_7000")
+
+    f = finding(brief, 10)
+    assert f.track_id == "T0096"
+    assert (f.time_check, f.effect) == ("ok", "lowers")
+
+
+def test_claims_about_an_unregistered_contact_do_not_claim_an_effect_they_cannot_apply() -> None:
+    """Kayıt dışı temasın track'i yok; rapor etkisi seviyesine uygulanamıyor (ADR-0003)."""
+    package, detections = parked_scene(parked_since=time(12, 0))
+    package = replace(package, track_points=[])
+    spot = east_of_base(4_000)
+    lie = record(10, time(13, 30), OFFICIAL, "1 kamyon", at(spot, vehicle_type="truck"))
+    friend = record(
+        11,
+        time(14, 10),
+        OFFICIAL,
+        "dost",
+        at(spot, claim_type="friendly_claim", vehicle_type="car"),
+    )
+
+    brief = evaluate([lie, friend], package, detections, "img_7000")
+
+    [c] = brief.contacts
+    assert c.kind == "unregistered"
+    assert c.final_level == c.base_level
+    assert c.verified_friend is False
+    assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("contradicts", "none")
+    assert (finding(brief, 11).verdict, finding(brief, 11).effect) == ("unverifiable", "none")

@@ -33,8 +33,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 PACKAGE = read_package(FIXTURE)
 TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
 WEAK_TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.35, x=727, y=284, w=58, h=34)
-T0122_AT_1405 = next(
-    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 5)
+T0122_AT_1410 = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
 )
 T0032_AT_1340 = next(
     p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(13, 40)
@@ -114,7 +114,7 @@ def contact(brief: Brief, track_id: str) -> ContactFinding:
 
 def test_vlm_is_not_called_without_color_or_cargo_claims_or_weak_detections() -> None:
     verifier = FakeVerifier(seen("beyaz"))
-    plain = record(10, time(14, 5), OFFICIAL, claim_at(T0122_AT_1405, vehicle_type="truck"))
+    plain = record(10, time(14, 10), OFFICIAL, claim_at(T0122_AT_1410, vehicle_type="truck"))
 
     brief = evaluate([plain], verifier)
 
@@ -124,8 +124,8 @@ def test_vlm_is_not_called_without_color_or_cargo_claims_or_weak_detections() ->
 
 def test_vlm_is_called_once_for_the_box_of_a_contact_with_a_color_claim() -> None:
     verifier = FakeVerifier(seen("mavi"))
-    blue = record(10, time(14, 5), THIRD, claim_at(T0122_AT_1405, color="mavi"))
-    also_blue = record(11, time(14, 5), OFFICIAL, claim_at(T0122_AT_1405, color="Mavi"))
+    blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
+    also_blue = record(11, time(14, 10), OFFICIAL, claim_at(T0122_AT_1410, color="Mavi"))
 
     brief = evaluate([blue, also_blue], verifier)
 
@@ -151,7 +151,7 @@ def test_color_claim_about_an_undetected_contact_stays_unverified_without_vlm() 
 
 def test_color_mismatch_makes_the_report_contradict_and_raises_the_contact() -> None:
     package_level = evaluate([], None)
-    blue = record(10, time(14, 5), THIRD, claim_at(T0122_AT_1405, color="mavi"))
+    blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
 
     brief = evaluate([blue], FakeVerifier(seen("beyaz")))
 
@@ -180,9 +180,9 @@ def test_color_mismatch_raises_a_low_contact_to_high() -> None:
 def test_matching_color_lets_an_official_friendly_claim_verify_a_friend() -> None:
     friend = record(
         10,
-        time(14, 5),
+        time(14, 10),
         OFFICIAL,
-        claim_at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="truck", color="mavi"),
+        claim_at(T0122_AT_1410, claim_type="friendly_claim", vehicle_type="truck", color="mavi"),
     )
 
     brief = evaluate([friend], FakeVerifier(seen("mavi")))
@@ -195,9 +195,9 @@ def test_matching_color_lets_an_official_friendly_claim_verify_a_friend() -> Non
 def test_color_named_with_turkish_characters_or_shade_matches_the_palette() -> None:
     friend = record(
         10,
-        time(14, 5),
+        time(14, 10),
         OFFICIAL,
-        claim_at(T0122_AT_1405, claim_type="friendly_claim", color="koyu yeşil"),
+        claim_at(T0122_AT_1410, claim_type="friendly_claim", color="koyu yeşil"),
     )
 
     brief = evaluate([friend], FakeVerifier(seen("yesil")))
@@ -208,9 +208,9 @@ def test_color_named_with_turkish_characters_or_shade_matches_the_palette() -> N
 def test_vlm_unable_to_tell_the_color_keeps_the_friendly_claim_unverified() -> None:
     friend = record(
         10,
-        time(14, 5),
+        time(14, 10),
         OFFICIAL,
-        claim_at(T0122_AT_1405, claim_type="friendly_claim", color="mavi"),
+        claim_at(T0122_AT_1410, claim_type="friendly_claim", color="mavi"),
     )
 
     brief = evaluate([friend], FakeVerifier(seen(color=None)))
@@ -222,9 +222,9 @@ def test_vlm_unable_to_tell_the_color_keeps_the_friendly_claim_unverified() -> N
 def test_vlm_failure_leaves_the_color_unverified() -> None:
     friend = record(
         10,
-        time(14, 5),
+        time(14, 10),
         OFFICIAL,
-        claim_at(T0122_AT_1405, claim_type="friendly_claim", color="mavi"),
+        claim_at(T0122_AT_1410, claim_type="friendly_claim", color="mavi"),
     )
 
     brief = evaluate([friend], FakeVerifier(None))
@@ -234,7 +234,7 @@ def test_vlm_failure_leaves_the_color_unverified() -> None:
 
 
 def test_cargo_mismatch_contradicts() -> None:
-    loaded = record(10, time(14, 5), OFFICIAL, claim_at(T0122_AT_1405, cargo="loaded"))
+    loaded = record(10, time(14, 10), OFFICIAL, claim_at(T0122_AT_1410, cargo="loaded"))
 
     brief = evaluate([loaded], FakeVerifier(seen("beyaz", "empty")))
 
@@ -243,7 +243,7 @@ def test_cargo_mismatch_contradicts() -> None:
 
 
 def test_cargo_match_is_consistent() -> None:
-    loaded = record(10, time(14, 5), OFFICIAL, claim_at(T0122_AT_1405, cargo="loaded"))
+    loaded = record(10, time(14, 10), OFFICIAL, claim_at(T0122_AT_1410, cargo="loaded"))
 
     brief = evaluate([loaded], FakeVerifier(seen("beyaz", "loaded")))
 
@@ -284,7 +284,7 @@ def test_weak_detection_without_a_vlm_answer_stays_weak() -> None:
 
 def test_weak_detection_color_is_reused_for_reports_without_a_second_call() -> None:
     verifier = FakeVerifier(seen("mavi"))
-    blue = record(10, time(14, 5), THIRD, claim_at(T0122_AT_1405, color="mavi"))
+    blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
 
     brief = evaluate([blue], verifier, [WEAK_TRUCK])
 
@@ -302,7 +302,7 @@ def test_unmatched_weak_detection_is_not_sent_to_the_vlm() -> None:
 
 
 def test_brief_text_mentions_the_visual_check() -> None:
-    blue = record(10, time(14, 5), THIRD, claim_at(T0122_AT_1405, color="mavi"))
+    blue = record(10, time(14, 10), THIRD, claim_at(T0122_AT_1410, color="mavi"))
 
     brief = evaluate([blue], FakeVerifier(seen("beyaz", "loaded")))
 

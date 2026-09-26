@@ -21,7 +21,10 @@ stop_min_minutes = 10
 window_minutes = 120
 # İddianın konumu görüntüye ya da bir temasa bu kadar yakınsa ilgili sayılır.
 relevance_m = 500
-# Rapor saatinde bir temas iddianın konumuna bu kadar yakınsa iddia o temasa bağlanır.
+# İddia, çekim anında konumu iddia noktasına bu kadar yakın olan en yakın temasa bağlanır.
+# Gerçek veride koordinatlı raporların hepsi çekim anında bir temasa ≤ 54 m.
+bind_now_m = 60
+# Bağlanan temasın rapor saatindeki konumu iddia noktasına bu kadar yakınsa saat tutar.
 match_m = 150
 
 [brief]

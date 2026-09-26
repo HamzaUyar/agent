@@ -60,7 +60,10 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] 14,1 m'lik eşleşmeyi kontrol et (15 m eşiğine yakın; yanlış eşleşme olabilir)
 - [ ] Doğrudan EVREN modunda API açılışında tespit önbelleğini ısıt ya da demoda dosyayı kullan
 
-- [ ] **Rapor bağlama (R15, kritik):** iddiayı çekim anındaki temasa bağla; rapor saatindeki konum yalnızca "orada duruyor/bekliyor" iddialarında; hareket iddiasını track eğilimiyle, "uzun süredir yerinde" iddiasını duraklama süresiyle karşılaştır
+- [x] **Rapor bağlama (R15):** iddia çekim anındaki temasa bağlanıyor, saat ayrı kontrol (`time_check`)
+- [ ] Hareket iddiasını track eğilimiyle, "uzun süredir yerinde" iddiasını duraklama süresiyle, sayı iddiasını tespit sayısıyla karşılaştır (R15)
+- [ ] Kalan 18 tip çelişkisinin hepsi "kamyon" ↔ modelin otomobil/minibüs dediği araç: model hatası mı tuzak mı, birkaç kırpmayı gözle kontrol et (VLM ile tip doğrulaması?)
+- [ ] Kayıt dışı temasa bağlanan çelişkili raporun etkisini temasa uygula (ADR-0003 TODO)
 - [ ] Brief'te gün boyu geçerli doğrulanamaz iddiaları (tatbikat, söylenti) tek satırda özetle
 
 ## Açık kararlar

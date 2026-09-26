@@ -354,6 +354,31 @@
 - **Bulgu — brief'teki rapor gürültüsü:** 273 rapor bulgusunun 209'u doğrulanamaz; gün boyu geçerli "tatbikat" dostluk iddiası 81 kez, söylentiler 60 kez her görüntüde listeleniyor.
 - Model sınıf dağılımı (260 kutu): 206 otomobil, 26 minibüs, 24 kamyon, 4 otobüs.
 
+### Rapor bağlama çekim anına taşındı, saat ayrı kontrol (27 Eylül, R15/R7)
+- **Değişiklik** (`pipelines/reports.py`, ADR-0002 notu): Koordinatlı iddia, **çekim anında** noktasına en yakın temasa bağlanıyor (`risk_rules.toml` `[reports] bind_now_m = 60`). Kaçırılmış ve kayıt dışı temaslar da aday. Saat ayrı bir özellik: `time_check` (ok, mismatch, unknown) bağlanan temasın rapor saatindeki track konumunu `match_m` (150 m) ile karşılaştırıyor. Rapor çekim anındaysa temasın şimdiki (gerekirse kestirilmiş) konumu kullanılıyor.
+  - Dostluk iddiası: saat tutmuyor ya da bilinmiyorsa "doğrulanamaz", risk düşmüyor. Düşürme için konum + saat + belirtilen her özellik.
+  - Gözlem: saat tutmasa da "tutarlı", risk yükselmiyor, gerekçeye not ("rapor saatindeki konumu uyuşmuyor").
+  - Tehdit uyarısı: yükseltmeye devam, saat notuyla.
+  - "Rapor saatinde orada kimse yok ama temas şu an orada → çelişkili" dalı kaldırıldı.
+  - Kayıt dışı temasa bağlanan iddianın etkisi seviyeye uygulanamadığı için `none` yazılıyor ve gerekçede belirtiliyor; dostluk iddiası orada doğrulanamaz (kod incelemesi bulgusu).
+- `ReportFinding.time_check` brief'te ve "Raporlar:" satırında ("tutarlı, saat tutmuyor"). Karar LLM'i girdide `time_check`'i görüyor; saati tutmayan rapor düşürme kanıtı olarak reddediliyor (prompt da güncellendi).
+- `RunRecorder.get`: güncel şemaya uymayan eski kayıt artık 500 yerine "yok" (404) dönüyor; `latest_cached` aynı yolu kullanıyor (kod incelemesi bulgusu). Önceki bütün kayıtlarda `time_check` olmadığı için önbellek kendiliğinden yenileniyor.
+- Sentetik üreteç gerçek verinin kurgusuna uyarlandı: rapor koordinatı odak aracın çekim anındaki konumu (5 ondalık). `location_contradiction` türü artık yalan sayılmadığı için yerine `friendly_time_mismatch` (saati tutmayan resmi dostluk → doğrulanamaz) geldi; dostluk raporları çekim anında.
+- Testler: `test_report_evaluation.py` 22 senaryo (12:35 organizatör örneği, 10:20 park halindeki kamyon yerine gelen otomobile bağlama, kaçırılmış temasa bağlama, yakında temas yok, adım dışı çekim saati, kayıt dışı temasın etkisi). Eski "kendi track'iyle çelişiyor" testleri yeni anlamla yeniden yazıldı, sebebi docstring'de. Karar kuralı için 1 test. Toplam 195; ruff ve `mypy --strict app scripts` temiz. `tests/` altındaki 30 mypy hatası bu değişiklikten önce de vardı (test sahtelerinde protokol üyeleri eksik).
+- **Ölçüm (gerçek veri, 40 görüntü, kurallar, LLM'siz, EVREN tespitleri dosyadan; gerçek etiket seti yok):**
+
+  | | Önce | Sonra |
+  |---|---|---|
+  | Koordinatlı iddialardan çelişkili (72'de) | 35 | 18 |
+  | Bütün bulgular: tutarlı / çelişkili / doğrulanamaz | 28 / 35 / 210 | 26 / 18 / 225 |
+  | Rapor etkisi: yükseltir / düşürür | 35 / 5 | 16 / 0 |
+  | Görüntü seviyesi: kritik / yüksek / orta / düşük | 1 / 32 / 7 / 0 | 1 / 25 / 13 / 1 |
+
+  - Seviyesi değişen 11 görüntü: 9'u düştü (img_000267, img_000531, img_003189, img_008001, img_003880, img_007171, img_001147, img_007664 yüksek → orta; img_006444 yüksek → düşük), 2'si yükseldi (img_005788, img_004423 orta → yüksek: "5 kamyon" / "3 kamyon" raporu artık o noktadaki otomobile bağlanıyor, tip çelişkisi).
+  - Kalan 18 çelişkinin hepsi tip uyuşmazlığı: rapor "kamyon" diyor, model aynı araca otomobil ya da minibüs diyor. Bir kısmı gerçek tuzak (img_003201, "panelvan" denen T0156 otomobil), bir kısmı modelin kamyon kaçırması olabilir (260 kutuda 24 kamyon).
+  - Eski 5 "doğrulanmış dost"un hepsi yanlış araca bağlıydı; şimdi 0. Gerçek verideki resmi dostluk bildirimlerinin hepsinde araç rapor saatinde o noktada değil, bu yüzden hiçbiri riski düşürmüyor.
+  - img_000860: 12:35 raporu T0122'ye bağlı, "tutarlı, saat tutmuyor"; seviye yüksek (model kamyonu görmüyor, T0122 kaçırılmış temas).
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

@@ -136,8 +136,10 @@ def test_report_search_by_time_window() -> None:
 def test_report_decision_is_explained_from_the_brief() -> None:
     result = tools().call("rapor_degerlendirmesi", {"claim_id": 2})
 
+    # İddia çekim anında noktada duran T0122'ye bağlanır; T0122 12:35'te orada değildi.
     assert result["verdict"] == "consistent"
-    assert result["track_id"] == "T0032"
+    assert result["track_id"] == "T0122"
+    assert result["time_check"] == "mismatch"
     assert "reasoning" in result
 
 

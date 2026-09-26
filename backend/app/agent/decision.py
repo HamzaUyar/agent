@@ -119,6 +119,7 @@ def build_input(
                 "claim_type": f.claim_type,
                 "track_id": f.track_id,
                 "verdict": f.verdict,
+                "time_check": f.time_check,
                 "reasoning": f.reasoning,
             }
             for f in findings
@@ -142,17 +143,23 @@ def _validate(
                 f"{contact.final_level} → {proposal.level}: raporlar bu temasın riskini "
                 "yükseltti, düşürülemez"
             )
-        usable = {
-            f.claim_id
+        about = {
+            f.claim_id: f
             for f in findings
             if f.verdict == "consistent" and contact.track_id and f.track_id == contact.track_id
         }
         if not proposal.evidence_claim_ids:
             return f"{contact.final_level} → {proposal.level}: düşürme için kanıt gösterilmedi"
-        if not set(proposal.evidence_claim_ids) <= usable:
+        if not set(proposal.evidence_claim_ids) <= about.keys():
             return (
                 f"{contact.final_level} → {proposal.level}: gösterilen kanıt bu temasa bağlı "
                 "tutarlı bir rapor değil"
+            )
+        if any(about[i].time_check != "ok" for i in proposal.evidence_claim_ids):
+            # Rapor saatinde araç orada değilse ya da bilinmiyorsa iddia bu araca ait olmayabilir.
+            return (
+                f"{contact.final_level} → {proposal.level}: gösterilen raporun saati temasın "
+                "o saatteki konumuyla doğrulanamadı"
             )
     return None
 

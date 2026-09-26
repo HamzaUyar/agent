@@ -41,7 +41,7 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
 - **Eşleşmeyen durumlar da sinyaldir:**
   - tespit var, track yok → kayıt dışı araç
   - track var, tespit yok → tipi bilinmiyor
-- **Rapor kontrolü:** Rapordaki koordinat, aracın **rapor saatindeki** track konumuyla karşılaştırılır. Zaman ve konum tutarsızlığı sahte raporu gösterebilir.
+- **Rapor kontrolü:** İddia, **çekim anında** noktasına en yakın temasa bağlanır (≤ 60 m). Saat ayrı bir kontroldür: temasın rapor saatindeki track konumu noktaya ≤ 150 m ise tutar. Saat tutmayan dostluk iddiası riski düşüremez (ADR-0002 notu).
 - **Referans örnek** (organizatörlerin demosu):
   - `img_000860`, 14:10, Doğu Yolu
   - truck, kutu (727, 284, 58, 34), merkez piksel (756, 301) → 39.92531, 32.87183

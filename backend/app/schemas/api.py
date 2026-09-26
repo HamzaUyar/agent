@@ -97,6 +97,7 @@ class ContactFinding(BaseModel):
 
 Verdict = Literal["consistent", "contradicts", "unverifiable", "irrelevant"]
 Effect = Literal["raises", "lowers", "none"]
+TimeCheck = Literal["ok", "mismatch", "unknown"]
 
 
 class ReportFinding(BaseModel):
@@ -111,6 +112,8 @@ class ReportFinding(BaseModel):
     verdict: Verdict
     certainty: Certainty
     effect: Effect
+    # Bağlanan temasın rapor saatindeki konumu iddiayla uyuşuyor mu.
+    time_check: TimeCheck
     reasoning: str
 
 
