@@ -182,7 +182,7 @@ def test_claim_is_bound_to_the_contact_at_its_point_at_capture_time() -> None:
     # T0122 12:35'te kilometrelerce uzaktaydı: saat tutmuyor, ama risk yükselmiyor.
     assert f.time_check == "mismatch"
     assert contact(brief, "T0122").final_level == contact(brief, "T0122").base_level
-    assert "- 12:35 (resmi): tutarlı, saat tutmuyor;" in brief.text
+    assert "- 12:35 (resmi): tutarlı, araç rapor saatinde başka yerdeydi;" in brief.text
 
 
 def test_reports_do_not_change_the_reference_levels() -> None:
@@ -404,7 +404,7 @@ def test_observation_whose_report_time_does_not_match_the_track_does_not_raise_r
     f = finding(brief, 10)
     assert (f.track_id, f.verdict, f.effect) == ("T7000", "consistent", "none")
     assert f.time_check == "mismatch"
-    assert "uyuşmuyor" in f.reasoning
+    assert "araç rapor saatinde başka yerdeydi" in f.reasoning
 
 
 def test_observation_with_the_wrong_type_contradicts_but_the_detection_decides_the_level() -> None:

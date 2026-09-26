@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from app.core.rules import LevelRules
+from app.formatting import km as fmt_km
 from app.schemas.domain import HEAVY_CLASSES, RiskLevel, Trend, VehicleClass
 
 LEVELS: tuple[RiskLevel, ...] = ("low", "medium", "high", "critical")
@@ -38,7 +39,7 @@ def base_level(
     `circling_path_m`: üs çevresinde dar bir mesafe bandında kalarak gidilen yol (dolaşma).
     """
     t = rules
-    km = f"{distance_to_base_m / 1000:.1f} km"
+    km = fmt_km(distance_to_base_m)
     approaching = trend == "approaching"
     heavy = label in HEAVY_CLASSES
 
@@ -61,7 +62,7 @@ def base_level(
     if circling_path_m >= t.circle_min_path_m:
         return LevelDecision(
             "medium",
-            [f"üs çevresinde sabit mesafede dolaşıyor ({circling_path_m / 1000:.1f} km yol), {km}"],
+            [f"üs çevresinde sabit mesafede dolaşıyor ({fmt_km(circling_path_m)} yol), {km}"],
         )
     if not registered:
         # Görev tanımı: park halindeki araçların hareket kaydı olmayabilir (ADR-0003).

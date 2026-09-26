@@ -20,6 +20,7 @@ from typing import Literal
 
 from app.core.rules import ReportRules
 from app.data_package import format_hhmm, to_minutes
+from app.formatting import mps
 from app.pipelines.geo import distance_m
 from app.pipelines.report_parser import rounding_error_m
 from app.pipelines.vision import normalize_color
@@ -158,7 +159,7 @@ def _behavior_check(
     if motion is None or motion.trend == "unknown":
         return "unverified", ""
     stopped = motion.current_stop_minutes is not None or motion.trend == "stationary"
-    actual = f"{TREND_TR[motion.trend]}, son 30 dk {motion.recent_speed_mps:.1f} m/s"
+    actual = f"{TREND_TR[motion.trend]}, son 30 dk {mps(motion.recent_speed_mps)}"
     if claimed == "moving":
         return ("mismatch", "iddia hareket halinde diyor, " + actual) if stopped else ("match", "")
     if claimed == "stationary":
@@ -325,7 +326,7 @@ def _repeat_key(record: ClaimRecord) -> tuple[object, ...]:
 
 TIME_NOTE: dict[TimeCheck, str] = {
     "ok": "",
-    "mismatch": "; rapor saatindeki konumu uyuşmuyor",
+    "mismatch": "; araç rapor saatinde başka yerdeydi",
     "unknown": "; rapor saatindeki konumu bilinmiyor",
 }
 

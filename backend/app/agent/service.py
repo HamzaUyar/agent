@@ -14,6 +14,7 @@ from app.agent.decision import DecisionUnavailableError, decide
 from app.core.rules import RiskRules, default_rules
 from app.data_package import TRACK_STEP_MINUTES, format_hhmm, from_minutes, to_minutes
 from app.db.repositories import DataRepository
+from app.formatting import km, mps
 from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector, ImageFileMissingError
 from app.pipelines.geo import distance_m, in_footprint, nearest_zone, pixel_to_geo
@@ -233,8 +234,7 @@ class EvaluationService:
         yield emit(
             "hareket",
             "; ".join(
-                f"{c.track_id}: {TREND_TR[c.motion.trend]}, "
-                f"üsse {c.motion.distance_to_base_m / 1000:.1f} km"
+                f"{c.track_id}: {TREND_TR[c.motion.trend]}, üsse {km(c.motion.distance_to_base_m)}"
                 for c in contacts
                 if c.motion and c.track_id
             )
@@ -463,6 +463,7 @@ class EvaluationService:
         return MotionFinding(
             distance_to_base_m=m.distance_to_base_m,
             distance_to_base_30min_ago_m=m.distance_to_base_window_ago_m,
+            distance_to_base_60min_ago_m=m.distance_to_base_hour_ago_m,
             trend=m.trend,
             route=[_latlon(p) for p in m.route],
             total_distance_m=m.total_distance_m,
@@ -658,7 +659,11 @@ VERDICT_TR = {
 }
 
 
-TIME_TR = {"ok": "saat tutuyor", "mismatch": "saat tutmuyor", "unknown": "saat bilinmiyor"}
+TIME_TR = {
+    "ok": "saat tutuyor",
+    "mismatch": "araç rapor saatinde başka yerdeydi",
+    "unknown": "saat bilinmiyor",
+}
 
 
 def _time_tag(f: ReportFinding) -> str:
@@ -709,13 +714,16 @@ def _contact_notes(c: ContactFinding) -> list[str]:
 def _movement_text(m: MotionFinding) -> str:
     parts = [TREND_TR[m.trend]]
     if m.distance_to_base_30min_ago_m is not None:
-        parts.append(
-            f"üsse uzaklık 30 dk önce {m.distance_to_base_30min_ago_m / 1000:.1f} km, "
-            f"şimdi {m.distance_to_base_m / 1000:.1f} km"
+        hour = (
+            f"1 saat önce {km(m.distance_to_base_60min_ago_m)}, "
+            if m.distance_to_base_60min_ago_m is not None
+            else ""
         )
-    parts.append(
-        f"son 30 dk {m.recent_speed_mps:.1f} m/s, 2 saatlik ortalama {m.avg_speed_mps:.1f} m/s"
-    )
+        parts.append(
+            f"üsse uzaklık {hour}30 dk önce {km(m.distance_to_base_30min_ago_m)}, "
+            f"şimdi {km(m.distance_to_base_m)}"
+        )
+    parts.append(f"son 30 dk {mps(m.recent_speed_mps)}, 2 saatlik ortalama {mps(m.avg_speed_mps)}")
     if m.heading_deg is not None:
         parts.append(f"yön {m.heading_deg:.0f}°")
     if m.stops:
@@ -752,7 +760,7 @@ def _brief_text(
         if c.adjustment_reason:
             notes.append(f"LLM ayarı: {c.adjustment_reason.rstrip('. ')}")
         lines.append(
-            f"- {who} ({label}): üsse {c.distance_to_base_m / 1000:.1f} km, {movement}; "
+            f"- {who} ({label}): üsse {km(c.distance_to_base_m)}, {movement}; "
             f"seviye {LEVEL_TR[c.final_level]} ({'; '.join(c.level_reasons)})."
             + (f" Not: {'; '.join(notes)}." if notes else "")
         )

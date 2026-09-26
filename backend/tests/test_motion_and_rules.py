@@ -17,6 +17,7 @@ from app.agent.service import EvaluationService
 from app.core.rules import DEFAULT_RULES_PATH, LevelRules, RiskRules, load_rules
 from app.data_package import from_minutes, read_package, to_minutes
 from app.db.repositories import InMemoryRepository
+from app.formatting import km, mps
 from app.schemas.api import Brief
 from app.schemas.domain import (
     Corners,
@@ -275,8 +276,14 @@ def test_llm_input_and_brief_carry_the_whole_track_motion_not_a_single_step() ->
     )
     assert facts["heading_deg"] == round(motion.heading_deg or 0)
 
-    assert f"2 saatlik ortalama {motion.avg_speed_mps:.1f} m/s" in brief.text
-    assert f"30 dk önce {motion.distance_to_base_30min_ago_m / 1000:.1f} km" in brief.text
+    assert f"2 saatlik ortalama {mps(motion.avg_speed_mps)}" in brief.text
+    assert f"30 dk önce {km(motion.distance_to_base_30min_ago_m)}" in brief.text
+    # Görev tanımı s2 örneği yaklaşmayı bir saatlik farkla anlatır (12:25 → 13:25).
+    assert motion.distance_to_base_60min_ago_m is not None
+    assert facts["distance_to_base_60min_ago_km"] == round(
+        motion.distance_to_base_60min_ago_m / 1000, 2
+    )
+    assert f"1 saat önce {km(motion.distance_to_base_60min_ago_m)}" in brief.text
 
 
 # --- Üs çevresinde dolaşma (görev tanımı s3) -------------------------------------

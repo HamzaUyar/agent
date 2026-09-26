@@ -1,8 +1,8 @@
 """Organizatör gateway'inin takım limitleri (görev tanımı s4, s10).
 
 Aynı anda en fazla 4 istek, dakikada 60 istek, dakikada 500.000 token ve toplam 15 USD
-bütçe. Limitler süreç geneli tutulur: FastAPI thread havuzundaki bütün değerlendirmeler ve süresi dolup arka
-planda biten çağrılar da aynı sayaçlara girer.
+bütçe. Limitler süreç geneli tutulur: FastAPI thread havuzundaki bütün değerlendirmeler ve
+süresi dolup arka planda biten çağrılar da aynı sayaçlara girer.
 """
 
 import logging

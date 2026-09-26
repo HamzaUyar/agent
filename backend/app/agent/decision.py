@@ -17,6 +17,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.formatting import km
 from app.llm.client import LLMRouter, LLMUnavailableError
 from app.pipelines.risk import LEVELS
 from app.schemas.api import ContactFinding, ReportFinding
@@ -89,6 +90,11 @@ def _contact_facts(i: int, c: ContactFinding) -> dict[str, object]:
         "certainty": c.certainty,
         "distance_to_base_km": round(c.distance_to_base_m / 1000, 2),
         "trend": motion.trend if motion else None,
+        "distance_to_base_60min_ago_km": (
+            round(motion.distance_to_base_60min_ago_m / 1000, 2)
+            if motion and motion.distance_to_base_60min_ago_m is not None
+            else None
+        ),
         "distance_to_base_30min_ago_km": (
             round(motion.distance_to_base_30min_ago_m / 1000, 2)
             if motion and motion.distance_to_base_30min_ago_m is not None
@@ -100,8 +106,7 @@ def _contact_facts(i: int, c: ContactFinding) -> dict[str, object]:
         if motion and motion.heading_deg is not None
         else None,
         "stops": [
-            f"{s.start} ({s.minutes} dk, üsse {s.distance_to_base_m / 1000:.1f} km)"
-            for s in motion.stops
+            f"{s.start} ({s.minutes} dk, üsse {km(s.distance_to_base_m)})" for s in motion.stops
         ]
         if motion
         else [],

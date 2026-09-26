@@ -73,6 +73,9 @@ class Stop:
 class Motion:
     distance_to_base_m: float
     distance_to_base_window_ago_m: float | None
+    distance_to_base_hour_ago_m: float | None
+    """Bir saat önceki (ya da kayıt daha kısaysa ilk) konumun üsse uzaklığı; görev tanımı s2
+    örneği yaklaşmayı bu farkla anlatır."""
     trend: Trend
     route: list[GeoPoint]
     total_distance_m: float
@@ -177,9 +180,13 @@ def analyze_motion(
     ):
         heading = bearing_deg(recent[0].location, current.location)
 
+    hour = _since(history, now, 60)
     return Motion(
         distance_to_base_m=distance_m(current.location, base),
         distance_to_base_window_ago_m=then_dist,
+        distance_to_base_hour_ago_m=(
+            distance_m(hour[0].location, base) if hour and hour[0] is not current else None
+        ),
         trend=trend,
         route=[p.location for p in history],
         total_distance_m=total,

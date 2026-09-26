@@ -35,6 +35,7 @@ class StopFinding(BaseModel):
 class MotionFinding(BaseModel):
     distance_to_base_m: float
     distance_to_base_30min_ago_m: float | None
+    distance_to_base_60min_ago_m: float | None
     trend: Trend
     route: list[LatLon] = Field(default_factory=list)
     total_distance_m: float
