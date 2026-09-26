@@ -869,4 +869,27 @@ def test_five_decimal_coordinates_keep_the_tight_binding_radius() -> None:
     brief = evaluate([report], package, detections, "img_000123")
 
     f = finding(brief, 10)
-    assert (f.track_id, f.verdict) == (None, "unverifiable")
+    # Bağlanmadı; nokta karenin içinde ve orada araç yok: tespit iddiayı desteklemiyor.
+    assert (f.track_id, f.verdict, f.effect) == (None, "contradicts", "none")
+
+
+def test_claim_inside_the_frame_where_nothing_is_seen_contradicts_without_effect() -> None:
+    """Gerçek veri, img_003880: "yüklü kamyon uzun süredir park halinde" denen nokta karenin
+    içinde, ama çekim anında 76 m içinde ne tespit ne track var (s2: tespit esas)."""
+    package, detections = pdf_example_scene()
+    [image] = package.images
+    inside = GeoPoint(image.corners.top_left.lat - 0.0001, image.corners.top_left.lon + 0.0001)
+    report = record(
+        10,
+        time(13, 0),
+        THIRD,
+        "39.94500N 32.86211E konumunda yuklu bir kamyon park halinde",
+        at(inside, vehicle_type="truck", behavior="stationary"),
+    )
+
+    brief = evaluate([report], package, detections, "img_000123")
+
+    f = finding(brief, 10)
+    assert (f.track_id, f.verdict, f.certainty, f.effect) == (None, "contradicts", "likely", "none")
+    [truck] = brief.contacts
+    assert truck.final_level == truck.base_level

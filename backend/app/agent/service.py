@@ -277,6 +277,7 @@ class EvaluationService:
             rules=self._rules.reports,
             position_at=self._position_at,
             observe=lambda track_id: look(boxes[track_id]) if track_id in boxes else None,
+            in_frame=lambda point: in_footprint(image, point),
         )
         contacts = [
             _apply_report_effects(

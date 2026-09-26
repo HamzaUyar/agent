@@ -74,6 +74,9 @@ PositionAt = Callable[[str, time], GeoPoint | None]
 Observe = Callable[[str], VisualFinding | None]
 """Track'e ait temasın görsel doğrulaması; bakılamıyorsa `None`. Yalnızca gerekince çağrılır."""
 
+InFrame = Callable[[GeoPoint], bool]
+"""Nokta görüntünün kapladığı alanda mı."""
+
 VISUAL_CHECKS = frozenset({"renk", "yük"})
 # Tespit modelinin gördüğüne dayanan kontroller: uyuşmazlıkları "olası" kesinlikte.
 DETECTOR_CHECKS = VISUAL_CHECKS | {"sayı"}
@@ -81,6 +84,10 @@ DETECTOR_CHECKS = VISUAL_CHECKS | {"sayı"}
 
 def _no_visual(track_id: str) -> None:
     return None
+
+
+def _outside(point: GeoPoint) -> bool:
+    return False
 
 
 def _type_check(claimed: ClaimVehicleType | None, label: VehicleClass | None) -> Check:
@@ -187,6 +194,7 @@ def evaluate_claims(
     rules: ReportRules,
     position_at: PositionAt,
     observe: Observe = _no_visual,
+    in_frame: InFrame = _outside,
 ) -> list[ClaimEvaluation]:
     """Çekim anına kadarki iddiaları değerlendirir; görüntüyle ilgisiz olanlar listeye girmez."""
     window_start = to_minutes(now) - rules.window_minutes
@@ -236,6 +244,7 @@ def evaluate_claims(
             rules,
             position_at,
             observe,
+            in_frame,
         )
         if evaluation is not None:
             results.append(evaluation)
@@ -282,6 +291,7 @@ def _evaluate_located(
     rules: ReportRules,
     position_at: PositionAt,
     observe: Observe,
+    in_frame: InFrame,
 ) -> ClaimEvaluation | None:
     claim, report = record.claim, record.report
     when = format_hhmm(report.time)
@@ -318,6 +328,16 @@ def _evaluate_located(
         return result("unverifiable", "unverified", "none", "doğrulanmamış ihbar/söylenti")
 
     if linked is None:
+        if in_frame(point):
+            # Nokta karenin içinde ama orada ne tespit ne track var: görüntü iddiayı
+            # desteklemiyor (s2: çelişkide tespit esas). Model araç kaçırmış olabilir: "olası".
+            return result(
+                "contradicts",
+                "likely",
+                "none",
+                "iddianın noktası karenin içinde ama çekim anında orada araç yok; "
+                "tespit esas alındı",
+            )
         return result(
             "unverifiable",
             "unverified",
