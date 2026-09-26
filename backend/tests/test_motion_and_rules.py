@@ -4,7 +4,6 @@ Senaryolar üssün doğusunda, bilinen mesafelerde kurulan track'lerle yazılır
 görüntünün ortasındaki tek bir temastan oluşur.
 """
 
-import json
 from dataclasses import replace
 from datetime import time
 from math import cos, radians, sin
@@ -12,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agent.decision import build_input
+from app.agent.decision import build_input, compass
 from app.agent.service import EvaluationService
 from app.core.rules import DEFAULT_RULES_PATH, LevelRules, RiskRules, load_rules
 from app.data_package import from_minutes, read_package, to_minutes
@@ -266,25 +265,20 @@ def test_llm_input_and_brief_carry_the_whole_track_motion_not_a_single_step() ->
     motion = contact.motion
     assert motion is not None and motion.distance_to_base_30min_ago_m is not None
 
-    payload = json.loads(
-        build_input(
-            brief.image_id, brief.zone, brief.capture_time, brief.contacts, [], load_rules().levels
-        )
-    )
-    [facts] = [c for c in payload["contacts"] if c["id"] == "T0122"]
-    assert facts["avg_speed_mps"] == round(motion.avg_speed_mps, 1)
-    assert facts["distance_to_base_30min_ago_km"] == round(
-        motion.distance_to_base_30min_ago_m / 1000, 2
-    )
-    assert facts["heading_deg"] == round(motion.heading_deg or 0)
+    user = build_input(brief.image_id, brief.capture_time, brief.contacts, [], load_rules().levels)
+    after = user.split("Temas T0122\n", 1)[1]
+    block = after.split("\n\n", 1)[0].splitlines()
+    [movement] = [line for line in block if line.startswith("  hareket: ")]
+    assert f"2 saatlik ortalama {mps(motion.avg_speed_mps)}" in movement
+    assert f"yön {compass(motion.heading_deg or 0)}" in movement
+    [distance] = [line for line in block if line.startswith("  uzaklik: ")]
+    assert f"30 dk önce {km(motion.distance_to_base_30min_ago_m)}" in distance
 
     assert f"2 saatlik ortalama {mps(motion.avg_speed_mps)}" in brief.text
     assert f"30 dk önce {km(motion.distance_to_base_30min_ago_m)}" in brief.text
     # Görev tanımı s2 örneği yaklaşmayı bir saatlik farkla anlatır (12:25 → 13:25).
     assert motion.distance_to_base_60min_ago_m is not None
-    assert facts["distance_to_base_60min_ago_km"] == round(
-        motion.distance_to_base_60min_ago_m / 1000, 2
-    )
+    assert f"1 saat önce {km(motion.distance_to_base_60min_ago_m)}" in distance
     assert f"1 saat önce {km(motion.distance_to_base_60min_ago_m)}" in brief.text
 
 

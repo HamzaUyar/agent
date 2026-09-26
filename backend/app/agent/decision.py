@@ -21,7 +21,6 @@ LLM cevap vermezse, süre aşılırsa ya da hiçbir model şemaya uymazsa `Decis
 fırlatılır; servis otomatik özete geçer.
 """
 
-import json
 import re
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -32,7 +31,7 @@ from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field, create_model, field_validator
 
-from app.agent.brief_text import TREND_TR
+from app.agent.brief_text import CARGO_TR, LEVEL_TR, TREND_TR, VERDICT_TR
 from app.core.rules import LevelRules
 from app.formatting import km, mps
 from app.llm.client import LLMRouter, LLMUnavailableError
@@ -44,36 +43,74 @@ from app.schemas.api import (
     MotionFinding,
     ReportFinding,
 )
-from app.schemas.domain import RiskLevel
+from app.schemas.domain import HEAVY_CLASSES, RiskLevel
 
 TASK = "reasoning"
 PROMPT_PATH = Path(__file__).parent / "prompts" / "brief.md"
 NO_ATTENTION: AttentionReason = "dikkat_gerekmiyor"
 
-FactField = Literal[
-    "kind",
-    "type",
-    "certainty",
-    "distance_to_base_km",
-    "trend",
-    "distance_to_base_60min_ago_km",
-    "distance_to_base_30min_ago_km",
-    "recent_speed_mps",
-    "avg_speed_mps",
-    "heading_deg",
-    "stops",
-    "long_stop_near_base_min",
-    "circling",
-    "base_distance_range_km",
-    "zones_passed",
-    "level",
-    "level_reasons",
-    "level_basis",
-    "verified_friend",
-    "visual",
-    "notes",
+FactKey = Literal[
+    "tur",
+    "tip",
+    "kesinlik",
+    "uzaklik",
+    "hareket",
+    "duraklamalar",
+    "yakin_duraklama",
+    "cevrede_dolasma",
+    "seviye",
+    "dost",
+    "gorsel",
+    "notlar",
+    "raporlar",
 ]
-"""LLM'e verilen temas bulgularının alan adları; `dayanak`'ta yalnızca bunlar gösterilebilir."""
+"""LLM girdisindeki temas olgularının anahtarları; `dayanak`'ta yalnızca bunlar gösterilebilir.
+
+Girdi `contact_facts` ile bu anahtarlardan kurulur: LLM'in gösterebileceği anahtar ile
+girdide gördüğü anahtar aynı listedir. Neden doğrulaması girdi metnine değil temas verisine
+(`ContactFinding`) bakar.
+"""
+
+KIND_TR = {
+    "matched": "eşleşmiş (tespit ve track)",
+    "unregistered": "kayıt dışı (track'i yok, hareket geçmişi bilinmiyor)",
+    "missed": "kaçırılmış (track karede, tespit yok)",
+}
+TYPE_TR = {"car": "otomobil", "van": "panelvan", "truck": "kamyon", "bus": "otobüs"}
+CERTAINTY_TR = {
+    "certain": "kesin",
+    "likely": "olası",
+    "weak": "zayıf",
+    "unverified": "doğrulanamadı",
+}
+SOURCE_TR = {"official": "resmi", "third_party": "üçüncü taraf"}
+CLAIM_TYPE_TR = {
+    "observation": "gözlem",
+    "friendly_claim": "dostluk iddiası",
+    "threat_warning": "tehdit uyarısı",
+    "rumor": "söylenti",
+    "irrelevant": "ilgisiz",
+}
+TIME_CHECK_TR = {
+    "ok": "tutuyor",
+    "mismatch": "araç rapor saatinde başka yerdeydi",
+    "unknown": "bilinmiyor",
+}
+COLOR_TR = {
+    "beyaz": "beyaz",
+    "siyah": "siyah",
+    "gri": "gri",
+    "kirmizi": "kırmızı",
+    "mavi": "mavi",
+    "yesil": "yeşil",
+    "sari": "sarı",
+    "turuncu": "turuncu",
+    "kahverengi": "kahverengi",
+    "bej": "bej",
+    "mor": "mor",
+}
+_TYPE_WORD = re.compile(r"\b(car|van|truck|bus)\b")
+COMPASS = ("kuzey", "kuzeydoğu", "doğu", "güneydoğu", "güney", "güneybatı", "batı", "kuzeybatı")
 
 REASON_TR: dict[AttentionReason, str] = {
     "yaklasma": "yaklaşma",
@@ -114,8 +151,8 @@ class AttentionDraft(BaseModel):
 
     track_id: str = Field(description="Temasın kimliği (listeden)")
     neden: AttentionReason = Field(description="Dikkat nedeni kodu")
-    dayanak: list[int | FactField] = Field(
-        description="Dayanılan bulgu alanlarının adları ve bu temasa bağlı iddiaların claim_id'leri"
+    dayanak: list[int | FactKey] = Field(
+        description="Dayanılan olgu anahtarları ve bu temasa bağlı iddiaların numaraları"
     )
     seviye_onerisi: RiskLevel | None = Field(
         default=None, description="Seviyeyi en fazla bir kademe değiştirmek istersen yeni seviye"
@@ -195,90 +232,173 @@ def draft_schema(labels: Sequence[str]) -> type[DecisionDraft]:
 # --- LLM girdisi -------------------------------------------------------------------------
 
 
-def _contact_facts(label: str, c: ContactFinding, levels: LevelRules) -> dict[str, object]:
-    motion = c.motion
-    facts: dict[str, object] = {
-        "id": label,
-        "kind": c.kind,
-        "type": c.effective_label,
-        "certainty": c.certainty,
-        "distance_to_base_km": round(c.distance_to_base_m / 1000, 2),
-        "trend": motion.trend if motion else None,
-        "distance_to_base_60min_ago_km": (
-            round(motion.distance_to_base_60min_ago_m / 1000, 2)
-            if motion and motion.distance_to_base_60min_ago_m is not None
-            else None
-        ),
-        "distance_to_base_30min_ago_km": (
-            round(motion.distance_to_base_30min_ago_m / 1000, 2)
-            if motion and motion.distance_to_base_30min_ago_m is not None
-            else None
-        ),
-        "recent_speed_mps": round(motion.recent_speed_mps, 1) if motion else None,
-        "avg_speed_mps": round(motion.avg_speed_mps, 1) if motion else None,
-        "heading_deg": round(motion.heading_deg)
-        if motion and motion.heading_deg is not None
-        else None,
-        "stops": [
-            f"{s.start}–{s.end} ({s.minutes} dk, üsse {km(s.distance_to_base_m)})"
-            for s in motion.stops
-        ]
-        if motion
-        else [],
-        "long_stop_near_base_min": loiter_minutes(motion, levels),
-        "circling": _is_circling(motion, levels),
-        "base_distance_range_km": [
-            round(motion.base_distance_min_m / 1000, 2),
-            round(motion.base_distance_max_m / 1000, 2),
-        ]
-        if motion
-        else None,
-        "zones_passed": motion.zones_passed if motion else [],
-        "level": c.final_level,
-        "level_reasons": c.level_reasons,
-        "level_basis": c.level_basis,
-        "verified_friend": c.verified_friend,
-        "visual": c.visual.model_dump(exclude={"model"}) if c.visual else None,
-        "notes": {
-            "weak_detection": c.is_weak,
-            "ambiguous_match": c.is_ambiguous,
-            "type_conflict": c.type_conflict,
-            "position_estimated": c.position_estimated,
-        },
-    }
-    return facts
+def compass(degrees: float) -> str:
+    """Derece (kuzey = 0, saat yönünde) → sekiz yönden biri."""
+    return COMPASS[round(degrees / 45) % 8]
+
+
+def _distance_line(c: ContactFinding) -> str:
+    m = c.motion
+    now = f"şimdi {km(c.distance_to_base_m)}"
+    if m is None:
+        return now
+    steps = [
+        f"{label} {km(value)}"
+        for label, value in (
+            ("1 saat önce", m.distance_to_base_60min_ago_m),
+            ("30 dk önce", m.distance_to_base_30min_ago_m),
+        )
+        if value is not None
+    ]
+    return " → ".join([*steps, now])
+
+
+def _movement_line(m: MotionFinding) -> str:
+    recent = [f"son 30 dk {TREND_TR[m.trend]}"]
+    if m.trend != "stationary":
+        recent.append(mps(m.recent_speed_mps))
+    if m.heading_deg is not None:
+        recent.append(f"yön {compass(m.heading_deg)}")
+    return f"{', '.join(recent)}; 2 saatlik ortalama {mps(m.avg_speed_mps)}"
+
+
+def _stops_line(m: MotionFinding) -> str:
+    stops = []
+    for i, st in enumerate(m.stops):
+        ongoing = i == len(m.stops) - 1 and m.current_stop_minutes is not None
+        minutes = f"en az {st.minutes}" if ongoing and m.stop_open_ended else str(st.minutes)
+        state = ", sürüyor" if ongoing else ""
+        stops.append(f"{st.start}–{st.end} ({minutes} dk{state}, üsse {km(st.distance_to_base_m)})")
+    return "; ".join(stops) or "yok"
+
+
+def _loiter_line(m: MotionFinding, levels: LevelRules) -> str:
+    minutes = loiter_minutes(m, levels)
+    if minutes == 0:
+        return "yok"
+    longest = max(
+        (s for s in m.stops if s.distance_to_base_m < levels.loiter_m), key=lambda s: s.minutes
+    )
+    open_ended = longest is m.stops[-1] and m.current_stop_minutes is not None and m.stop_open_ended
+    at_least = "en az " if open_ended else ""
+    verdict = "aşıyor" if minutes >= levels.loiter_minutes else "altında"
+    return f"{at_least}{minutes} dk, eşik {levels.loiter_minutes} dk: {verdict}"
+
+
+def _circling_line(m: MotionFinding, levels: LevelRules) -> str:
+    if not _is_circling(m, levels):
+        return "yok"
+    closest, farthest = km(m.base_distance_min_m), km(m.base_distance_max_m)
+    band = closest if closest == farthest else f"{closest}–{farthest}"
+    return f"var, üsse {band} bandında, {km(circling_path_m(m, levels))} yol"
+
+
+def _type_line(c: ContactFinding) -> str:
+    if c.effective_label is None:
+        return "bilinmiyor"
+    name = TYPE_TR[c.effective_label]
+    return f"{name} (ağır araç)" if c.effective_label in HEAVY_CLASSES else name
+
+
+def _visual_line(c: ContactFinding) -> str | None:
+    v = c.visual
+    if v is None:
+        return None
+    if not v.is_vehicle:
+        return "araç görsel olarak seçilemedi"
+    looks = [COLOR_TR[v.color]] if v.color else []
+    looks += [CARGO_TR[v.cargo]] if v.cargo else []
+    return ", ".join(["araç doğrulandı", *looks])
+
+
+def _notes_line(c: ContactFinding) -> str | None:
+    notes = []
+    if c.is_weak:
+        notes.append("zayıf tespit")
+    if c.is_ambiguous:
+        other = f", diğer aday {c.second_candidate.track_id}" if c.second_candidate else ""
+        notes.append(f"belirsiz eşleşme{other}")
+    if c.type_conflict:
+        seen = ", ".join(sorted({TYPE_TR[o.label] for o in c.observed_labels}))
+        notes.append(f"tip çelişkisi (görülen: {seen}), riskli olan kabul edildi")
+    if c.position_estimated:
+        notes.append("konum kestirildi")
+    return "; ".join(notes) or None
+
+
+def _level_line(c: ContactFinding) -> str:
+    basis = ", ".join(c.level_basis) or "yok"
+    return f"{LEVEL_TR[c.final_level]} (kuralların saydığı neden: {basis})"
+
+
+def _report_line(f: ReportFinding) -> str:
+    parts = [f"karar: {VERDICT_TR[f.verdict]}"]
+    if f.track_id:
+        parts.append(f"saat kontrolü: {TIME_CHECK_TR[f.time_check]}")
+    # Gerekçe brief'te aynen kalır; LLM girdisinde tip adı İngilizce kalmasın.
+    reasoning = _TYPE_WORD.sub(lambda m: TYPE_TR[m.group(0)], f.reasoning)
+    parts.append(f"gerekçe: {reasoning}")
+    what = CLAIM_TYPE_TR.get(f.claim_type, f.claim_type)
+    return f"[{f.claim_id}] {f.report_time} {SOURCE_TR[f.source]} {what} — {'; '.join(parts)}"
+
+
+def contact_facts(
+    c: ContactFinding, findings: list[ReportFinding], levels: LevelRules
+) -> list[tuple[FactKey, str]]:
+    """Temasın olguları, kodla yazılmış kısa Türkçe satırlar (anahtar, değer).
+
+    Sayılar virgüllü ve birimli; kod değerleri Türkçe; karşılaştırmaları (eşik, dolaşma)
+    kod yapar. Bağlı rapor iddiaları `raporlar` altında, alt satırlarda verilir.
+    """
+    m = c.motion
+    facts: list[tuple[FactKey, str | None]] = [
+        ("tur", KIND_TR[c.kind]),
+        ("tip", _type_line(c)),
+        ("kesinlik", CERTAINTY_TR[c.certainty]),
+        ("uzaklik", _distance_line(c)),
+        ("hareket", _movement_line(m) if m else "kayıt yok"),
+        ("duraklamalar", _stops_line(m) if m else None),
+        ("yakin_duraklama", _loiter_line(m, levels) if m else None),
+        ("cevrede_dolasma", _circling_line(m, levels) if m else None),
+        ("seviye", _level_line(c)),
+        ("dost", "doğrulanmış dost (resmi rapor)" if c.verified_friend else None),
+        ("gorsel", _visual_line(c)),
+        ("notlar", _notes_line(c)),
+    ]
+    linked = _linked(c, findings)
+    if linked:
+        facts.append(("raporlar", "\n".join(f"    {_report_line(f)}" for f in linked)))
+    return [(key, value) for key, value in facts if value is not None]
 
 
 def build_input(
     image_id: str,
-    zone: str,
     at: str,
     contacts: list[ContactFinding],
     findings: list[ReportFinding],
     levels: LevelRules,
 ) -> str:
-    labels = contact_labels(contacts)
-    payload = {
-        "image": {"id": image_id, "zone": zone, "capture_time": at},
-        "thresholds": {"long_stop_min": levels.loiter_minutes},
-        "contacts": [
-            _contact_facts(label, c, levels) for label, c in zip(labels, contacts, strict=True)
-        ],
-        "reports": [
-            {
-                "claim_id": f.claim_id,
-                "time": f.report_time,
-                "source": f.source,
-                "claim_type": f.claim_type,
-                "track_id": f.track_id,
-                "verdict": f.verdict,
-                "time_check": f.time_check,
-                "reasoning": f.reasoning,
-            }
-            for f in findings
-        ],
-    }
-    return json.dumps(payload, ensure_ascii=False, indent=1)
+    """Karar LLM'inin girdisi: temas başına Türkçe olgu satırları ve track'e bağlanmayan raporlar.
+
+    Track'i olmayan iddia bölge düzeyinde olabilir ya da kayıt dışı bir temasa bağlanmış
+    olabilir (ADR-0003); `ReportFinding` hangisi olduğunu taşımadığı için ayrı bölümdedir.
+
+    Bölge adı verilmez: kararın hiçbir nedeni ona dayanmaz, özette de yasak.
+    """
+    lines = [f"Görüntü {image_id} · çekim anı {at}"]
+    for label, c in zip(contact_labels(contacts), contacts, strict=True):
+        lines += ["", f"Temas {label}"]
+        for key, value in contact_facts(c, findings, levels):
+            lines.append(f"  {key}:\n{value}" if key == "raporlar" else f"  {key}: {value}")
+    linked = {f.claim_id for c in contacts for f in _linked(c, findings)}
+    unlinked = [f for f in findings if f.claim_id not in linked]
+    if unlinked:
+        lines += [
+            "",
+            "Track'e bağlanmayan raporlar (bölge düzeyinde ya da kayıt dışı bir temasla ilgili)",
+        ]
+        lines += [f"  {_report_line(f)}" for f in unlinked]
+    return "\n".join(lines)
 
 
 # --- doğrulama ---------------------------------------------------------------------------
@@ -642,7 +762,7 @@ def decide(
     max_tokens: int,
 ) -> Decision:
     system = PROMPT_PATH.read_text(encoding="utf-8")
-    user = build_input(image_id, zone, at, contacts, findings, levels)
+    user = build_input(image_id, at, contacts, findings, levels)
     schema = draft_schema(contact_labels(contacts))
     executor = ThreadPoolExecutor(max_workers=1)
     future = executor.submit(router.complete_json, TASK, system, user, schema, max_tokens)
