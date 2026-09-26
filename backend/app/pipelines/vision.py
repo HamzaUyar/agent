@@ -132,4 +132,5 @@ class VlmVerifier:
             return None
         finally:
             executor.shutdown(wait=False, cancel_futures=True)
+        logger.info("VLM %s %s: %s", image.image_id, bbox, observation.model_dump())
         return VisualFinding(**observation.model_dump(), model=model)

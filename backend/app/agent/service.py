@@ -190,6 +190,7 @@ class EvaluationService:
             _match_summary(matches, missed),
             matches=[
                 {
+                    "bbox": list(_bbox(m.located.detection)),
                     "track_id": m.track.track_id if m.track else None,
                     "distance_m": m.track.distance_m if m.track else None,
                     "ambiguous": m.ambiguous,
@@ -225,6 +226,20 @@ class EvaluationService:
             motions={
                 c.track_id: c.motion.model_dump() for c in contacts if c.motion and c.track_id
             },
+            # Temel seviyenin girdileri: tip ve mesafe Kol A'dan, eğilim ve duraklama Kol B'den.
+            contacts=[
+                {
+                    "kind": c.kind,
+                    "track_id": c.track_id,
+                    "label": c.effective_label,
+                    "distance_to_base_m": c.distance_to_base_m,
+                    "trend": c.motion.trend if c.motion else None,
+                    "base_level": c.base_level,
+                    "reasons": c.level_reasons,
+                    "certainty": c.certainty,
+                }
+                for c in contacts
+            ],
         )
 
         # Kaçırılmış temasın kutusu yok: rengi ve yükü görsel olarak doğrulanamaz.

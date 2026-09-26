@@ -46,6 +46,8 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] Supabase'i sahte pakete geri döndür ya da sentetik paketle bırak (demo/frontend için)
 - [ ] Brief prompt'u: kaçırılmış ve kayıt dışı temas ayrımı, K1/K2 sızıntısı, "muhtemel" gibi çeviri ifadeleri; mesafelerde ondalık virgül
 
+- [ ] LLM yükseltmelerinde kanıtın o temasa ait olduğunu doğrula (canlı örnekte başka temasın raporuyla yükseltti)
+
 ## Açık kararlar
 - [ ] Zaman kaydırıcılı risk haritası yapılacak mı (spec'te kapsam dışı, sonraya bırakıldı)?
 - [ ] Embedding modeli ve `report_claims.embedding` boyutu

@@ -9,6 +9,7 @@ da OpenAI uyumlu ayrı bir sağlayıcıdır. Claude modelleri, anahtar tanımlı
 import base64
 import json
 import logging
+import time
 import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -291,12 +292,20 @@ class LLMRouter:
             if provider is None or not provider.is_available():
                 attempts.append((entry.model_id, "kimlik bilgisi yok"))
                 continue
+            started = time.monotonic()
             try:
                 result = call(provider, entry)
             except Exception as exc:  # herhangi bir hata: zincirdeki sıradaki modele geç
                 logger.warning("%s başarısız (%s): %s", entry.model_id, task, exc)
                 attempts.append((entry.model_id, f"{type(exc).__name__}: {exc}"))
                 continue
+            logger.info(
+                "%s/%s cevap verdi (%s, %.1f sn)",
+                entry.provider,
+                entry.model_id,
+                task,
+                time.monotonic() - started,
+            )
             return result, f"{entry.provider}/{entry.model_id}"
         raise LLMUnavailableError(task, attempts)
 

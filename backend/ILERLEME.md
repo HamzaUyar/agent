@@ -314,6 +314,13 @@
 - **Brief uzunluğu:** Görüntü başına ortanca 16 temas; brief ortanca 20, en fazla 34 satır. `--coverage 0.6` ile kayıt dışı temas ortancası 5 (en fazla 16) ve hiçbir görüntü düşük kalmıyor (5 → 0).
 - Supabase'te şu an sentetik paket yüklü (sahte paketin yerine). Geri dönmek için: `load_data tests/fixtures/mock_package --replace` + `parse_reports`.
 
+### Canlı iz sürme komutu
+- `scripts/trace_evaluation.py`: tek bir görüntüyü canlı değerlendirip her kolun çıktısını geldiği anda basıyor: meta, Kol A (tespit, konum), Kol B1 (çekim anı konumları), Birleşim 1 (eşleşme), Kol B2 (hareket), Birleşim 2 (temel seviye), Kol C (raporlar), risk, LLM kararı, brief. LLM ve VLM çağrıları zaman damgası ve süreyle log olarak araya düşüyor; `--image-out` kutuları, track'leri ve seviyeleri görüntünün üzerine çiziyor.
+- Servis olaylarına eklenenler (geriye dönük uyumlu): "hareket" adımında temel seviyenin girdileri, "eslesme" adımında her eşleşmenin kutusu. LLM yönlendiricisi başarılı çağrıları süresiyle, VLM sonuçlarını logluyor.
+- `scripts/common.py`: değerlendirme seti ve iz sürme komutunun ortak kurulumu.
+- **Canlı örnek (img_002724, Supabase + EVREN, 6–8 sn):** 11 araç. VLM zayıf kutulardan birini onayladı (beyaz otomobil), diğerini reddetti; o gerçek bir minibüstü, çatı gölgesinde kısmen görünüyordu, T0314 kaçırılmış temasa döndü. 13:15 resmi tehdit uyarısı, 7,5 km ötedeki bir noktayı gösterdiği halde aracın rapor saatindeki konumu üzerinden doğru araca (T0316) bağlandı; seviye yüksek → kritik.
+- **Bulgu:** İlk çalıştırmada LLM, T0316 hakkındaki tehdit uyarısını gerekçe gösterip T0314'ü orta seviyeye çıkardı; değerlendirme paragrafında da T0316'ya "kayıt dışı temas" dedi. Yükseltmeler kanıt istemediği için kod bunu kabul etti. İkinci çalıştırmada LLM hiç ayar yapmadı, ama kaçırılmış temas T0314'e yine "kayıt dışı" dedi (R14 ve brief prompt'u maddesi).
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.
