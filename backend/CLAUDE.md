@@ -69,7 +69,7 @@ Python 3.11+ (ortam: `.venv`, Python 3.14, pip), FastAPI (SSE), Pydantic v2, psy
   - **Kaynak:** `bases`, `zones`, `images`, `tracks`, `track_points`, `field_reports`
   - **Zenginleştirilmiş:** `report_claims`, `track_segments`
   - **Analiz:** `analysis_runs`, `detections`, `track_matches`, `motion_analyses`, `report_evaluations`, `risk_assessments`, `agent_steps`
-- Migration'lar: `01_extensions_and_enums` … `07_claim_cargo` (`app/supabase/migrations/`).
+- Migration'lar: `01_extensions_and_enums` … `08_field_reports_seq` (`app/supabase/migrations/`).
 
 ## Dizin yapısı
 ```

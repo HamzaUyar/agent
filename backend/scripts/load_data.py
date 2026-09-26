@@ -108,10 +108,12 @@ def load(conn: psycopg.Connection, package: DataPackage, *, replace: bool = Fals
             [(p.track_id, p.time, p.location.lon, p.location.lat) for p in package.track_points],
         )
 
+        # Doğal anahtar dosyadaki sıra: birebir aynı iki rapor da korunur (migration 08).
         cur.executemany(
-            """insert into public.field_reports (time, source, text) values (%s, %s, %s)
-               on conflict on constraint field_reports_natural_key do nothing""",
-            [(r.time, r.source.value, r.text) for r in package.reports],
+            """insert into public.field_reports (seq, time, source, text) values (%s, %s, %s, %s)
+               on conflict (seq) do update set
+                   time = excluded.time, source = excluded.source, text = excluded.text""",
+            [(i, r.time, r.source.value, r.text) for i, r in enumerate(package.reports)],
         )
 
 
