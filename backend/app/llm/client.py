@@ -9,6 +9,7 @@ Hangi görevde hangi modelin kullanılacağı `models.toml` dosyasındadır.
 import base64
 import json
 import logging
+import re
 import time
 import tomllib
 from collections.abc import Callable, Mapping
@@ -177,6 +178,15 @@ class AnthropicProvider:
 MIN_OPENAI_COMPAT_TOKENS = 4096
 
 
+CODE_FENCE = re.compile(r"^\s*```[a-zA-Z]*\s*\n?(.*?)\n?\s*```\s*$", re.DOTALL)
+
+
+def strip_code_fence(text: str) -> str:
+    """glm-5.3-flash JSON'u json_schema istense de ```json ... ``` içinde döndürebiliyor."""
+    match = CODE_FENCE.match(text)
+    return match.group(1) if match else text
+
+
 UsageHook = Callable[[int, int], None]
 """Cevaptaki girdi ve çıktı (düşünme dahil) token sayıları."""
 
@@ -260,7 +270,7 @@ class OpenAICompatibleProvider:
         text = self._message(response, model_id).content
         if not text:
             raise ValueError(f"{model_id} boş cevap döndürdü")
-        return schema.model_validate_json(text)
+        return schema.model_validate_json(strip_code_fence(text))
 
     def chat(
         self,

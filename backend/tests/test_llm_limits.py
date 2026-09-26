@@ -284,3 +284,14 @@ def test_limited_provider_releases_its_slot_while_backing_off() -> None:
 
     assert waited_with_free_slot == [True]
     assert clock.monotonic() - started < 1
+
+
+@pytest.mark.parametrize(
+    "content",
+    ['```json\n{"ok": true}\n```', '```\n{"ok": true}\n```', '  ```json {"ok": true} ```  '],
+)
+def test_json_wrapped_in_a_code_fence_is_accepted(content: str) -> None:
+    """glm-5.3-flash, json_schema istense de cevabı kod çitine sarabiliyor."""
+    provider, _ = provider_with(completion(content))
+
+    assert provider.complete_json("m", "s", "u", Answer, 4096) == Answer(ok=True)
