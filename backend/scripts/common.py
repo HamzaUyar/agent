@@ -12,6 +12,7 @@ from app.db.session import connect
 from app.llm.client import build_router
 from app.pipelines.detection import Detector, MockDetector, build_detector, load_mock_detections
 from app.pipelines.vision import VlmVerifier
+from app.storage import build_storage
 from scripts.make_synthetic_data import load_claims
 
 
@@ -42,7 +43,11 @@ def build_service(args: argparse.Namespace) -> EvaluationService:
         with connect() as conn:
             repo = InMemoryRepository(fetch_package(conn), claims=fetch_claims(conn))
     router = None if args.no_llm else build_router(settings)
-    verifier = None if router is None else VlmVerifier(router, images_dir(args))
+    verifier = (
+        None
+        if router is None
+        else VlmVerifier(router, images_dir(args), storage=build_storage(settings))
+    )
     detector: Detector = (
         MockDetector(load_mock_detections(args.detections))
         if args.detections

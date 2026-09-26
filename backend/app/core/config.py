@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_role_key: SecretStr = SecretStr("")
     database_url: SecretStr = SecretStr("")
+    storage_bucket: str = "drone-images"
+    """Drone görüntülerinin Supabase Storage bucket'ı."""
 
     anthropic_api_key: SecretStr = SecretStr("")
     openai_api_key: SecretStr = SecretStr("")
