@@ -27,7 +27,7 @@ from app.pipelines.geo import (
 )
 from app.pipelines.matching import LocatedDetection, MatchResult, match_detections
 from app.pipelines.motion import Position, analyze_motion, positions_at
-from app.pipelines.reports import ClaimEvaluation, ContactView, evaluate_claims
+from app.pipelines.reports import ClaimEvaluation, ContactView, evaluate_claims, visual_track_ids
 from app.pipelines.risk import LEVELS, base_level, highest, recommended_action
 from app.pipelines.vision import BBox, VisualVerifier
 from app.schemas.api import (
@@ -43,6 +43,7 @@ from app.schemas.api import (
     TrackCandidate,
     VisualFinding,
 )
+from app.schemas.claims import ClaimRecord
 from app.schemas.domain import (
     Detection,
     GeoPoint,
@@ -202,23 +203,13 @@ class EvaluationService:
 
         matches = self._match(image, located, branch.positions)
         positions = branch.positions
-        # Track'le eşleşen zayıf tespit VLM'e sorulur: araç derse kesinlik "olası"ya çıkar.
-        # "Araç değil" cevabı kutuyu düşürmez: 1 m içindeki track orada bir araç olduğunu zaten
-        # gösteriyor; VLM'in reddettiği bu kutular ağaç ya da gölge altındaki gerçek araçlardı.
-        # Kutular paralel sorulur.
+        assigned = {m.track.track_id for m in matches if m.track}
+        missed = [
+            p for p in positions if p.track_id not in assigned and in_footprint(image, p.location)
+        ]
+        claims = self._repo.claims_until(now)
         if self._verifier is not None:
-            weak = list(
-                dict.fromkeys(
-                    _bbox(m.located.detection)
-                    for m in matches
-                    if m.track and self._is_weak(m.located.detection)
-                )
-            )
-            if weak:
-                verifier = self._verifier
-                with ThreadPoolExecutor(max_workers=VISUAL_WORKERS) as pool:
-                    found = pool.map(lambda box: verifier.inspect(image, box), weak)
-                    visuals.update(zip(weak, found, strict=True))
+            self._inspect_all(image, matches, missed, claims, visuals)
         unconfirmed = [
             m.track.track_id
             for m in matches
@@ -226,10 +217,6 @@ class EvaluationService:
             and self._is_weak(m.located.detection)
             and (v := visuals.get(_bbox(m.located.detection))) is not None
             and not v.is_vehicle
-        ]
-        assigned = {m.track.track_id for m in matches if m.track}
-        missed = [
-            p for p in positions if p.track_id not in assigned and in_footprint(image, p.location)
         ]
         estimated = {p.track_id for p in positions if p.estimated}
         yield emit(
@@ -291,7 +278,7 @@ class EvaluationService:
         # Kaçırılmış temasın kutusu yok: rengi ve yükü görsel olarak doğrulanamaz.
         boxes = {c.track_id: c.bbox for c in contacts if c.track_id and c.bbox}
         evaluations = evaluate_claims(
-            self._repo.claims_until(now),
+            claims,
             [
                 ContactView(
                     track_id=c.track_id,
@@ -436,6 +423,50 @@ class EvaluationService:
     @staticmethod
     def _locate(image: ImageMeta, detections: list[Detection]) -> list[LocatedDetection]:
         return [LocatedDetection(d, pixel_to_geo(image, *d.center_px)) for d in detections]
+
+    def _inspect_all(
+        self,
+        image: ImageMeta,
+        matches: list[MatchResult],
+        missed: list[Position],
+        claims: list[ClaimRecord],
+        visuals: dict[BBox, VisualFinding | None],
+    ) -> None:
+        """Bütün görsel doğrulama tek bir paralel dalgada; sonuçlar `visuals`'a yazılır.
+
+        - Track'le eşleşen zayıf tespit: araç derse kesinlik "olası"ya çıkar. "Araç değil"
+          cevabı kutuyu düşürmez: track orada bir araç olduğunu zaten gösteriyor.
+        - Renk ya da yük belirten iddianın bağlanacağı kutu: bağlama ucuz bir hesap, rapor
+          değerlendirmesiyle aynı kuralla önceden yapılır; değerlendirme yalnızca sonucu okur.
+        Her VLM çağrısı ~10 sn; sırayla sormak çağrı sayısıyla çarpılırdı.
+        """
+        assert self._verifier is not None
+        weak = [
+            _bbox(m.located.detection)
+            for m in matches
+            if m.track and self._is_weak(m.located.detection)
+        ]
+        tracked_boxes = {m.track.track_id: _bbox(m.located.detection) for m in matches if m.track}
+        views = [
+            ContactView(m.track.track_id if m.track else None, None, m.located.location)
+            for m in matches
+        ] + [ContactView(p.track_id, None, p.location) for p in missed]
+        claimed = visual_track_ids(
+            claims,
+            views,
+            image_center=image.corners.center,
+            now=image.capture_time,
+            rules=self._rules.reports,
+        )
+        boxes = list(
+            dict.fromkeys(weak + [tracked_boxes[t] for t in sorted(claimed) if t in tracked_boxes])
+        )
+        if not boxes:
+            return
+        verifier = self._verifier
+        with ThreadPoolExecutor(max_workers=VISUAL_WORKERS) as pool:
+            found = pool.map(lambda box: verifier.inspect(image, box), boxes)
+            visuals.update(zip(boxes, found, strict=True))
 
     def track_branch(self, image: ImageMeta) -> TrackBranch:
         """Kol B: aday track'lerin çekim anı konumu ve hareket analizi, tespitten bağımsız."""

@@ -459,3 +459,9 @@
 - Değerlendirmede track kolu tespitle aynı anda çalışıyor (thread); eşleşme ve temas oluşturma hazır sonucu kullanıyor, `_motion` temas başına ayrıca çağrılmıyor. Tip geçmişi de aynı aday tanımını kullanıyor.
 - Ölçüm: 40 gerçek görüntünün kurallarla, LLM'siz bütün SSE olayları (360 olay, veriler dahil) önce ve sonra byte düzeyinde aynı.
 - Testler: `tests/test_track_branch.py` (aday tanımı, hareketin yeniden okunmaması, tespitle paralellik); toplam 277.
+
+### Görsel doğrulama tek paralel dalgada (27 Eylül, pipeline iyileştirmesi madde 3)
+- Önceden zayıf kutular paralel soruluyordu, ama renk/yük iddialarının kutuları rapor değerlendirmesi sırasında tek tek ve sırayla VLM'e gidiyordu (her biri ~10 sn).
+- `reports.visual_track_ids(...)`: renk ya da yük belirten iddiaların bağlanacağı track'li temaslar; `evaluate_claims` ile aynı bağlama kuralını (`_bind`) kullanıyor. Servis (`_inspect_all`) eşleşmeden hemen sonra bu kutuları zayıf kutularla birlikte tek bir paralel dalgada (en fazla 4) soruyor; rapor değerlendirmesi yalnızca sonucu okuyor.
+- Ölçüm: 40 gerçek görüntü, kurallar + belirlenimci sahte VLM: 360 olayın hepsi ve 17 VLM çağrısının kutuları önce ve sonra aynı.
+- Testler: renk iddiası ile zayıf kutunun aynı dalgada aynı anda sorulması, bağlanmayan ya da ilgisiz iddianın VLM'e gitmemesi; toplam 279.

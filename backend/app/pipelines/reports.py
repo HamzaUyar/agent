@@ -265,6 +265,61 @@ def evaluate_claims(
     return results
 
 
+def visual_track_ids(
+    records: list[ClaimRecord],
+    contacts: list[ContactView],
+    *,
+    image_center: GeoPoint,
+    now: time,
+    rules: ReportRules,
+) -> set[str]:
+    """Renk ya da yük belirten iddiaların bağlanacağı track'li temaslar.
+
+    `evaluate_claims` ile aynı bağlama kuralını kullanır; servis bu kutuları zayıf tespitlerle
+    birlikte tek bir paralel VLM dalgasında sorar, değerlendirme yalnızca sonucu okur. Temas
+    görünümünde yalnızca kimlik ve konum gerekir.
+    """
+    window_start = to_minutes(now) - rules.window_minutes
+    needed: set[str] = set()
+    for record in records:
+        claim, report = record.claim, record.report
+        if (
+            report.time > now
+            or to_minutes(report.time) < window_start
+            or claim.location_type != "coordinate"
+            or claim.lat is None
+            or claim.lon is None
+            or claim.claim_type in ("irrelevant", "rumor")
+            or not (claim.color or claim.cargo is not None)
+        ):
+            continue
+        bound = _bind(record, GeoPoint(claim.lat, claim.lon), contacts, image_center, rules)
+        if bound is not None and bound[0] is not None and bound[0].track_id is not None:
+            needed.add(bound[0].track_id)
+    return needed
+
+
+def _bind(
+    record: ClaimRecord,
+    point: GeoPoint,
+    contacts: list[ContactView],
+    image_center: GeoPoint,
+    rules: ReportRules,
+) -> tuple[ContactView | None, float] | None:
+    """İddiayı çekim anında noktasına en yakın temasa bağlar: (temas ya da yok, yuvarlama payı).
+
+    Nokta görüntüden uzaksa ve yakınında temas yoksa iddia bu görüntüyle ilgisizdir: `None`.
+    """
+    # Az ondalıklı koordinat (ör. "39.944N") gerçek noktadan onlarca metre sapabilir.
+    slack = rounding_error_m(record.report.text, point)
+    near = [
+        (d, c) for c in contacts if (d := distance_m(c.location, point)) <= rules.bind_now_m + slack
+    ]
+    if distance_m(image_center, point) > rules.relevance_m and not near:
+        return None
+    return (min(near, key=lambda x: x[0])[1] if near else None), slack
+
+
 def _evaluate_zone_type(record: ClaimRecord, contacts: list[ContactView]) -> ClaimEvaluation | None:
     """Görüntünün bölgesini anan tip gözlemi karedeki tespitlerle (s2: tip karşılaştırması).
 
@@ -369,15 +424,10 @@ def _evaluate_located(
     claim, report = record.claim, record.report
     when = format_hhmm(report.time)
 
-    # Az ondalıklı koordinat (ör. "39.944N") gerçek noktadan onlarca metre sapabilir.
-    slack = rounding_error_m(report.text, point)
-    near = [
-        (d, c) for c in contacts if (d := distance_m(c.location, point)) <= rules.bind_now_m + slack
-    ]
-    if distance_m(image_center, point) > rules.relevance_m and not near:
+    bound = _bind(record, point, contacts, image_center, rules)
+    if bound is None:
         return None
-
-    linked = min(near, key=lambda x: x[0])[1] if near else None
+    linked, slack = bound
     track_id = linked.track_id if linked else None
     time_check = (
         _time_check(linked, point, report.time, now, rules, position_at, slack)
