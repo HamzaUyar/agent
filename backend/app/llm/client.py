@@ -541,6 +541,7 @@ def build_router(
     glm_limits = GatewayLimits(
         max_concurrent=s.glm_max_concurrent,
         per_minute=s.glm_requests_per_minute,
+        tokens_per_minute=s.glm_tokens_per_minute,
         budget_usd=s.glm_budget_usd,
         price_input_per_mtok=s.glm_price_input_per_mtok,
         price_output_per_mtok=s.glm_price_output_per_mtok,

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     """Organizatörlerin gateway'i (görev tanımı s4)."""
     glm_max_concurrent: int = 4
     glm_requests_per_minute: int = 60
+    glm_tokens_per_minute: int = 500_000
     glm_budget_usd: float = 15.0
     glm_price_input_per_mtok: float = 0.0
     """Harcama tahmini için fiyat (USD / 1M token); 0 ise bütçe sınırı devreye girmez."""

@@ -117,6 +117,21 @@ def test_61st_request_in_a_minute_waits_for_the_window() -> None:
     assert fake.sleeps == [60.0]
 
 
+def test_request_waits_when_the_last_minute_used_the_token_limit() -> None:
+    """s4: dakikada 500.000 token; token sayısı cevaptan sonra bilinir."""
+    fake = FakeClock()
+    limits = GatewayLimits(tokens_per_minute=1_000, clock=fake, sleep=fake.sleep)
+
+    with limits.slot():
+        pass
+    limits.record_usage(900, 100)
+    fake.now += 20
+    with limits.slot():
+        pass
+
+    assert fake.sleeps == [40.0]
+
+
 def test_fifth_concurrent_request_waits_for_a_free_slot() -> None:
     limits = GatewayLimits(max_concurrent=4)
     inside = threading.Semaphore(0)
@@ -159,7 +174,8 @@ def test_budget_exceeded_stops_new_requests() -> None:
 
 
 def test_without_prices_the_budget_never_blocks() -> None:
-    limits = GatewayLimits(budget_usd=15.0)
+    # Token sınırı bu testin konusu değil; bekletmesin.
+    limits = GatewayLimits(budget_usd=15.0, tokens_per_minute=10**9)
     limits.record_usage(10_000_000, 10_000_000)
 
     with limits.slot():
