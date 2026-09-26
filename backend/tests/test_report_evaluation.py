@@ -934,3 +934,33 @@ def test_claim_inside_the_frame_where_nothing_is_seen_contradicts_without_effect
     assert (f.track_id, f.verdict, f.certainty, f.effect) == (None, "contradicts", "likely", "none")
     [truck] = brief.contacts
     assert truck.final_level == truck.base_level
+
+
+def test_repeated_day_wide_claim_is_listed_once_from_its_latest_report() -> None:
+    """Gerçek veride aynı "dün gece … ihbar" metni gün içinde birkaç kez geliyor."""
+    rumor = claim(claim_type="rumor", time_reference="dun gece", is_verifiable=False)
+    text = "Dun gece Dogu Yolu cevresinde arac hareketliligi oldugu yonunde ihbar var."
+    repeats = [
+        record(10, time(9, 50), OFFICIAL, text, rumor),
+        record(11, time(12, 50), OFFICIAL, text, rumor),
+        record(12, time(13, 0), THIRD, text, rumor),  # başka kaynak: ayrı listelenir
+    ]
+
+    brief = evaluate(repeats)
+
+    assert sorted(f.claim_id for f in brief.report_findings) == [11, 12]
+
+
+def test_repeated_coordinate_reports_are_all_evaluated() -> None:
+    """Koordinatlı raporların saati kontrolün parçası; tekrarları ayrı değerlendirilir."""
+    text = "39.9253N 32.8718E cevresinde 1 agir arac"
+    heavy = at(SPOT, vehicle_type="heavy", vehicle_count=1)
+
+    brief = evaluate(
+        [
+            record(10, time(12, 35), OFFICIAL, text, heavy),
+            record(11, time(13, 35), OFFICIAL, text, heavy),
+        ]
+    )
+
+    assert sorted(f.claim_id for f in brief.report_findings) == [10, 11]

@@ -196,12 +196,24 @@ def evaluate_claims(
     observe: Observe = _no_visual,
     in_frame: InFrame = _outside,
 ) -> list[ClaimEvaluation]:
-    """Çekim anına kadarki iddiaları değerlendirir; görüntüyle ilgisiz olanlar listeye girmez."""
+    """Çekim anına kadarki iddiaları değerlendirir; görüntüyle ilgisiz olanlar listeye girmez.
+
+    Konumsuz ya da bölge düzeyindeki aynı iddia gün içinde birkaç kez gelebiliyor (gerçek
+    veride 30 tekrar: "dün gece … ihbar", tatbikat); yalnızca en sonuncusu listelenir.
+    """
     window_start = to_minutes(now) - rules.window_minutes
     results: list[ClaimEvaluation] = []
+    latest: dict[tuple[object, ...], ClaimRecord] = {}
+    for record in records:
+        if record.report.time <= now and record.claim.location_type != "coordinate":
+            key = _repeat_key(record)
+            if key not in latest or record.report.time >= latest[key].report.time:
+                latest[key] = record
     for record in records:
         claim, report = record.claim, record.report
         if report.time > now:
+            continue
+        if claim.location_type != "coordinate" and latest[_repeat_key(record)] is not record:
             continue
         in_window = to_minutes(report.time) >= window_start
         located = claim.location_type == "coordinate" and claim.lat is not None
@@ -296,6 +308,19 @@ def _evaluate_zone_type(record: ClaimRecord, contacts: list[ContactView]) -> Cla
             "bölgede ağır araç iddiası karedeki tespitle uyuşuyor",
         )
     return None
+
+
+def _repeat_key(record: ClaimRecord) -> tuple[object, ...]:
+    c = record.claim
+    return (
+        record.report.source,
+        record.report.text,
+        c.claim_type,
+        c.zone,
+        c.vehicle_type,
+        c.behavior,
+        c.color,
+    )
 
 
 TIME_NOTE: dict[TimeCheck, str] = {
