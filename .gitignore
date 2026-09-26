@@ -25,3 +25,6 @@ node_modules/
 .DS_Store
 .coverage
 htmlcov/
+
+# Sentetik paket (Kaggle görüntüleri içerir; scripts/make_synthetic_data.py yeniden üretir)
+backend/synthetic/

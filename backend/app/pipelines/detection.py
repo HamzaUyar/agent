@@ -5,6 +5,7 @@ Hangisinin kullanılacağı ayarla seçilir (`DETECTOR_MODE`: mock / model). İk
 """
 
 import importlib
+import json
 import logging
 import threading
 from collections.abc import Callable
@@ -45,6 +46,43 @@ MOCK_DETECTIONS: dict[str, list[Detection]] = {
         Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34),
     ],
 }
+
+
+def load_mock_detections(path: Path) -> dict[str, list[Detection]]:
+    """`{image_id: [{label, confidence, x, y, w, h}, ...]}` biçimindeki JSON dosyasını okur."""
+    raw: dict[str, list[dict[str, float | str]]] = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        image_id: [
+            Detection(
+                label=VehicleClass(str(d["label"])),
+                confidence=float(d["confidence"]),
+                x=float(d["x"]),
+                y=float(d["y"]),
+                w=float(d["w"]),
+                h=float(d["h"]),
+            )
+            for d in items
+        ]
+        for image_id, items in raw.items()
+    }
+
+
+def dump_mock_detections(detections: dict[str, list[Detection]], path: Path) -> None:
+    payload = {
+        image_id: [
+            {
+                "label": d.label.value,
+                "confidence": d.confidence,
+                "x": d.x,
+                "y": d.y,
+                "w": d.w,
+                "h": d.h,
+            }
+            for d in items
+        ]
+        for image_id, items in detections.items()
+    }
+    path.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
 
 
 class MockDetector:
@@ -143,6 +181,9 @@ class UltralyticsDetector:
 def build_detector(settings: Settings) -> Detector:
     """Ayara göre tespit bileşeni. Model modunda ağırlık dosyası açılışta doğrulanır."""
     if settings.detector_mode == "mock":
+        mock_path = settings.resolved_mock_path
+        if mock_path is not None:
+            return MockDetector(load_mock_detections(mock_path))
         return MockDetector()
     weights = settings.resolved_weights_path
     if weights is None:

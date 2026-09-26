@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     data_dir: Path = Path("../../data")
     detector_mode: Literal["mock", "model"] = "mock"
     detector_weights_path: str = ""
+    detector_mock_path: str = ""
+    """Sahte tespitlerin JSON dosyası (ör. sentetik `detections.json`); boşsa yerleşik örnek."""
     detector_imgsz: int | None = None
     """Modelin çıkarım boyutu; boşsa Ultralytics'in varsayılanı."""
 
@@ -41,6 +43,11 @@ class Settings(BaseSettings):
     def resolved_weights_path(self) -> Path | None:
         """Model ağırlıkları, backend klasörüne göre çözümlenmiş; tanımlı değilse `None`."""
         return _resolve(Path(self.detector_weights_path)) if self.detector_weights_path else None
+
+    @property
+    def resolved_mock_path(self) -> Path | None:
+        """Sahte tespit dosyası, backend klasörüne göre çözümlenmiş; tanımlı değilse `None`."""
+        return _resolve(Path(self.detector_mock_path)) if self.detector_mock_path else None
 
 
 def _resolve(path: Path) -> Path:
