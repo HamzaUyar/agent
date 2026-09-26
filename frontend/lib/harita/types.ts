@@ -11,7 +11,7 @@ import type { Bounds, LngLat } from "@/lib/geo"
 export type Basemap = "uydu" | "sokak" | "duz"
 
 /** GeoJSON alan/çizgi katmanları; çizim sırası bu listenin sırasıdır. */
-export const AREA_LAYERS = ["bolge-alanlari", "us-halkalari"] as const
+export const AREA_LAYERS = ["bolge-alanlari", "ayak-izi", "us-halkalari"] as const
 export type AreaLayer = (typeof AREA_LAYERS)[number]
 
 /** Etiketli nokta işaretleri (erişilebilir düğmeler); gruplar üst üste bu sırayla çizilir. */

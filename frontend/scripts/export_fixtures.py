@@ -33,7 +33,12 @@ DETECTIONS = {
         Detection(label=VehicleClass.CAR, confidence=0.83, x=120, y=400, w=30, h=18),
     ]
 }
-LAST_LEVELS = {"img_000860": "high"}
+# `last_risk_level` gerçekte veritabanındaki son değerlendirmeden gelir; testler için birkaç örnek.
+LAST_LEVELS = {
+    "img_000860": "high",
+    "img_008333": "low",
+    "img_004423": "medium",
+}
 
 
 class FakeDetector:

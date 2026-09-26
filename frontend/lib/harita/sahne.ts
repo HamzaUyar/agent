@@ -4,7 +4,7 @@
  */
 import type { FeatureCollection } from "geojson"
 
-import type { ZonesResponse } from "@/lib/api/types"
+import type { ImageDetail, ZonesResponse } from "@/lib/api/types"
 import { formatDistance } from "@/lib/format"
 import { approxZoneRadiiM, boundsOf, circleRing, toLngLat, type Bounds } from "@/lib/geo"
 
@@ -62,5 +62,28 @@ export function buildScene({ base, zones }: ZonesResponse): Scene {
     },
     // Üs ve bütün Bölge'ler, yaklaşık alanlarıyla birlikte görünsün.
     bounds: boundsOf([baseLngLat, ...centers.flatMap((c, i) => circleRing(c, radii[i], 16))]),
+  }
+}
+
+/** Karenin çevresinde bırakılan bağlam: ayak izi ~150 m, harita bölgeyi de göstersin. */
+const FOOTPRINT_CONTEXT_M = 1200
+
+/** Seçili karenin ayak izi (4 köşe) ve haritanın yaklaşacağı kutu. */
+export function buildFootprint(image: ImageDetail): { area: FeatureCollection; bounds: Bounds } {
+  const c = image.corner_coordinates
+  const ring = [c.top_left, c.top_right, c.bottom_right, c.bottom_left, c.top_left].map(toLngLat)
+  const center = toLngLat(image.center)
+  return {
+    area: {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: { image_id: image.image_id },
+          geometry: { type: "Polygon", coordinates: [ring] },
+        },
+      ],
+    },
+    bounds: boundsOf([...ring, ...circleRing(center, FOOTPRINT_CONTEXT_M, 16)]),
   }
 }

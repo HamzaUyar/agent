@@ -1,11 +1,6 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test } from "@playwright/test"
 
-import zones from "../tests/fixtures/zones.json" with { type: "json" }
-
-/** Backend'siz: `/api/zones` backend'den üretilmiş referans veriyle cevaplanır. */
-async function mockZones(page: Page) {
-  await page.route("**/api/zones", (route) => route.fulfill({ json: zones }))
-}
+import { mockApi as mockZones } from "./mock-api"
 
 test("gerçek MapLibre: Üs, halka etiketleri ve 8 Bölge işaretle görünür; zemin atfı var", async ({ page }) => {
   await mockZones(page)

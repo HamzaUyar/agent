@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
+import type { FeatureCollection } from "geojson"
+import { useMemo } from "react"
 
 import { Button } from "@/components/ui/button"
-import { buildScene } from "@/lib/harita/sahne"
+import { buildFootprint, buildScene } from "@/lib/harita/sahne"
 import type { Basemap } from "@/lib/harita/types"
 import { cn } from "@/lib/utils"
 import { useOperasyon } from "@/store/operasyon"
@@ -16,6 +17,9 @@ const BASEMAPS: { id: Exclude<Basemap, "duz">; label: string }[] = [
   { id: "sokak", label: "Sokak" },
 ]
 
+const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] }
+const NO_MARKERS = {}
+
 /** Çerçeveli harita paneli: zemin seçimi, lejant ve sahne katmanları (Üs, halkalar, Bölge'ler). */
 export function HaritaPaneli() {
   const zones = useOperasyon((s) => s.zones)
@@ -25,11 +29,18 @@ export function HaritaPaneli() {
   const setBasemap = useOperasyon((s) => s.setBasemap)
   const basemapError = useOperasyon((s) => s.basemapError)
 
-  useEffect(() => {
-    if (useOperasyon.getState().zones.status === "idle") void loadZones()
-  }, [loadZones])
+  const selectedImageId = useOperasyon((s) => s.selectedImageId)
+  const imageDetail = useOperasyon((s) => s.imageDetail)
 
   const scene = useMemo(() => (zones.status === "ready" ? buildScene(zones.data) : null), [zones])
+  const footprint = useMemo(
+    () => (imageDetail.status === "ready" ? buildFootprint(imageDetail.data) : null),
+    [imageDetail],
+  )
+  const areas = useMemo(
+    () => ({ ...scene?.areas, "ayak-izi": footprint?.area ?? EMPTY }),
+    [scene, footprint],
+  )
 
   return (
     <section
@@ -38,9 +49,10 @@ export function HaritaPaneli() {
     >
       <Harita
         basemap={basemap}
-        areas={scene?.areas ?? {}}
-        markers={scene?.markers ?? {}}
-        fitTo={scene?.bounds ?? null}
+        areas={areas}
+        markers={scene?.markers ?? NO_MARKERS}
+        // Kare seçiliyken ayak izine yaklaşır; ayrıntısı yüklenirken görünüm yerinde kalır.
+        fitTo={selectedImageId ? (footprint?.bounds ?? null) : (scene?.bounds ?? null)}
         onBasemapError={basemapError}
       />
 

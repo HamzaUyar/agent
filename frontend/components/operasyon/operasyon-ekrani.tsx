@@ -1,8 +1,12 @@
 "use client"
 
+import { useEffect } from "react"
+
+import { GoruntuCekmecesi } from "@/components/goruntu/goruntu-cekmecesi"
 import { HaritaPaneli } from "@/components/harita/harita-paneli"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useOperasyon, type RiskTab } from "@/store/operasyon"
+import { RiskCekmecesi, RiskOzeti } from "@/components/risk/risk-cekmecesi"
+import { ZamanAkisi } from "@/components/zaman-akisi/zaman-akisi"
+import { useOperasyon } from "@/store/operasyon"
 
 import { Cekmece } from "./cekmece"
 import { SekmeRafi } from "./sekme-rafi"
@@ -17,7 +21,14 @@ const LEFT_TITLES = { goruntu: "Görüntü", sohbet: "Sohbet" } as const
  */
 export function OperasyonEkrani() {
   useKisayollar()
-  const { left, right, riskTab, setRiskTab } = useOperasyon()
+  const left = useOperasyon((s) => s.left)
+  const right = useOperasyon((s) => s.right)
+
+  useEffect(() => {
+    const s = useOperasyon.getState()
+    if (s.zones.status === "idle") void s.loadZones()
+    if (s.images.status === "idle") void s.loadImages()
+  }, [])
 
   return (
     <div className="grid h-dvh grid-rows-[auto_minmax(0,1fr)_auto]">
@@ -31,11 +42,9 @@ export function OperasyonEkrani() {
           panelKey={left.panel}
           state={left.state}
         >
-          {left.panel === "goruntu" && <p className="text-metin-soluk">Kare seçilmedi.</p>}
+          {left.panel === "goruntu" && <GoruntuCekmecesi />}
           {left.panel === "sohbet" && (
-            <p className="text-metin-soluk">
-              Sohbet, tamamlanmış bir değerlendirmeden sonra açılır.
-            </p>
+            <p className="text-metin-soluk">Sohbet, tamamlanmış bir değerlendirmeden sonra açılır.</p>
           )}
         </Cekmece>
 
@@ -43,27 +52,19 @@ export function OperasyonEkrani() {
           <HaritaPaneli />
         </main>
 
-        <Cekmece side="right" title="Risk & Temaslar" panelKey={right.panel} state={right.state}>
-          <Tabs value={riskTab} onValueChange={(v) => setRiskTab(v as RiskTab)}>
-            <TabsList>
-              <TabsTrigger value="temaslar">Temaslar</TabsTrigger>
-              <TabsTrigger value="brief">Brief</TabsTrigger>
-            </TabsList>
-            <TabsContent value="temaslar" className="text-metin-soluk">
-              Henüz değerlendirme yok. Bir kare seçip risk analizini başlatın.
-            </TabsContent>
-            <TabsContent value="brief" className="text-metin-soluk">
-              Brief, değerlendirme tamamlanınca burada görünür.
-            </TabsContent>
-          </Tabs>
+        <Cekmece
+          side="right"
+          title="Risk & Temaslar"
+          panelKey={right.panel}
+          state={right.state}
+          peek={<RiskOzeti />}
+        >
+          <RiskCekmecesi />
         </Cekmece>
         <SekmeRafi side="right" />
       </div>
 
-      <section
-        aria-label="Zaman akışı"
-        className="h-[var(--zaman-akisi-yukseklik)] border-t border-cizgi bg-[var(--zaman-akisi-zemin)]"
-      />
+      <ZamanAkisi />
     </div>
   )
 }

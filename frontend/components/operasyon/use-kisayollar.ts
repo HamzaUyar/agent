@@ -14,8 +14,13 @@ function isTyping(target: EventTarget | null): boolean {
   )
 }
 
+/** Ok tuşlarını kendisi kullanan öğeler (sekmeler, seçim kutuları); orada ←/→ kare değiştirmez. */
+function usesArrows(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.closest('[role="tablist"], select, [role="slider"]') !== null
+}
+
 /**
- * Çekmece kısayolları: R Risk & Temaslar · B Brief · G Görüntü · S Sohbet · Esc kapat.
+ * Kısayollar: R Risk & Temaslar · B Brief · G Görüntü · S Sohbet · Esc kapat · ←/→ önceki/sonraki kare.
  * Aynı kısayol açık çekmeceyi kapatır. Yazı alanındayken yalnızca Esc çalışır.
  */
 export function useKisayollar() {
@@ -33,6 +38,13 @@ export function useKisayollar() {
         return
       }
       if (isTyping(event.target)) return
+
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        if (usesArrows(event.target)) return
+        s.stepImage(event.key === "ArrowRight" ? 1 : -1)
+        event.preventDefault()
+        return
+      }
 
       switch (event.key.toLocaleLowerCase("tr-TR")) {
         case "r":

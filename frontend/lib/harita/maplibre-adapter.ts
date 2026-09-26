@@ -106,6 +106,22 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
           },
         },
       ]
+    case "ayak-izi":
+      return [
+        {
+          id: `${source}-dolgu`,
+          type: "fill",
+          source,
+          paint: { "fill-color": css("--secim"), "fill-opacity": 0.12 },
+        },
+        casing(4),
+        {
+          id: `${source}-cizgi`,
+          type: "line",
+          source,
+          paint: { "line-color": css("--secim"), "line-width": 2 },
+        },
+      ]
     case "us-halkalari":
       return [
         casing(4),

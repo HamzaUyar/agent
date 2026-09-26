@@ -3,7 +3,7 @@
     "image_id": "img_008333",
     "zone": "Kuzeydogu Kavsagi",
     "capture_time": "10:10",
-    "last_risk_level": null
+    "last_risk_level": "low"
   },
   {
     "image_id": "img_000267",
@@ -237,6 +237,6 @@
     "image_id": "img_004423",
     "zone": "Kuzeybati Yolu",
     "capture_time": "15:50",
-    "last_risk_level": null
+    "last_risk_level": "medium"
   }
 ]

@@ -2,6 +2,7 @@ import { render } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { OperasyonEkrani } from "@/components/operasyon/operasyon-ekrani"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { MapAdapterProvider } from "@/lib/harita/context"
 
 import { FakeMap } from "./sahte-harita"
@@ -11,9 +12,11 @@ export function renderEkran() {
   const user = userEvent.setup()
   const map = new FakeMap()
   const view = render(
-    <MapAdapterProvider factory={map.factory}>
-      <OperasyonEkrani />
-    </MapAdapterProvider>,
+    <TooltipProvider>
+      <MapAdapterProvider factory={map.factory}>
+        <OperasyonEkrani />
+      </MapAdapterProvider>
+    </TooltipProvider>,
   )
   return { user, map, ...view }
 }
