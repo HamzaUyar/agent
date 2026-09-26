@@ -104,6 +104,9 @@ class ImageResult:
     reports: list[ReportCheck] = field(default_factory=list)
     automatic: bool = False
     """Brief otomatik özet mi (LLM kullanılmadı ya da cevap vermedi)."""
+    llm_adjusted: bool = False
+    """LLM en az bir temasın seviyesini değiştirdi; etiketler kural tablosuna göre olduğu
+    için bu görüntüdeki seviye farkı kural hatası değil, LLM kararı olabilir."""
     error: str | None = None
 
     @property
@@ -134,6 +137,7 @@ class Summary:
     contradictions_caught: int
     false_alarms: int
     automatic: int
+    llm_adjusted: int
 
 
 @dataclass(frozen=True)
@@ -177,6 +181,7 @@ def score_image(label: ImageLabel, brief: Brief) -> ImageResult:
             for r in label.reports
         ],
         automatic=brief.is_fallback,
+        llm_adjusted=any(c.adjustment_reason for c in brief.contacts),
     )
 
 
@@ -203,6 +208,7 @@ def summarize(results: list[ImageResult]) -> Summary:
             c.expected != "contradicts" and c.actual == "contradicts" for c in reports
         ),
         automatic=sum(r.automatic for r in done),
+        llm_adjusted=sum(r.llm_adjusted for r in done),
     )
 
 
@@ -243,6 +249,8 @@ def render(result: EvalResult) -> str:
             parts.append(f"fazla eşleşme: {', '.join(r.extra_matches)}")
         wrong = [c for c in r.reports if not c.ok]
         parts += [f"rapor {c.time} {c.source}: {c.actual} (beklenen {c.expected})" for c in wrong]
+        if r.llm_adjusted:
+            parts.append("LLM ayarı")
         if r.automatic:
             parts.append("otomatik özet")
         lines.append(f"  {mark} {r.image_id}: " + "; ".join(parts))
@@ -255,6 +263,14 @@ def render(result: EvalResult) -> str:
         f"{s.false_alarms} yanlış alarm",
         f"LLM brief: {s.images - s.automatic}/{s.images} (otomatik özet: {s.automatic})",
     ]
+    if s.llm_adjusted:
+        wrong_adjusted = sum(
+            r.llm_adjusted and not r.level_ok for r in result.images if not r.error
+        )
+        lines.append(
+            f"LLM seviye ayarı: {s.llm_adjusted} görüntüde; seviye farklarının {wrong_adjusted}'i "
+            "bunlarda (etiketler kural tablosuna göre)"
+        )
     if s.failed:
         lines.append(f"Değerlendirilemeyen görüntü: {s.failed}")
     return "\n".join(lines)

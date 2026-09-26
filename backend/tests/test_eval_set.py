@@ -13,7 +13,15 @@ import pytest
 from app.agent.service import EvaluationService
 from app.data_package import read_package
 from app.db.repositories import InMemoryRepository
-from app.eval_set import EvalLabels, LabelError, load_labels, run_eval_set
+from app.eval_set import (
+    EvalLabels,
+    EvalResult,
+    LabelError,
+    load_labels,
+    run_eval_set,
+    score_image,
+    summarize,
+)
 from app.schemas.claims import ClaimRecord, ReportClaim
 from app.schemas.domain import Detection, FieldReport, ImageMeta, ReportSource, VehicleClass
 
@@ -264,3 +272,20 @@ def test_brief_source_is_recorded_per_image(tmp_path: Path) -> None:
 
     assert all(r.automatic for r in result.images if r.error is None)  # LLM yok
     assert result.summary.automatic == 2
+
+
+def test_llm_adjusted_images_are_counted_separately(tmp_path: Path) -> None:
+    brief = service().run("img_000860")
+    raised = [
+        c.model_copy(update={"final_level": "critical", "adjustment_reason": "üsse yakın park"})
+        if c.track_id == "T0032"
+        else c
+        for c in brief.contacts
+    ]
+    label = labels(CORRECT, tmp_path).images[0]
+
+    row = score_image(label, brief.model_copy(update={"contacts": raised}))
+
+    assert row.llm_adjusted is True
+    assert summarize([row]).llm_adjusted == 1
+    assert "LLM ayarı" in EvalResult([row], summarize([row])).render()

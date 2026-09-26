@@ -287,6 +287,33 @@
 - **Bulgu (açık):** Paragraf metninde hâlâ olgu ve üslup hataları var: kaçırılmış temas T0200'e "kayıt dışı" deniyor, temas etiketleri (K1, K2) metne sızıyor, "muhtemel düzeyinde" gibi çeviri ifadeleri kullanılıyor. Brief'te mesafeler "1.6 km" diye yazılıyor ("1,6 km" olmalı).
 - **Karar:** Sıradaki iş, Kaggle eğitim görüntülerinden sentetik bir 2. aşama paketi üretmek (40 görüntü, track'ler, bilerek yanlış raporlar, otomatik etiketler) ve bütün pipeline'ı onunla koşturmak.
 
+### Sentetik 2. aşama paketi ve bütün pipeline'ın koşturulması
+- `scripts/make_synthetic_data.py`: Kaggle eğitim görüntülerinden (`train/`, 6.471 gerçek drone görüntüsü, 165 bin etiketli kutu) organizatör biçiminde paket üretiyor.
+  - Görüntü ve kutular gerçek; konum, track ve raporlar uydurma. Ölçek, otomobil kutusunun boyundan kestiriliyor (~4,5 m).
+  - 10 görüntülük desen: yaklaşan ağır ve hafif araç, üsse yakın park, kayıt dışı, kaçırılmış temas, sakin trafik. Arka plan araçları yerinde gidip gelen yerel trafik ya da park halinde.
+  - Raporlar organizatör üslubunda ve bir kısmı bilerek yanlış: konum/saat çelişkisi, yanlış tip, üçüncü taraf sahte dostluk. Ayrıca resmi dostluk, tehdit uyarısı, çekim sonrası, ilgisiz ve bölge raporları var.
+  - Beklenen etiketler senaryonun gerçek değerlerinden kural tablosuyla hesaplanıyor; pipeline bunları pikselden, track'ten ve rapor metninden çıkarmak zorunda.
+  - Üreteç tutarlılığı doğruluyor: başka bir görüntünün track'i bir kareye düşmemeli, raporlar doğru araca bağlanmalı, track'siz güçlü bir kutu zayıf ya da kaçırılmış bir aracın track'ini kapmamalı.
+  - `--coverage`: arka plan araçlarından track'i olanların oranı (R12 stres testi).
+- Sahte detektör tespitleri dosyadan okunabiliyor (`DETECTOR_MOCK_PATH`). `run_eval_set` Supabase'siz de çalışıyor (`--package`, `--claims`, `--detections`).
+- Değerlendirme seti, LLM'in seviyeyi değiştirdiği görüntüleri ayrıca sayıyor ("LLM ayarı"); etiketler kural tablosuna göre olduğu için LLM açıkken seviye farkı kural hatası anlamına gelmeyebilir.
+- `tests/test_synthetic.py`: pipeline sentetik senaryoyu birebir geri çıkarmalı. Bilerek bozma denemesi yapıldı (rapor bağlama mesafesi 150 → 3 m): rapor kararları %36'ya, çelişki yakalama 0/4'e düştü; test gerçekten ölçüyor. Toplam 174 test.
+- **Sonuçlar (40 görüntü, 619 araç, 609 track, 17.613 nokta, 28 rapor):**
+
+| Çalıştırma | Seviye | Eşleşme | Rapor kararı | Çelişki | Süre |
+|---|---|---|---|---|---|
+| Kurallar, ideal iddialar (yerel) | 40/40 | 605/605 | 28/28 | 8/8 | 3 sn |
+| Kurallar, GLM'in ayrıştırdığı iddialar (Supabase) | 40/40 | 605/605 | 27/28 | 8/8 | — |
+| LLM karar + brief + VLM (Supabase) | 31/40 | 603/605 | 27/28 | 8/8 | 7 dk |
+
+  - Supabase'e yükleme 15 sn, GLM ile 28 raporun ayrıştırılması 74 sn. GLM'in ayrıştırması neredeyse kusursuz: koordinat, tip ve iddia türü doğru. Tek hata, aynı kalıptaki üç "yol çalışması" raporundan birinin ilgisiz yerine gözlem sayılması.
+  - LLM açıkken 9 seviye farkı var ve hepsi LLM'in ±1 kademe ayarı; 8'i yukarı. Örnekler: resmi olarak doğrulanmış iki dost aracı "düşük"ten "orta"ya çıkardı; 2,7–2,9 km'de yaklaşan araçları kritiğe çıkardı; 1,1 km'de 2 saattir park halindeki kamyonları yükseltti. Aynı görüntülerin yeniden çalıştırılmasında 5 görüntünün 4'ünde hiç ayar yapmadı; LLM kararı tekrarlanabilir değil.
+  - **Dikkat:** Bir çalıştırmada LLM, 1,7 km'de yaklaşan bir otobüsü kritikten yükseğe düşürdü. Kanıt olarak, aracın 45 dk önce uzakta park halindeyken "hareketleri olağan" diyen tutarlı bir rapor gösterdi. Kod buna izin veriyor, çünkü tutarlı her iddia düşürme kanıtı sayılıyor.
+  - VLM 70 zayıf kutunun 2'sini "araç değil" diye reddetti; ikisi de gerçek araçtı, track kaçırılmış temasa döndü.
+  - GLM bir kez 21 bin satır boş satırdan oluşan bozuk bir cevap verdi; o görüntü otomatik özete düştü.
+- **Brief uzunluğu:** Görüntü başına ortanca 16 temas; brief ortanca 20, en fazla 34 satır. `--coverage 0.6` ile kayıt dışı temas ortancası 5 (en fazla 16) ve hiçbir görüntü düşük kalmıyor (5 → 0).
+- Supabase'te şu an sentetik paket yüklü (sahte paketin yerine). Geri dönmek için: `load_data tests/fixtures/mock_package --replace` + `parse_reports`.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.
