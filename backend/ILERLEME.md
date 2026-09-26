@@ -354,6 +354,12 @@
 - **Bulgu — brief'teki rapor gürültüsü:** 273 rapor bulgusunun 209'u doğrulanamaz; gün boyu geçerli "tatbikat" dostluk iddiası 81 kez, söylentiler 60 kez her görüntüde listeleniyor.
 - Model sınıf dağılımı (260 kutu): 206 otomobil, 26 minibüs, 24 kamyon, 4 otobüs.
 
+### Görüntüler Supabase Storage'a taşınıyor
+- Migration `09_images_bucket`: özel `drone-images` bucket'ı (jpeg/png, 20 MB sınır) oluşturuldu.
+- `images.file_path` biçimi `drone-images/<id>.jpg` oldu (`load-data` da bunu yazıyor); `fetch_package` yolu `ImageMeta.file_path`'e taşıyor.
+- `app/storage.py`: Storage REST istemcisi (`service_role`). Tespit (EVREN/YOLO) ve VLM, görüntü `DATA_DIR/images`'ta yoksa Storage'dan indirip oraya yazıyor; yerel dosya varsa Storage'a gidilmiyor.
+- `upload-images [klasör]`: dosyaları bucket'a yükleyip `file_path`'i günceller. 40 görüntü Dashboard'dan bucket'a yüklendi (boyutlar paketle aynı); `images.file_path` 40 kayıtta `drone-images/<id>.jpg` yapıldı.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

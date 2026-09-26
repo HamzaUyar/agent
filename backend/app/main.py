@@ -19,6 +19,7 @@ from app.db.session import connect
 from app.llm.client import build_router
 from app.pipelines.detection import build_detector
 from app.pipelines.vision import VlmVerifier
+from app.storage import build_storage
 
 
 def _load_repository() -> InMemoryRepository:
@@ -29,9 +30,14 @@ def _load_repository() -> InMemoryRepository:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.repository = await run_in_threadpool(_load_repository)
-    app.state.detector = build_detector(get_settings())
+    settings = get_settings()
+    app.state.detector = build_detector(settings)
     app.state.router = build_router()
-    app.state.verifier = VlmVerifier(app.state.router, get_settings().resolved_data_dir / "images")
+    app.state.verifier = VlmVerifier(
+        app.state.router,
+        settings.resolved_data_dir / "images",
+        storage=build_storage(settings),
+    )
     yield
 
 

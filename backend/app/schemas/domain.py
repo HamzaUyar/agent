@@ -81,6 +81,8 @@ class ImageMeta:
     height_px: int
     capture_time: time
     corners: Corners
+    file_path: str | None = None
+    """Supabase Storage'daki dosya, "<bucket>/<nesne>"; yerel veri paketinde `None`."""
 
 
 @dataclass(frozen=True)

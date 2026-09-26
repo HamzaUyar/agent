@@ -69,7 +69,8 @@ Python 3.11+ (ortam: `.venv`, Python 3.14, pip), FastAPI (SSE), Pydantic v2, psy
   - **Kaynak:** `bases`, `zones`, `images`, `tracks`, `track_points`, `field_reports`
   - **Zenginleştirilmiş:** `report_claims`, `track_segments`
   - **Analiz:** `analysis_runs`, `detections`, `track_matches`, `motion_analyses`, `report_evaluations`, `risk_assessments`, `agent_steps`
-- Migration'lar: `01_extensions_and_enums` … `08_field_reports_seq` (`app/supabase/migrations/`).
+- Migration'lar: `01_extensions_and_enums` … `09_images_bucket` (`supabase/migrations/`).
+- **Storage:** görüntü dosyaları özel `drone-images` bucket'ında; `images.file_path` = `drone-images/<id>.jpg`. Yerelde (`DATA_DIR/images`) olmayan görüntü, tespit ve VLM ilk ihtiyaç duyduğunda `service_role` ile indirilip oraya yazılır (`app/storage.py`). Yükleme: `upload-images [klasör]`.
 
 ## Dizin yapısı
 ```

@@ -12,6 +12,7 @@ dependencies = [
     "openai>=1.40",
     "pillow>=10",
     "evren-sdk>=0.9",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +29,7 @@ dev = [
 [project.scripts]
 make-mock-data = "scripts.make_mock_data:main"
 load-data = "scripts.load_data:main"
+upload-images = "scripts.upload_images:main"
 run-eval-set = "scripts.run_eval_set:main"
 
 [build-system]

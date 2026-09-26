@@ -50,7 +50,7 @@ def fetch_package(conn: psycopg.Connection) -> DataPackage:
 
         cur.execute(
             """select id, width_px, height_px, capture_time,
-                      tl_lat, tl_lon, tr_lat, tr_lon, bl_lat, bl_lon, br_lat, br_lon
+                      tl_lat, tl_lon, tr_lat, tr_lon, bl_lat, bl_lon, br_lat, br_lon, file_path
                from public.images order by id"""
         )
         images = [
@@ -65,6 +65,7 @@ def fetch_package(conn: psycopg.Connection) -> DataPackage:
                     bottom_left=GeoPoint(r[8], r[9]),
                     bottom_right=GeoPoint(r[10], r[11]),
                 ),
+                file_path=r[12],
             )
             for r in cur.fetchall()
         ]
