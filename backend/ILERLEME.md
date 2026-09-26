@@ -453,3 +453,9 @@
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.
 - Embedding modeli ve boyutu hâlâ belirsiz.
 - EVREN anahtarı çalışıyor; `report_claims` 6 iddiayla dolu. Organizatörlerin GLM anahtarı yarın gelecek, o zaman `GLM_API_KEY`/`GLM_API_BASE` ve model adı doğrulanacak.
+
+### Kol B eşleşmeden ayrıldı (27 Eylül, pipeline iyileştirmesi madde 1)
+- `EvaluationService.track_branch(image)` → `TrackBranch(positions, motions)`: aday track'ler (çekim anında karenin içinde ya da kareye eşleşme eşiği + 1 m kadar yakın) ve her birinin hareket özeti. Görev tanımı s3: her track kendi görüntüsünün çekim anında biter, tespiti beklemeye gerek yok.
+- Değerlendirmede track kolu tespitle aynı anda çalışıyor (thread); eşleşme ve temas oluşturma hazır sonucu kullanıyor, `_motion` temas başına ayrıca çağrılmıyor. Tip geçmişi de aynı aday tanımını kullanıyor.
+- Ölçüm: 40 gerçek görüntünün kurallarla, LLM'siz bütün SSE olayları (360 olay, veriler dahil) önce ve sonra byte düzeyinde aynı.
+- Testler: `tests/test_track_branch.py` (aday tanımı, hareketin yeniden okunmaması, tespitle paralellik); toplam 277.

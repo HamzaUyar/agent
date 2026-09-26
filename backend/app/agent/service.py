@@ -8,6 +8,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import time
 
 from app.agent.decision import DecisionUnavailableError, decide
@@ -17,7 +18,13 @@ from app.db.repositories import DataRepository
 from app.formatting import km, mps
 from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector, ImageFileMissingError
-from app.pipelines.geo import distance_m, in_footprint, nearest_zone, pixel_to_geo
+from app.pipelines.geo import (
+    distance_m,
+    distance_to_footprint_m,
+    in_footprint,
+    nearest_zone,
+    pixel_to_geo,
+)
 from app.pipelines.matching import LocatedDetection, MatchResult, match_detections
 from app.pipelines.motion import Position, analyze_motion, positions_at
 from app.pipelines.reports import ClaimEvaluation, ContactView, evaluate_claims
@@ -51,6 +58,9 @@ logger = logging.getLogger(__name__)
 BRIEF_STEP = "brief"
 # Aynı anda en fazla bu kadar görsel doğrulama; gateway de 4 eşzamanlı istek kabul ediyor.
 VISUAL_WORKERS = 4
+# Aday track sınırına eklenen pay: eşleşme düzlem yaklaşımıyla, kareye uzaklık haversine'le
+# ölçülüyor; eşik sınırındaki bir track iki ölçü arasındaki küçük fark yüzünden kaçmasın.
+CANDIDATE_SLACK_M = 1.0
 
 LEVEL_TR = {"low": "DÜŞÜK", "medium": "ORTA", "high": "YÜKSEK", "critical": "KRİTİK"}
 TREND_TR = {
@@ -65,6 +75,20 @@ CARGO_TR = {"loaded": "yüklü", "empty": "boş"}
 
 class ImageNotFoundError(LookupError):
     """Görüntü veri setinde yok; konumu ve saati bilinmediği için değerlendirilemez."""
+
+
+@dataclass(frozen=True)
+class TrackBranch:
+    """Kol B'nin bir görüntü için hazır sonucu; tespitten bağımsız hesaplanır.
+
+    Görev tanımı s3: her track kendi görüntüsünün çekim anında biter. Adaylar çekim anında
+    karenin içinde ya da kareye eşleşme eşiği kadar yakın olan track'lerdir.
+    """
+
+    positions: list[Position]
+    """Adayların çekim anındaki konumları (adım dışı çekim saatinde ileri kestirilmiş)."""
+    motions: dict[str, MotionFinding]
+    """Her adayın son iki saatlik hareket özeti."""
 
 
 def _latlon(p: GeoPoint) -> LatLon:
@@ -138,7 +162,11 @@ class EvaluationService:
             corners=[_latlon(p).model_dump() for p in image.corners.as_ring()[:4]],
         )
 
-        detected = self._detector.detect(image)
+        # Kol B tespiti beklemez: karedeki track'lerin hareketi tespitle aynı anda hesaplanır.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pending = pool.submit(self.track_branch, image)
+            detected = self._detector.detect(image)
+            branch = pending.result()
         usable = self._usable(detected)
         ignored = len(detected) - len(usable)
         yield emit(
@@ -172,7 +200,8 @@ class EvaluationService:
                 visuals[box] = self._verifier.inspect(image, box) if self._verifier else None
             return visuals[box]
 
-        matches, positions = self._match(image, located)
+        matches = self._match(image, located, branch.positions)
+        positions = branch.positions
         # Track'le eşleşen zayıf tespit VLM'e sorulur: araç derse kesinlik "olası"ya çıkar.
         # "Araç değil" cevabı kutuyu düşürmez: 1 m içindeki track orada bir araç olduğunu zaten
         # gösteriyor; VLM'in reddettiği bu kutular ağaç ya da gölge altındaki gerçek araçlardı.
@@ -228,10 +257,10 @@ class EvaluationService:
         history = self._label_history(image)
         contacts = [
             self._detection_contact(
-                image, m, base, estimated, history, visuals.get(_bbox(m.located.detection))
+                m, base, branch, estimated, history, visuals.get(_bbox(m.located.detection))
             )
             for m in matches
-        ] + [self._missed_contact(p, base, now) for p in missed]
+        ] + [self._missed_contact(p, base, branch) for p in missed]
         yield emit(
             "hareket",
             "; ".join(
@@ -408,28 +437,38 @@ class EvaluationService:
     def _locate(image: ImageMeta, detections: list[Detection]) -> list[LocatedDetection]:
         return [LocatedDetection(d, pixel_to_geo(image, *d.center_px)) for d in detections]
 
+    def track_branch(self, image: ImageMeta) -> TrackBranch:
+        """Kol B: aday track'lerin çekim anı konumu ve hareket analizi, tespitten bağımsız."""
+        base = self._repo.base().location
+        positions = self._candidate_positions(image)
+        motions = {
+            p.track_id: self._motion(p.track_id, base, image.capture_time) for p in positions
+        }
+        return TrackBranch(positions, motions)
+
+    def _candidate_positions(self, image: ImageMeta) -> list[Position]:
+        """Çekim anında karenin içinde ya da kareye eşleşme eşiği kadar yakın track'ler."""
+        now = image.capture_time
+        since = from_minutes(to_minutes(now) - 2 * TRACK_STEP_MINUTES)
+        reach = self._rules.matching.threshold_m + CANDIDATE_SLACK_M
+        return [
+            p
+            for p in positions_at(self._repo.track_points_between(since, now), now)
+            if distance_to_footprint_m(image, p.location) <= reach
+        ]
+
     def _match(
-        self, image: ImageMeta, located: list[LocatedDetection]
-    ) -> tuple[list[MatchResult], list[Position]]:
-        """Tespitleri çekim anında görüntünün alanındaki track konumlarıyla birebir eşler.
+        self, image: ImageMeta, located: list[LocatedDetection], positions: list[Position]
+    ) -> list[MatchResult]:
+        """Tespitleri aday track'lerin çekim anı konumlarıyla birebir eşler.
 
         Güçlü ve zayıf tespitler tek atamada eşlenir; eşitlik bozma güçlü tespiti öne alır.
         Eşleşmeyen zayıf tespit düşer.
         """
-        now = image.capture_time
-        since = from_minutes(to_minutes(now) - 2 * TRACK_STEP_MINUTES)
-        positions = positions_at(self._repo.track_points_between(since, now), now)
-        points = [
-            TrackPoint(p.track_id, now, p.location)
-            for p in positions
-            if in_footprint(image, p.location)
-        ]
+        points = [TrackPoint(p.track_id, image.capture_time, p.location) for p in positions]
         rules = self._rules.matching
         matches = match_detections(located, points, rules.threshold_m, rules.score_tiebreak)
-        matches = [
-            m for m in matches if m.track is not None or not self._is_weak(m.located.detection)
-        ]
-        return matches, positions
+        return [m for m in matches if m.track is not None or not self._is_weak(m.located.detection)]
 
     def _label_history(self, image: ImageMeta) -> dict[str, list[LabelObservation]]:
         """Çekim anına kadarki karelerde her track'in hangi sınıfla tespit edildiği."""
@@ -444,7 +483,8 @@ class EvaluationService:
                 logger.warning("Tip geçmişi: %s atlandı, dosya yok", frame.image_id)
                 continue
             usable = self._usable(detected)
-            matches, _ = self._match(frame, self._locate(frame, usable))
+            located = self._locate(frame, usable)
+            matches = self._match(frame, located, self._candidate_positions(frame))
             for m in matches:
                 if m.track:
                     history[m.track.track_id].append(
@@ -517,9 +557,9 @@ class EvaluationService:
 
     def _detection_contact(
         self,
-        image: ImageMeta,
         match: MatchResult,
         base: GeoPoint,
+        branch: TrackBranch,
         estimated: set[str],
         history: dict[str, list[LabelObservation]],
         visual: VisualFinding | None,
@@ -529,7 +569,7 @@ class EvaluationService:
         dist_base = distance_m(location, base)
         track_id = match.track.track_id if match.track else None
 
-        motion = self._motion(track_id, base, image.capture_time) if track_id else None
+        motion = branch.motions[track_id] if track_id else None
         observed = history.get(track_id, []) if track_id else []
         labels = {VehicleClass(o.label) for o in observed} | {det.label}
         effective = riskier_type(sorted(labels, key=str))
@@ -575,9 +615,11 @@ class EvaluationService:
             ),
         )
 
-    def _missed_contact(self, position: Position, base: GeoPoint, now: time) -> ContactFinding:
+    def _missed_contact(
+        self, position: Position, base: GeoPoint, branch: TrackBranch
+    ) -> ContactFinding:
         """Karede olduğu halde tespit edilmemiş track: tipi bilinmez, risk yalnızca hareketten."""
-        motion = self._motion(position.track_id, base, now)
+        motion = branch.motions[position.track_id]
         dist_base = distance_m(position.location, base)
         decision = base_level(
             None,
