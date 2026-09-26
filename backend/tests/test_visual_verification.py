@@ -5,6 +5,7 @@ tespit kararına nasıl yansıdığı gerçek kodla çalışır.
 """
 
 import io
+import threading
 import time as clock
 from datetime import time
 from pathlib import Path
@@ -403,3 +404,38 @@ def test_vlm_verifier_with_an_unreadable_image_returns_none(tmp_path: Path) -> N
     provider = FakeVisionProvider({"is_vehicle": True, "color": None, "cargo": None})
 
     assert vlm(provider, tmp_path).inspect(IMG_000860, (727, 284, 58, 34)) is None
+
+
+class BarrierVerifier(FakeVerifier):
+    """İki çağrı aynı anda gelmezse bariyer zaman aşımına uğrar: sıralı çağrıyı yakalar."""
+
+    def __init__(self, finding: VisualFinding | None) -> None:
+        super().__init__(finding)
+        self.barrier = threading.Barrier(2, timeout=2)
+
+    def inspect(
+        self, image: ImageMeta, bbox: tuple[float, float, float, float]
+    ) -> VisualFinding | None:
+        self.barrier.wait()
+        return super().inspect(image, bbox)
+
+
+def box_at(point: GeoPoint, image_id: str = "img_000860") -> Detection:
+    [image] = [m for m in PACKAGE.images if m.image_id == image_id]
+    c = image.corners
+    x = (point.lon - c.top_left.lon) / (c.top_right.lon - c.top_left.lon) * image.width_px
+    y = (c.top_left.lat - point.lat) / (c.top_left.lat - c.bottom_left.lat) * image.height_px
+    return Detection(label=VehicleClass.CAR, confidence=0.35, x=x - 10, y=y - 10, w=20, h=20)
+
+
+def test_weak_detections_are_checked_in_parallel() -> None:
+    """Her VLM çağrısı ~10 sn; kutular sırayla değil aynı anda sorulur."""
+    t0032_now = next(
+        p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(14, 10)
+    )
+    verifier = BarrierVerifier(seen("beyaz"))
+
+    brief = evaluate([], verifier, [WEAK_TRUCK, box_at(t0032_now)])
+
+    assert len(verifier.calls) == 2
+    assert {contact(brief, t).certainty for t in ("T0122", "T0032")} == {"likely"}

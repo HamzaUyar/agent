@@ -7,6 +7,7 @@ olay yapılandırılmış Brief'i taşır. Çekim anından sonraki veri okunmaz 
 import logging
 from collections import defaultdict
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import time
 
 from app.agent.decision import DecisionUnavailableError, decide
@@ -47,6 +48,8 @@ from app.schemas.domain import (
 logger = logging.getLogger(__name__)
 
 BRIEF_STEP = "brief"
+# Aynı anda en fazla bu kadar görsel doğrulama; gateway de 4 eşzamanlı istek kabul ediyor.
+VISUAL_WORKERS = 4
 
 LEVEL_TR = {"low": "DÜŞÜK", "medium": "ORTA", "high": "YÜKSEK", "critical": "KRİTİK"}
 TREND_TR = {
@@ -170,7 +173,20 @@ class EvaluationService:
 
         matches, positions = self._match(located, now)
         # Track'le eşleşen zayıf tespit VLM'e sorulur; araç değilse kutu düşer ve track
-        # kaçırılmış temas olarak kalır.
+        # kaçırılmış temas olarak kalır. Kutular paralel sorulur: her çağrı ~10 sn sürer.
+        if self._verifier is not None:
+            weak = list(
+                dict.fromkeys(
+                    _bbox(m.located.detection)
+                    for m in matches
+                    if m.track and is_weak(m.located.detection)
+                )
+            )
+            if weak:
+                verifier = self._verifier
+                with ThreadPoolExecutor(max_workers=VISUAL_WORKERS) as pool:
+                    found = pool.map(lambda box: verifier.inspect(image, box), weak)
+                    visuals.update(zip(weak, found, strict=True))
         not_vehicles = [
             m
             for m in matches
