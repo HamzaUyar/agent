@@ -465,3 +465,10 @@
 - `reports.visual_track_ids(...)`: renk ya da yük belirten iddiaların bağlanacağı track'li temaslar; `evaluate_claims` ile aynı bağlama kuralını (`_bind`) kullanıyor. Servis (`_inspect_all`) eşleşmeden hemen sonra bu kutuları zayıf kutularla birlikte tek bir paralel dalgada (en fazla 4) soruyor; rapor değerlendirmesi yalnızca sonucu okuyor.
 - Ölçüm: 40 gerçek görüntü, kurallar + belirlenimci sahte VLM: 360 olayın hepsi ve 17 VLM çağrısının kutuları önce ve sonra aynı.
 - Testler: renk iddiası ile zayıf kutunun aynı dalgada aynı anda sorulması, bağlanmayan ya da ilgisiz iddianın VLM'e gitmemesi; toplam 279.
+
+### Değerlendirme tipli aşamalara bölündü (27 Eylül, refactor)
+- `EvaluationService.evaluate` (~260 satırlık tek üreteç) ince bir orkestratör oldu: aşamaları sırayla çağırıp her birinden sonra SSE adımını yayıyor. Kol A (`detect`) ve Kol B (`track_branch`) yine `concurrent.futures` ile paralel.
+- `app/agent/stages.py`: her aşama saf ya da yan etkisi imzasında açık (`repo`, `detector`, `verifier`, `router`) bir fonksiyon; girdi/çıktılar dondurulmuş dataclass: `ImageContext`, `Detections`, `TrackBranch`, `Matches`, `Contacts`, `ClaimEvaluations`, `RiskResult`, `FinalDecision` → `Brief`.
+- `app/agent/events.py`: adımların özet ve `data` yükleri (frontend sözleşmesi) tek yerde. `app/agent/brief_text.py`: brief ve özet metinleri.
+- Ölçüm: 40 gerçek görüntünün bütün olayları ve brief'leri önce ve sonra byte düzeyinde aynı; üç koşuda: kurallar, kurallar + belirlenimci sahte VLM, sahte VLM + kabul/red üreten sahte LLM.
+- Testler: `tests/test_stages.py` (eşleşme; rapor etkilerinin bağlanması, ADR-0002); toplam 285.
