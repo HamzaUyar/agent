@@ -30,8 +30,8 @@ from app.schemas.domain import (
 FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 PACKAGE = read_package(FIXTURE)
 TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
-T0122_AT_1405 = next(
-    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 5)
+T0122_NOW = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
 )
 OFFICIAL, THIRD = ReportSource.OFFICIAL, ReportSource.THIRD_PARTY
 
@@ -160,14 +160,15 @@ def test_day_wide_friendly_claim_without_location_is_listed_as_unverifiable() ->
     assert (f.verdict, f.effect, f.track_id) == ("unverifiable", "none", None)
 
 
-def test_report_is_compared_with_where_the_vehicle_was_at_report_time() -> None:
+def test_report_is_linked_to_the_contact_at_capture_time_not_report_time() -> None:
     brief = evaluate(FIXTURE_CLAIMS)
 
-    # 12:35'te o noktada T0122 değil, park halindeki T0032 vardı (~38 m).
+    # Rapor 12:35'te yazılmış, ama koordinatı T0122'nin rapor saatindeki değil ÇEKİM
+    # ANINDAKİ (14:10) konumu (ADR-0004): gerçek T0122 o saatte başka bir yerdeydi.
     f = finding(brief, 2)
-    assert f.track_id == "T0032"
+    assert f.track_id == "T0122"
     assert f.verdict == "consistent"
-    assert f.certainty == "likely"  # "ağır araç" doğrulanamadı: T0032'nin tipi bilinmiyor
+    assert f.certainty == "certain"  # T0122'nin tipi (truck) biliniyor ve "ağır araç" ile uyuşuyor
 
 
 def test_reports_do_not_change_the_reference_levels() -> None:
@@ -227,7 +228,7 @@ def test_official_friendly_claim_matching_everything_makes_a_verified_friend() -
         time(14, 5),
         OFFICIAL,
         "T0122 dost devriye, kimlik teyitli",
-        at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="truck"),
+        at(T0122_NOW, claim_type="friendly_claim", vehicle_type="truck"),
     )
 
     brief = evaluate([friend])
@@ -245,7 +246,7 @@ def test_third_party_friendly_claim_cannot_lower_risk() -> None:
         time(14, 5),
         THIRD,
         "dost devriye",
-        at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="truck"),
+        at(T0122_NOW, claim_type="friendly_claim", vehicle_type="truck"),
     )
 
     brief = evaluate([friend])
@@ -261,7 +262,7 @@ def test_official_friendly_claim_with_unverifiable_color_does_not_lower_risk() -
         time(14, 5),
         OFFICIAL,
         "mavi kamyon dost",
-        at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="truck", color="mavi"),
+        at(T0122_NOW, claim_type="friendly_claim", vehicle_type="truck", color="mavi"),
     )
 
     brief = evaluate([friend])
@@ -276,7 +277,7 @@ def test_official_friendly_claim_with_wrong_type_contradicts() -> None:
         time(14, 5),
         OFFICIAL,
         "binek arac dost",
-        at(T0122_AT_1405, claim_type="friendly_claim", vehicle_type="car"),
+        at(T0122_NOW, claim_type="friendly_claim", vehicle_type="car"),
     )
 
     brief = evaluate([friend])
@@ -328,18 +329,24 @@ def parked_scene(parked_since: time) -> tuple[DataPackage, dict[str, list[Detect
     return package, {"img_7000": [box]}
 
 
-def test_report_contradicting_the_contacts_own_track_raises_to_high() -> None:
+def test_report_time_mismatch_with_the_contacts_own_track_is_not_a_contradiction() -> None:
+    """ADR-0004 (R15): rapor saati, aracın gerçek konumunu bilmediğimiz için güvenilmez.
+
+    T7000 rapor saatinde (13:30) 8 km ötede olsa da, rapor koordinatı T7000'in ÇEKİM
+    ANINDAKİ konumuyla (spot) uyuşuyor ve tipi de tutuyor: artık çelişki sayılmıyor.
+    """
     package, detections = parked_scene(parked_since=time(14, 0))
     spot = east_of_base(4_000)
-    # 13:30'da bu noktada araç olduğunu söylüyor; T7000 o saatte 8 km ötedeydi.
-    lie = record(10, time(13, 30), OFFICIAL, "burada 1 arac bekliyor", at(spot, vehicle_type="car"))
+    report_ = record(
+        10, time(13, 30), OFFICIAL, "burada 1 arac bekliyor", at(spot, vehicle_type="car")
+    )
 
-    brief = evaluate([lie], package, detections, "img_7000")
+    brief = evaluate([report_], package, detections, "img_7000")
 
     c = contact(brief, "T7000")
     assert c.base_level == "low"
-    assert c.final_level == "high"
-    assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("contradicts", "raises")
+    assert c.final_level == "low"
+    assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("consistent", "none")
 
 
 def test_threat_warning_about_a_contact_raises_one_level() -> None:
@@ -364,7 +371,8 @@ def test_contradiction_wins_over_a_verified_friendly_claim() -> None:
     friend = record(
         10, time(14, 5), OFFICIAL, "dost", at(spot, claim_type="friendly_claim", vehicle_type="car")
     )
-    lie = record(11, time(13, 30), OFFICIAL, "burada 1 arac", at(spot, vehicle_type="car"))
+    # T7000 aslında araba; "kamyon" iddiası tip uyuşmazlığından çelişkili sayılır.
+    lie = record(11, time(13, 30), OFFICIAL, "burada 1 kamyon", at(spot, vehicle_type="truck"))
 
     brief = evaluate([friend, lie], package, detections, "img_7000")
 
@@ -384,15 +392,3 @@ def test_report_step_is_streamed_before_the_risk_step() -> None:
     assert names.index("raporlar") == names.index("risk") - 1
 
 
-def test_track_without_a_record_at_report_time_is_not_a_contradiction() -> None:
-    package, detections = parked_scene(parked_since=time(14, 0))
-    # T7000'in kaydı ancak 13:40'ta başlıyor; 13:30'daki konumu bilinmiyor.
-    package = replace(
-        package, track_points=[p for p in package.track_points if p.time >= time(13, 40)]
-    )
-    claim_ = record(10, time(13, 30), OFFICIAL, "burada 1 arac", at(east_of_base(4_000)))
-
-    brief = evaluate([claim_], package, detections, "img_7000")
-
-    assert (finding(brief, 10).verdict, finding(brief, 10).effect) == ("unverifiable", "none")
-    assert contact(brief, "T7000").final_level == contact(brief, "T7000").base_level

@@ -258,7 +258,6 @@ class EvaluationService:
             image_zone=zone,
             now=now,
             rules=self._rules.reports,
-            position_at=self._position_at,
             observe=lambda track_id: look(boxes[track_id]) if track_id in boxes else None,
         )
         contacts = [
@@ -370,12 +369,6 @@ class EvaluationService:
         yield emit(BRIEF_STEP, f"Risk: {LEVEL_TR[level]} · {action}", **brief.model_dump())
 
     # --- adımlar ----------------------------------------------------------------
-
-    def _position_at(self, track_id: str, at: time) -> GeoPoint | None:
-        """Track'in `at` anındaki ya da en fazla bir adım önceki konumu."""
-        since = from_minutes(to_minutes(at) - TRACK_STEP_MINUTES)
-        history = self._repo.track_history(track_id, until=at, since=since)
-        return history[-1].location if history else None
 
     @staticmethod
     def _locate(image: ImageMeta, detections: list[Detection]) -> list[LocatedDetection]:

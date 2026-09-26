@@ -12,6 +12,7 @@ dependencies = [
     "openai>=1.40",
     "pillow>=10",
     "evren-sdk>=0.9",
+    "pandas>=2.2",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,7 @@ dev = [
 make-mock-data = "scripts.make_mock_data:main"
 load-data = "scripts.load_data:main"
 run-eval-set = "scripts.run_eval_set:main"
+simple-risk = "scripts.simple_risk:main"
 
 [build-system]
 requires = ["setuptools>=69"]
@@ -48,9 +50,18 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+# 3.12: numpy'ın gömülü stub dosyası (pandas üzerinden transitif taranıyor) 3.12+ söz
+# dizimi kullanıyor. `requires-python` (>=3.11) ve gerçek ortam (3.13) etkilenmiyor;
+# bu yalnızca mypy'ın hangi söz dizimini kabul edeceğini belirliyor.
+python_version = "3.12"
 strict = true
 packages = ["app", "scripts"]
+
+[[tool.mypy.overrides]]
+# pandas kendi tip bilgisini dağıtmıyor; pandas-stubs de numpy'ın 3.12+ söz dizimiyle
+# tekrar çakışıyor (yukarıdaki not). Basit tutmak için pandas'ı Any olarak kabul ediyoruz.
+module = "pandas"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

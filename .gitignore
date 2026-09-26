@@ -28,3 +28,6 @@ htmlcov/
 
 # Sentetik paket (Kaggle görüntüleri içerir; scripts/make_synthetic_data.py yeniden üretir)
 backend/synthetic/
+
+# scripts/simple_risk.py çıktısı: yeniden üretilebilir, repoya girmez
+backend/outputs/

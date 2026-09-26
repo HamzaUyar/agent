@@ -38,3 +38,4 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Üs Koruma Karar Destek", version="0.1.0", lifespan=lifespan)
 app.include_router(data.router)
 app.include_router(analyze.router)
+

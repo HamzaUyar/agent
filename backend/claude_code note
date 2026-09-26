@@ -1,0 +1,47 @@
+Bana Türkçe cevap ver. Çalışma kuralları geçerli: ben "yaz" demeden dosya değiştirme, adım adım ilerle, önemli kısımları açıkla.
+
+## Görev
+Basit, hard-coded, açıklanabilir bir risk skoru modülü yazacağız. Karmaşık özellik yok; sadece 3 sinyal.
+
+## Önce
+Repo yapısına bak (CLAUDE.md, CONTEXT.md, docs/adr/) ve bu modülün nereye konması gerektiğini öner. Dosya adı önerim: simple_risk.py. Mevcut kodda haversine veya tracks.csv yükleyen bir fonksiyon varsa onu kullan, yeniden yazma. Önerini göster ve onayımı bekle.
+
+## Veri
+tracks.csv (track_id,time,lat,lon; her track 25 satır, 5 dk adım). Üs: 39.92184, 32.85306 (zones.json'daki base).
+Mesafeler haversine, metre.
+
+## Tanımlar (tam olarak bunları kullan, sabitler dosyanın başında tek yerde)
+- ADIM: ardışık iki satır arası mesafe.
+- DURAGAN ADIM: adım < 25 m.
+- DURAKLAMA: art arda en az 2 durağan adım. Süre = durağan adım sayısı x 5 dk. Konum = duraklamadaki noktaların ortalaması; üsse mesafe = bu noktaların üsse ortalama mesafesi.
+- GERI DONUS: Konumu 150 m'lik hücrelere böl (hücre_lat = int(lat / 0.00135), hücre_lon = int(lon / 0.00176)). Araç bir hücreden çıkıp, o hücrede en son görüldüğü andan en az 15 dk sonra aynı hücreye tekrar giriyorsa bu bir geri dönüştür. Track başına geri dönüş sayısını say.
+
+## Skor (0-100, toplam 100'ü geçerse 100)
+1. US_YAKINI_PARK (en yüksek kademe geçerli):
+   - Üsse < 1000 m ve süre >= 30 dk olan bir duraklama var: +40
+   - Üsse 1000-2000 m ve süre >= 30 dk olan bir duraklama var: +20
+   - Yoksa: 0
+2. DOLASMA (geri dönüş sayısı):
+   - 1: +15, 2: +25, 3 ve üstü: +35, 0: 0
+3. ARAC_TIPI (tespit sınıfından):
+   - truck: +30, van: +25, bus: +10, car: +5, unknown: +10
+   Sınıf dışarıdan bir sözlükle gelir {track_id: sınıf}. Tespitler henüz bağlı değil; verilmezse hepsi "unknown".
+
+Seviye: 0-24 DUSUK, 25-49 ORTA, 50-74 YUKSEK, 75-100 KRITIK.
+
+## Çıktı
+Her track için: track_id, skor, seviye, her sinyalin puanı, ve her sinyal için tek satırlık Türkçe gerekçe, sayılarla. Örnek:
+- "Üsse 0,8 km mesafede 45 dk bekledi (13:15-14:00) -> +40"
+- "Son 2 saatte aynı bölgeye 2 kez geri döndü -> +25"
+- "Araç tipi truck -> +30"
+Sinyal tetiklenmezse gerekçe "tetiklenmedi" olsun.
+Fonksiyonlar: score_track(track_df, vehicle_class) -> dict ve score_all(tracks_df, class_map) -> DataFrame. Sonuçları outputs/simple_risk.csv'ye yazan küçük bir main.
+
+## Kontrol (yazdıktan sonra çalıştır ve bana göster)
+Bu tanımlarla benim ön hesabım şöyle çıktı, seninki de yakın olmalı:
+- 226 track'ten üsse < 1000 m'de >= 30 dk bekleyen: yaklaşık 27
+- En az 1 geri dönüşü olan: yaklaşık 30 (1: 16, 2: 7, 3: 4, 4: 3)
+Farklı çıkarsa nedenini açıkla, kendin düzeltmeye çalışma.
+Sonra: seviye dağılımı, skora göre ilk 10 track (gerekçeleriyle) ve T0122 ile T0206'nın sonuçları.
+
+Adım sırası: (1) nereye koyacağını öner, dur. (2) Onayımdan sonra kodu yaz ve açıkla, dur. (3) Onayımdan sonra çalıştır ve kontrol sonuçlarını göster.

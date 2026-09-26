@@ -1,6 +1,8 @@
 """KOL C: rapor iddialarını temaslarla karşılaştırır (ADR-0002: asimetrik güven).
 
-Kararı kod verir. Bir iddia, **rapor saatinde** konumuna en yakın temasa bağlanır.
+Kararı kod verir. Bir iddia, **çekim anındaki** konumuna en yakın temasa bağlanır, rapor
+saatindeki konumuna değil (ADR-0004): gerçek veride rapor koordinatları neredeyse hep
+aracın çekim anındaki konumuna işaret ediyor, rapor saatine değil.
 Raporlar riski serbestçe yükseltebilir. Düşürebilmeleri için kaynağın resmi olması ve
 iddianın belirttiği her özelliğin (konum, zaman, tip, renk, yük) doğrulanması gerekir.
 Renk ve yük, yalnızca iddia bunları belirtiyorsa görsel doğrulamaya (VLM) sorulur.
@@ -51,9 +53,6 @@ class ClaimEvaluation:
     reasoning: str
 
 
-PositionAt = Callable[[str, time], GeoPoint | None]
-"""Bir track'in verilen andaki (ya da hemen önceki) konumu."""
-
 Observe = Callable[[str], VisualFinding | None]
 """Track'e ait temasın görsel doğrulaması; bakılamıyorsa `None`. Yalnızca gerekince çağrılır."""
 
@@ -97,7 +96,6 @@ def evaluate_claims(
     image_zone: str,
     now: time,
     rules: ReportRules,
-    position_at: PositionAt,
     observe: Observe = _no_visual,
 ) -> list[ClaimEvaluation]:
     """Çekim anına kadarki iddiaları değerlendirir; görüntüyle ilgisiz olanlar listeye girmez."""
@@ -145,7 +143,6 @@ def evaluate_claims(
             contacts,
             image_center,
             rules,
-            position_at,
             observe,
         )
         if evaluation is not None:
@@ -159,26 +156,22 @@ def _evaluate_located(
     contacts: list[ContactView],
     image_center: GeoPoint,
     rules: ReportRules,
-    position_at: PositionAt,
     observe: Observe,
 ) -> ClaimEvaluation | None:
+    """İddiayı, konumunu çekim anındaki konumuna en yakın temasa bağlar (ADR-0004).
+
+    Rapor saati bağlama için kullanılmaz: gerçek veride rapor koordinatları neredeyse
+    hep aracın çekim anındaki konumuna işaret ediyor, yazıldığı saatteki konumuna değil.
+    """
     claim, report = record.claim, record.report
     when = format_hhmm(report.time)
 
-    at_report: list[tuple[float, ContactView]] = []
-    known_at_report: set[str] = set()  # rapor saatinde konumu kayıtlı track'ler
-    for c in contacts:
-        pos = position_at(c.track_id, report.time) if c.track_id else None
-        if pos is not None and c.track_id:
-            known_at_report.add(c.track_id)
-        if pos is not None and (d := distance_m(pos, point)) <= rules.match_m:
-            at_report.append((d, c))
-    now_near = [(d, c) for c in contacts if (d := distance_m(c.location, point)) <= rules.match_m]
-    relevant = distance_m(image_center, point) <= rules.relevance_m or at_report or now_near
+    near = [(d, c) for c in contacts if (d := distance_m(c.location, point)) <= rules.match_m]
+    relevant = distance_m(image_center, point) <= rules.relevance_m or bool(near)
     if not relevant:
         return None
 
-    linked = min(at_report, key=lambda x: x[0])[1] if at_report else None
+    linked = min(near, key=lambda x: x[0])[1] if near else None
     track_id = linked.track_id if linked else None
 
     if claim.claim_type == "irrelevant":
@@ -191,27 +184,14 @@ def _evaluate_located(
         )
 
     if linked is None:
-        # Çelişki ancak track'in rapor saatinde başka bir yerde olduğu biliniyorsa vardır;
-        # o saatte kaydı olmayan track için veri yok, çelişki de yok.
-        tracked_now = [(d, c) for d, c in now_near if c.track_id in known_at_report]
-        if tracked_now:
-            contact = min(tracked_now, key=lambda x: x[0])[1]
-            return ClaimEvaluation(
-                record,
-                contact.track_id,
-                "contradicts",
-                "likely",
-                "raises",
-                f"rapor saat {when} için bu noktada araç bildiriyor; {contact.track_id} o saatte "
-                "orada değildi (kendi track'iyle çelişiyor)",
-            )
         return ClaimEvaluation(
             record,
             None,
             "unverifiable",
             "unverified",
             "none",
-            f"saat {when} itibarıyla bu noktada kayıtlı bir temas yok; karşılaştırılamadı",
+            f"saat {when} itibarıyla bildirilen konumda çekim anında bir temas yok; "
+            "karşılaştırılamadı",
         )
 
     needs_visual = bool(claim.color) or claim.cargo is not None
