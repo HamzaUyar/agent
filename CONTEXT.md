@@ -12,6 +12,10 @@ _Avoid_: base, merkez
 Üs çevresinde drone ile izlenen sekiz adlandırılmış alandan biri; yalnızca merkez noktasıyla tanımlıdır.
 _Avoid_: zone, sektör
 
+**Yaklaşık bölge alanı**:
+Bir Bölge'nin merkezi çevresinde gösterilen, komşu Bölge merkezlerine olan uzaklıktan türetilmiş yaklaşık alan; veride sınır olmadığı için kesin sınır değildir.
+_Avoid_: bölge sınırı, bölge poligonu
+
 **Görüntü**:
 Bir bölgeden belirli bir çekim anında alınmış tek drone karesi; köşe koordinatları ve çekim saati bilinir.
 _Avoid_: resim, frame, fotoğraf
