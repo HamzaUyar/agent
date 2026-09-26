@@ -214,7 +214,7 @@ Ekran bir karar destek aracıdır: operatörün kararını kaydetmez. Çekim an�
 - Brief geldiğinde sağ çekmece göz atma hâline geçer.
 
 ### Çekmeceler
-- shadcn `Sheet`, modal olmayan kipte kullanılır: arka plan kararmaz, harita etkileşimli kalır.
+- Çekmeceler sayfa düzeninin parçası olan panellerdir; shadcn `Sheet` kullanılmaz, çünkü Sheet ekranın üstüne açılır ve haritayı daraltmaz. Arka plan kararmaz, harita etkileşimli kalır.
 - **Genişlikler:** göz atma ~56 px, yarım ~%30, tam ~%55. Harita paneli açık çekmecenin genişliği kadar daralır.
 - **Kenarlar:**
   - Sağ: Risk & Temaslar (sekmeler: Temaslar · Brief).

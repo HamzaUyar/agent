@@ -1,0 +1,162 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Tasarım token'ları üç katmanlı (design-system/operasyon-ekrani/pages/operasyon.md):
+ *   1. ham değerler      --ham-*
+ *   2. anlamlı değerler  --zemin, --metin, --secim, --risk-*, --veri-bayat …
+ *   3. bileşen değerleri --ust-cubuk-*, --harita-paneli-*, --cekmece-*, --zaman-akisi-*
+ * Yalnızca koyu tema var: operasyon ekranı karanlık bir odada, projektörde kullanılıyor.
+ */
+:root {
+  /* 1 · ham */
+  --ham-lacivert-950: #0a101c;
+  --ham-lacivert-900: #0f172a;
+  --ham-lacivert-850: #141d31;
+  --ham-lacivert-800: #1b2336;
+  --ham-lacivert-700: #272f42;
+  --ham-lacivert-600: #3a465c;
+  --ham-gri-400: #94a3b8;
+  --ham-gri-300: #cbd5e1;
+  --ham-gri-50: #f1f5f9;
+  --ham-gok-400: #38bdf8;
+  --ham-gok-950: #082f49;
+  --ham-arduvaz-400: #8b9bb4;
+  --ham-sari-400: #e3b341;
+  --ham-turuncu-400: #f0883e;
+  --ham-kirmizi-400: #f85149;
+  --ham-mor-300: #c4b5fd;
+
+  /* 2 · anlamlı */
+  --zemin: var(--ham-lacivert-950);
+  --yuzey: var(--ham-lacivert-900);
+  --kart: var(--ham-lacivert-800);
+  --kart-vurgu: var(--ham-lacivert-700);
+  --cizgi: var(--ham-lacivert-600);
+  --metin: var(--ham-gri-50);
+  --metin-ikincil: var(--ham-gri-300);
+  --metin-soluk: var(--ham-gri-400);
+  /* Seçim tek vurgu rengi. Amber, orta/yüksek seviye renklerine çok yakın olduğu için gök mavisi. */
+  --secim: var(--ham-gok-400);
+  --secim-zemin: var(--ham-gok-950);
+  --risk-dusuk: var(--ham-arduvaz-400);
+  --risk-orta: var(--ham-sari-400);
+  --risk-yuksek: var(--ham-turuncu-400);
+  /* Kırmızı yalnızca kritik için. */
+  --risk-kritik: var(--ham-kirmizi-400);
+  --veri-bayat: var(--ham-gri-400);
+  --otomatik-ozet: var(--ham-mor-300);
+
+  /* 3 · bileşen */
+  --ust-cubuk-zemin: var(--yuzey);
+  --ust-cubuk-yukseklik: 3rem;
+  --harita-paneli-zemin: var(--ham-lacivert-850);
+  --harita-paneli-cerceve: var(--cizgi);
+  --harita-paneli-bosluk: 1.25rem;
+  --cekmece-zemin: var(--yuzey);
+  --cekmece-cerceve: var(--cizgi);
+  --cekmece-sekme-genislik: 2.25rem;
+  --cekmece-goz-atma: 56px;
+  --cekmece-yarim: 30vw;
+  --cekmece-tam: 55vw;
+  --zaman-akisi-zemin: var(--yuzey);
+  --zaman-akisi-yukseklik: 6.5rem;
+
+  /* shadcn değişkenleri anlamlı değerlere bağlı */
+  --background: var(--zemin);
+  --foreground: var(--metin);
+  --card: var(--kart);
+  --card-foreground: var(--metin);
+  --popover: var(--kart);
+  --popover-foreground: var(--metin);
+  --primary: var(--secim);
+  --primary-foreground: var(--ham-lacivert-950);
+  --secondary: var(--kart-vurgu);
+  --secondary-foreground: var(--metin);
+  --muted: var(--kart-vurgu);
+  --muted-foreground: var(--metin-soluk);
+  --accent: var(--kart-vurgu);
+  --accent-foreground: var(--metin);
+  --destructive: var(--risk-kritik);
+  --border: var(--cizgi);
+  --input: var(--cizgi);
+  --ring: var(--secim);
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-atkinson);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-atkinson);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --color-yuzey: var(--yuzey);
+  --color-kart: var(--kart);
+  --color-cizgi: var(--cizgi);
+  --color-metin: var(--metin);
+  --color-metin-ikincil: var(--metin-ikincil);
+  --color-metin-soluk: var(--metin-soluk);
+  --color-secim: var(--secim);
+  --color-secim-zemin: var(--secim-zemin);
+  --color-risk-dusuk: var(--risk-dusuk);
+  --color-risk-orta: var(--risk-orta);
+  --color-risk-yuksek: var(--risk-yuksek);
+  --color-risk-kritik: var(--risk-kritik);
+  --color-veri-bayat: var(--veri-bayat);
+  --color-otomatik-ozet: var(--otomatik-ozet);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 0.875rem;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--secim);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}

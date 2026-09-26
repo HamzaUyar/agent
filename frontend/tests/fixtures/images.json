@@ -1,0 +1,242 @@
+[
+  {
+    "image_id": "img_008333",
+    "zone": "Kuzeydogu Kavsagi",
+    "capture_time": "10:10",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_000267",
+    "zone": "Dogu Yolu",
+    "capture_time": "10:15",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_005978",
+    "zone": "Guneybati Yolu",
+    "capture_time": "10:20",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_005368",
+    "zone": "Dogu Yolu",
+    "capture_time": "10:25",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_006673",
+    "zone": "Guneydogu Yerlesimi",
+    "capture_time": "10:30",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_006388",
+    "zone": "Kuzeybati Yolu",
+    "capture_time": "10:35",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_008589",
+    "zone": "Dogu Yolu",
+    "capture_time": "10:40",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_004530",
+    "zone": "Guney Kapisi Yaklasimi",
+    "capture_time": "10:45",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_005672",
+    "zone": "Guneybati Yolu",
+    "capture_time": "11:00",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_005788",
+    "zone": "Bati Yerlesimi",
+    "capture_time": "11:10",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_006591",
+    "zone": "Bati Yerlesimi",
+    "capture_time": "11:15",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_005359",
+    "zone": "Guneydogu Yerlesimi",
+    "capture_time": "11:30",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_000926",
+    "zone": "Kuzeydogu Kavsagi",
+    "capture_time": "11:35",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_000531",
+    "zone": "Guneybati Yolu",
+    "capture_time": "12:05",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_005561",
+    "zone": "Guney Kapisi Yaklasimi",
+    "capture_time": "12:10",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_003464",
+    "zone": "Kuzey Yolu",
+    "capture_time": "12:15",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_004388",
+    "zone": "Kuzey Yolu",
+    "capture_time": "12:55",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_000733",
+    "zone": "Guney Kapisi Yaklasimi",
+    "capture_time": "13:00",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_004512",
+    "zone": "Kuzeydogu Kavsagi",
+    "capture_time": "13:05",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_003189",
+    "zone": "Kuzeybati Yolu",
+    "capture_time": "13:20",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_003839",
+    "zone": "Kuzey Yolu",
+    "capture_time": "13:25",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_005611",
+    "zone": "Bati Yerlesimi",
+    "capture_time": "13:45",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_002900",
+    "zone": "Bati Yerlesimi",
+    "capture_time": "13:50",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_002661",
+    "zone": "Kuzey Yolu",
+    "capture_time": "14:00",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_002256",
+    "zone": "Kuzeybati Yolu",
+    "capture_time": "14:05",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_000860",
+    "zone": "Dogu Yolu",
+    "capture_time": "14:10",
+    "last_risk_level": "high"
+  },
+  {
+    "image_id": "img_004416",
+    "zone": "Guneydogu Yerlesimi",
+    "capture_time": "14:15",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_008562",
+    "zone": "Guneydogu Yerlesimi",
+    "capture_time": "14:20",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_008001",
+    "zone": "Dogu Yolu",
+    "capture_time": "14:25",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_003880",
+    "zone": "Kuzeydogu Kavsagi",
+    "capture_time": "14:35",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_003201",
+    "zone": "Guney Kapisi Yaklasimi",
+    "capture_time": "14:55",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_007171",
+    "zone": "Kuzeydogu Kavsagi",
+    "capture_time": "15:00",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_001733",
+    "zone": "Kuzeybati Yolu",
+    "capture_time": "15:05",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_001643",
+    "zone": "Kuzey Yolu",
+    "capture_time": "15:10",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_001230",
+    "zone": "Guneydogu Yerlesimi",
+    "capture_time": "15:15",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_001147",
+    "zone": "Guneybati Yolu",
+    "capture_time": "15:20",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_007664",
+    "zone": "Guney Kapisi Yaklasimi",
+    "capture_time": "15:25",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_006444",
+    "zone": "Guneybati Yolu",
+    "capture_time": "15:35",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_004318",
+    "zone": "Bati Yerlesimi",
+    "capture_time": "15:45",
+    "last_risk_level": null
+  },
+  {
+    "image_id": "img_004423",
+    "zone": "Kuzeybati Yolu",
+    "capture_time": "15:50",
+    "last_risk_level": null
+  }
+]

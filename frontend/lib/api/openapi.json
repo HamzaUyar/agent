@@ -1,0 +1,1378 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Üs Koruma Karar Destek",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/zones": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Get Zones",
+        "description": "Üs ve bölge merkezleri. Bölgelerin sınırı veride yok.",
+        "operationId": "get_zones_zones_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZonesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "List Images",
+        "description": "Veri setindeki görüntüler: bölge, çekim saati ve varsa son değerlendirmenin seviyesi.",
+        "operationId": "list_images_images_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImageSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Images Images Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images/{image_id}": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Get Image",
+        "description": "Görüntünün boyutu, çekim saati, köşe koordinatları, merkezi ve bölgesi.",
+        "operationId": "get_image_images__image_id__get",
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Görüntü veri setinde yok"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images/{image_id}/file": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "Get Image File",
+        "description": "Görüntü dosyası. Ad veri setindeki kimlikten kurulur, istekten gelen yol kullanılmaz.",
+        "operationId": "get_image_file_images__image_id__file_get",
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Görüntü dosyası",
+            "content": {
+              "image/jpeg": {},
+              "image/png": {}
+            }
+          },
+          "404": {
+            "description": "Görüntü veri setinde yok ya da dosyası bulunamadı"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations": {
+      "post": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Start Evaluation",
+        "description": "Görüntüyü değerlendirir; `run`, `step` olayları ve son `brief` olayı akar.\n\nAynı görüntünün başarılı bir değerlendirmesi varsa önbellekten tekrar oynatılır\n(`run.cached = true`); `recompute = true` yeni değerlendirme başlatır.",
+        "operationId": "start_evaluation_evaluations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Adım olayları, son olay brief",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "404": {
+            "description": "Görüntü veri setinde yok"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations/{run_id}": {
+      "get": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Read Evaluation",
+        "description": "Kayıtlı bir değerlendirmeyi bütün adımları ve brief'iyle döndürür.",
+        "operationId": "read_evaluation_evaluations__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationRecord"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Değerlendirme bulunamadı"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/evaluations/{run_id}/chat": {
+      "post": {
+        "tags": [
+          "evaluations"
+        ],
+        "summary": "Chat",
+        "description": "Değerlendirme hakkında takip sorusu; agent salt okuma araçlarıyla cevaplar.",
+        "operationId": "chat_evaluations__run_id__chat_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`tool` olayları, son olay `answer`",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "404": {
+            "description": "Tamamlanmış değerlendirme bulunamadı"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BaseInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "lat",
+          "lon"
+        ],
+        "title": "BaseInfo"
+      },
+      "Brief": {
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "title": "Image Id"
+          },
+          "zone": {
+            "type": "string",
+            "title": "Zone"
+          },
+          "capture_time": {
+            "type": "string",
+            "title": "Capture Time"
+          },
+          "risk_level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Risk Level"
+          },
+          "recommended_action": {
+            "type": "string",
+            "title": "Recommended Action"
+          },
+          "is_fallback": {
+            "type": "boolean",
+            "title": "Is Fallback"
+          },
+          "fallback_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Reason"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/ContactFinding"
+            },
+            "type": "array",
+            "title": "Contacts"
+          },
+          "report_findings": {
+            "items": {
+              "$ref": "#/components/schemas/ReportFinding"
+            },
+            "type": "array",
+            "title": "Report Findings"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_id",
+          "zone",
+          "capture_time",
+          "risk_level",
+          "recommended_action",
+          "is_fallback",
+          "contacts",
+          "text",
+          "sources"
+        ],
+        "title": "Brief"
+      },
+      "ChatRequest": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest"
+      },
+      "ContactFinding": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "unregistered",
+              "missed"
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "effective_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Label"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 4
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LatLon"
+          },
+          "is_weak": {
+            "type": "boolean",
+            "title": "Is Weak",
+            "default": false
+          },
+          "is_ambiguous": {
+            "type": "boolean",
+            "title": "Is Ambiguous",
+            "default": false
+          },
+          "position_estimated": {
+            "type": "boolean",
+            "title": "Position Estimated",
+            "default": false
+          },
+          "type_conflict": {
+            "type": "boolean",
+            "title": "Type Conflict",
+            "default": false
+          },
+          "verified_friend": {
+            "type": "boolean",
+            "title": "Verified Friend",
+            "default": false
+          },
+          "observed_labels": {
+            "items": {
+              "$ref": "#/components/schemas/LabelObservation"
+            },
+            "type": "array",
+            "title": "Observed Labels"
+          },
+          "distance_to_base_m": {
+            "type": "number",
+            "title": "Distance To Base M"
+          },
+          "track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Id"
+          },
+          "match_distance_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Distance M"
+          },
+          "second_candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrackCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "motion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MotionFinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VisualFinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Base Level"
+          },
+          "final_level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "title": "Final Level"
+          },
+          "level_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Level Reasons"
+          },
+          "adjustment_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjustment Reason"
+          },
+          "adjustment_rejected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adjustment Rejected"
+          },
+          "certainty": {
+            "type": "string",
+            "enum": [
+              "certain",
+              "likely",
+              "weak",
+              "unverified"
+            ],
+            "title": "Certainty"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "label",
+          "effective_label",
+          "confidence",
+          "bbox",
+          "location",
+          "distance_to_base_m",
+          "base_level",
+          "final_level",
+          "certainty"
+        ],
+        "title": "ContactFinding",
+        "description": "Temas: bir Tespit ve/veya onu çekim anında karşılayan Track."
+      },
+      "CornerCoordinates": {
+        "properties": {
+          "top_left": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Top Left"
+          },
+          "top_right": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Top Right"
+          },
+          "bottom_left": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Bottom Left"
+          },
+          "bottom_right": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Bottom Right"
+          }
+        },
+        "type": "object",
+        "required": [
+          "top_left",
+          "top_right",
+          "bottom_left",
+          "bottom_right"
+        ],
+        "title": "CornerCoordinates"
+      },
+      "EvaluationRecord": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "image_id": {
+            "type": "string",
+            "title": "Image Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "done",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepEvent"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "brief": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Brief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "image_id",
+          "status",
+          "steps",
+          "brief",
+          "error"
+        ],
+        "title": "EvaluationRecord",
+        "description": "Kayıtlı bir değerlendirme: bütün adımları ve brief'i."
+      },
+      "EvaluationRequest": {
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "title": "Image Id"
+          },
+          "recompute": {
+            "type": "boolean",
+            "title": "Recompute",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_id"
+        ],
+        "title": "EvaluationRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ImageDetail": {
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "title": "Image Id"
+          },
+          "width_px": {
+            "type": "integer",
+            "title": "Width Px"
+          },
+          "height_px": {
+            "type": "integer",
+            "title": "Height Px"
+          },
+          "capture_time": {
+            "type": "string",
+            "title": "Capture Time"
+          },
+          "corner_coordinates": {
+            "$ref": "#/components/schemas/CornerCoordinates"
+          },
+          "center": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Center"
+          },
+          "zone": {
+            "type": "string",
+            "title": "Zone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_id",
+          "width_px",
+          "height_px",
+          "capture_time",
+          "corner_coordinates",
+          "center",
+          "zone"
+        ],
+        "title": "ImageDetail",
+        "description": "Görüntünün `image_meta.json` kaydı; karenin merkezi ve bölgesiyle."
+      },
+      "ImageSummary": {
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "title": "Image Id"
+          },
+          "zone": {
+            "type": "string",
+            "title": "Zone"
+          },
+          "capture_time": {
+            "type": "string",
+            "title": "Capture Time"
+          },
+          "last_risk_level": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Risk Level"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_id",
+          "zone",
+          "capture_time"
+        ],
+        "title": "ImageSummary"
+      },
+      "LabelObservation": {
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "title": "Image Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_id",
+          "label"
+        ],
+        "title": "LabelObservation"
+      },
+      "LatLon": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "LatLon"
+      },
+      "MotionFinding": {
+        "properties": {
+          "distance_to_base_m": {
+            "type": "number",
+            "title": "Distance To Base M"
+          },
+          "distance_to_base_30min_ago_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance To Base 30Min Ago M"
+          },
+          "trend": {
+            "type": "string",
+            "enum": [
+              "approaching",
+              "receding",
+              "stationary",
+              "passing",
+              "unknown"
+            ],
+            "title": "Trend"
+          },
+          "route": {
+            "items": {
+              "$ref": "#/components/schemas/RoutePoint"
+            },
+            "type": "array",
+            "title": "Route"
+          },
+          "total_distance_m": {
+            "type": "number",
+            "title": "Total Distance M"
+          },
+          "avg_speed_mps": {
+            "type": "number",
+            "title": "Avg Speed Mps"
+          },
+          "recent_speed_mps": {
+            "type": "number",
+            "title": "Recent Speed Mps"
+          },
+          "heading_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading Deg"
+          },
+          "stops": {
+            "items": {
+              "$ref": "#/components/schemas/StopFinding"
+            },
+            "type": "array",
+            "title": "Stops"
+          },
+          "zones_passed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zones Passed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "distance_to_base_m",
+          "distance_to_base_30min_ago_m",
+          "trend",
+          "total_distance_m",
+          "avg_speed_mps",
+          "recent_speed_mps",
+          "heading_deg"
+        ],
+        "title": "MotionFinding"
+      },
+      "ReportFinding": {
+        "properties": {
+          "claim_id": {
+            "type": "integer",
+            "title": "Claim Id"
+          },
+          "report_time": {
+            "type": "string",
+            "title": "Report Time"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "claim_type": {
+            "type": "string",
+            "title": "Claim Type"
+          },
+          "track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Id"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "consistent",
+              "contradicts",
+              "unverifiable",
+              "irrelevant"
+            ],
+            "title": "Verdict"
+          },
+          "certainty": {
+            "type": "string",
+            "enum": [
+              "certain",
+              "likely",
+              "weak",
+              "unverified"
+            ],
+            "title": "Certainty"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "raises",
+              "lowers",
+              "none"
+            ],
+            "title": "Effect"
+          },
+          "reasoning": {
+            "type": "string",
+            "title": "Reasoning"
+          }
+        },
+        "type": "object",
+        "required": [
+          "claim_id",
+          "report_time",
+          "source",
+          "text",
+          "claim_type",
+          "track_id",
+          "verdict",
+          "certainty",
+          "effect",
+          "reasoning"
+        ],
+        "title": "ReportFinding",
+        "description": "Rapor kararı: bir iddianın bu değerlendirmedeki sonucu ve riske etkisi."
+      },
+      "RoutePoint": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "RoutePoint"
+      },
+      "StepEvent": {
+        "properties": {
+          "step_no": {
+            "type": "integer",
+            "title": "Step No"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "step_no",
+          "name",
+          "summary"
+        ],
+        "title": "StepEvent",
+        "description": "Değerlendirme adımı; arayüze SSE ile akar ve kaydedilir."
+      },
+      "StopFinding": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "minutes": {
+            "type": "integer",
+            "title": "Minutes"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LatLon"
+          },
+          "zone": {
+            "type": "string",
+            "title": "Zone"
+          },
+          "distance_to_base_m": {
+            "type": "number",
+            "title": "Distance To Base M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "minutes",
+          "location",
+          "zone",
+          "distance_to_base_m"
+        ],
+        "title": "StopFinding",
+        "description": "Duraklama: saat (SS:DD), süre, yer ve bölge."
+      },
+      "TrackCandidate": {
+        "properties": {
+          "track_id": {
+            "type": "string",
+            "title": "Track Id"
+          },
+          "distance_m": {
+            "type": "number",
+            "title": "Distance M"
+          }
+        },
+        "type": "object",
+        "required": [
+          "track_id",
+          "distance_m"
+        ],
+        "title": "TrackCandidate"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VisualFinding": {
+        "properties": {
+          "is_vehicle": {
+            "type": "boolean",
+            "title": "Is Vehicle"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "beyaz",
+                  "siyah",
+                  "gri",
+                  "kirmizi",
+                  "mavi",
+                  "yesil",
+                  "sari",
+                  "turuncu",
+                  "kahverengi",
+                  "bej",
+                  "mor"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "cargo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "loaded",
+                  "empty"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cargo"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          }
+        },
+        "type": "object",
+        "required": [
+          "is_vehicle",
+          "color",
+          "cargo",
+          "model"
+        ],
+        "title": "VisualFinding",
+        "description": "VLM'in bir tespit kutusunda gördükleri; bilemediği özellik boş kalır."
+      },
+      "ZoneInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "center": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Center"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "center"
+        ],
+        "title": "ZoneInfo"
+      },
+      "ZonesResponse": {
+        "properties": {
+          "base": {
+            "$ref": "#/components/schemas/BaseInfo"
+          },
+          "zones": {
+            "items": {
+              "$ref": "#/components/schemas/ZoneInfo"
+            },
+            "type": "array",
+            "title": "Zones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "base",
+          "zones"
+        ],
+        "title": "ZonesResponse",
+        "description": "Üs ve bölgeler, `zones.json` biçiminde. Bölgelerin sınırı yok, yalnızca merkezi var."
+      }
+    }
+  }
+}
