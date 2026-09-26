@@ -113,11 +113,17 @@ class ChatAgent:
         self._store = store
         self._run_id = run_id
 
-    def _clean(self, raw: str) -> str:
-        """Düşünmesi kapalı model akıl yürütmesini metne yazabiliyor; cevabı ondan ayırır."""
+    def _clean(self, raw: str, model: str) -> str:
+        """Düşünmesi kapalı model akıl yürütmesini metne yazabiliyor; cevabı ondan ayırır.
+
+        Düşüncesini ayrı alanda veren modelin (gateway'deki glm-5.3-flash) cevabı zaten
+        temizdir; ikinci bir LLM çağrısı yapılmaz.
+        """
         tagged = ANSWER_TAG.findall(raw)
         if tagged:
             return str(tagged[-1]).strip()
+        if self._router.separates_reasoning(model):
+            return raw.strip()
         try:
             cleaned, _ = self._router.complete_json(TASK, CLEAN_PROMPT, raw, CleanAnswer, 2048)
         except LLMUnavailableError:
@@ -145,7 +151,7 @@ class ChatAgent:
                 yield "error", {"message": "Şu anda cevap verecek model yok; tekrar deneyin."}
                 return
             if not turn.tool_calls:
-                content = self._clean(turn.content or "")
+                content = self._clean(turn.content or "", model)
                 self._store.append(self._run_id, ChatMessage("assistant", content))
                 yield "answer", {"content": content, "model": model}
                 return

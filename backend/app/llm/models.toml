@@ -33,6 +33,8 @@ model_id = "glm-5.3-flash"
 # Gateway'de düşünme kapatılamaz ve `thinking` parametresi hata verir; miktarı
 # reasoning_effort ayarlar (low: ~10-15 sn).
 extra_body = { reasoning_effort = "low" }
+# Düşünce `reasoning_content`'te ayrı gelir (s11): sohbet cevabı ayrıca temizlenmez.
+separate_reasoning = true
 
 # --- Claude (ANTHROPIC_API_KEY tanımlıysa) ---------------------------------------
 [models.haiku]

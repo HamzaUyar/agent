@@ -40,6 +40,13 @@ class ModelEntry:
     model_id: str
     extra_body: dict[str, Any] = field(default_factory=dict)
     """Sağlayıcıya olduğu gibi iletilen ek istek alanları (ör. düşünmeyi kapatmak)."""
+    separate_reasoning: bool = False
+    """Düşünce `reasoning_content`'te ayrı gelir; `content` doğrudan cevaptır (s11)."""
+
+    @property
+    def ref(self) -> str:
+        """Cevabı veren modelin adı: `sağlayıcı/model_id`."""
+        return f"{self.provider}/{self.model_id}"
 
 
 @dataclass(frozen=True)
@@ -57,6 +64,7 @@ def load_model_config(path: Path | None = None) -> ModelConfig:
             provider=m["provider"],
             model_id=m["model_id"],
             extra_body=dict(m.get("extra_body", {})),
+            separate_reasoning=bool(m.get("separate_reasoning", False)),
         )
         for name, m in raw["models"].items()
     }
@@ -462,8 +470,12 @@ class LLMRouter:
                 task,
                 time.monotonic() - started,
             )
-            return result, f"{entry.provider}/{entry.model_id}"
+            return result, entry.ref
         raise LLMUnavailableError(task, attempts)
+
+    def separates_reasoning(self, model: str) -> bool:
+        """`model` (`sağlayıcı/model_id`) düşüncesini cevaptan ayrı mı veriyor."""
+        return any(e.separate_reasoning for e in self._config.models.values() if e.ref == model)
 
     def complete_json(
         self,
