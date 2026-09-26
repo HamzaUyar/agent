@@ -267,9 +267,11 @@ def test_llm_input_and_brief_carry_the_whole_track_motion_not_a_single_step() ->
     assert motion is not None and motion.distance_to_base_30min_ago_m is not None
 
     payload = json.loads(
-        build_input(brief.image_id, brief.zone, brief.capture_time, brief.contacts, [])
+        build_input(
+            brief.image_id, brief.zone, brief.capture_time, brief.contacts, [], load_rules().levels
+        )
     )
-    [facts] = [c for c in payload["contacts"] if c["track_id"] == "T0122"]
+    [facts] = [c for c in payload["contacts"] if c["id"] == "T0122"]
     assert facts["avg_speed_mps"] == round(motion.avg_speed_mps, 1)
     assert facts["distance_to_base_30min_ago_km"] == round(
         motion.distance_to_base_30min_ago_m / 1000, 2

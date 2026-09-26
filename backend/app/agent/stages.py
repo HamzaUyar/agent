@@ -12,7 +12,7 @@ Sıra: `image_context` → Kol A `detect` ∥ Kol B `track_branch` → `locate` 
 
 import logging
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import time
@@ -34,9 +34,17 @@ from app.pipelines.geo import (
 from app.pipelines.matching import LocatedDetection, MatchResult, match_detections
 from app.pipelines.motion import Position, analyze_motion, positions_at
 from app.pipelines.reports import ClaimEvaluation, ContactView, evaluate_claims, visual_track_ids
-from app.pipelines.risk import LEVELS, base_level, highest, recommended_action
+from app.pipelines.risk import (
+    LEVELS,
+    base_level,
+    circling_path_m,
+    highest,
+    loiter_minutes,
+    recommended_action,
+)
 from app.pipelines.vision import BBox, VisualVerifier
 from app.schemas.api import (
+    AttentionFinding,
     Brief,
     Certainty,
     ContactFinding,
@@ -163,6 +171,10 @@ class FinalDecision:
     fallback_reason: str | None
     accepted: int = 0
     rejected: int = 0
+    attention: tuple[AttentionFinding, ...] = ()
+    """LLM'in dikkat maddeleri ve kodun doğrulaması."""
+    summary: str | None = None
+    summary_rejected: str | None = None
 
 
 # --- yardımcılar ----------------------------------------------------------------------
@@ -417,32 +429,6 @@ def label_history(
     return history
 
 
-def _loiter_minutes(motion: MotionFinding | None, rules: LevelRules) -> int:
-    """Üsse `loiter_m`'den yakın en uzun duraklamanın süresi."""
-    if motion is None:
-        return 0
-    return max(
-        (s.minutes for s in motion.stops if s.distance_to_base_m < rules.loiter_m), default=0
-    )
-
-
-def _circling_path_m(motion: MotionFinding | None, rules: LevelRules) -> float:
-    """Üssün çevresinde dar bir mesafe bandında kalarak gidilen yol; dolaşmıyorsa 0.
-
-    Görev tanımı s3: araçlar üs çevresinde dolaşır. Üsse mesafesi kayıt boyunca
-    `circle_band_m` içinde kalan, `loiter_m`'den yakın ve en az `circle_min_extent_m`
-    genişliğinde bir yay çizen araç dolaşıyordur; yerinde gidip gelen yerel trafik değil.
-    """
-    if (
-        motion is None
-        or motion.base_distance_max_m >= rules.loiter_m
-        or motion.base_distance_max_m - motion.base_distance_min_m > rules.circle_band_m
-        or motion.extent_m < rules.circle_min_extent_m
-    ):
-        return 0.0
-    return motion.total_distance_m
-
-
 def _detection_contact(
     match: MatchResult,
     ctx: ImageContext,
@@ -467,8 +453,8 @@ def _detection_contact(
         dist_base,
         motion.trend if motion else None,
         registered=track_id is not None,
-        loiter_minutes_near_base=_loiter_minutes(motion, rules.levels),
-        circling_path_m=_circling_path_m(motion, rules.levels),
+        loiter_minutes_near_base=loiter_minutes(motion, rules.levels),
+        circling_path_m=circling_path_m(motion, rules.levels),
         rules=rules.levels,
     )
     position_estimated = track_id in estimated
@@ -516,8 +502,8 @@ def _missed_contact(
         dist_base,
         motion.trend,
         registered=True,
-        loiter_minutes_near_base=_loiter_minutes(motion, rules),
-        circling_path_m=_circling_path_m(motion, rules),
+        loiter_minutes_near_base=loiter_minutes(motion, rules),
+        circling_path_m=circling_path_m(motion, rules),
         rules=rules,
     )
     return ContactFinding(
@@ -691,12 +677,15 @@ def decide_level(
     risk: RiskResult,
     reports: ClaimEvaluations,
     *,
+    levels: LevelRules,
+    zone_names: Sequence[str],
     timeout_s: float,
     max_tokens: int,
 ) -> FinalDecision:
-    """LLM: seviyeyi gerekçesiyle en fazla ±1 kademe ayarlar (ADR-0002).
+    """LLM: dikkat maddeleri önerir, kod her birini veriyle doğrular (ADR-0002).
 
-    LLM yapılandırılmamışsa ya da cevap alınamazsa kuralların sonucu olduğu gibi kalır.
+    Seviye yalnızca doğrulanmış bir nedenle ve en fazla ±1 kademe değişir. LLM
+    yapılandırılmamışsa ya da cevap alınamazsa kuralların sonucu olduğu gibi kalır.
     """
 
     def fallback(reason: str) -> FinalDecision:
@@ -712,6 +701,8 @@ def decide_level(
             at=ctx.at,
             contacts=list(risk.contacts),
             findings=list(reports.findings),
+            levels=levels,
+            zone_names=zone_names,
             timeout_s=timeout_s,
             max_tokens=max_tokens,
         )
@@ -727,6 +718,9 @@ def decide_level(
         fallback_reason=None,
         accepted=decision.accepted,
         rejected=decision.rejected,
+        attention=tuple(decision.attention),
+        summary=decision.summary,
+        summary_rejected=decision.summary_rejected,
     )
 
 
@@ -762,4 +756,7 @@ def compose_brief(
             automatic=decision.model is None,
         ),
         sources=sources(detector_version, contacts, findings),
+        attention=list(decision.attention),
+        summary=decision.summary,
+        summary_rejected=decision.summary_rejected,
     )

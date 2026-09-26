@@ -116,6 +116,8 @@ class EvaluationService:
             ctx,
             risk,
             reports,
+            levels=rules.levels,
+            zone_names=[z.name for z in repo.zones()],
             timeout_s=self._brief_timeout_s,
             max_tokens=rules.brief.max_tokens,
         )

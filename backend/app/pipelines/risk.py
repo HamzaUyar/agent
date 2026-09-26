@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.core.rules import LevelRules
 from app.formatting import km as fmt_km
+from app.schemas.api import MotionFinding
 from app.schemas.domain import HEAVY_CLASSES, RiskLevel, Trend, VehicleClass
 
 LEVELS: tuple[RiskLevel, ...] = ("low", "medium", "high", "critical")
@@ -79,3 +80,29 @@ def highest(levels: list[RiskLevel]) -> RiskLevel:
 
 def recommended_action(level: RiskLevel, *, zone: str, contact: str | None) -> str:
     return ACTIONS[level].format(zone=zone, contact=contact or "en riskli")
+
+
+def loiter_minutes(motion: MotionFinding | None, rules: LevelRules) -> int:
+    """Üsse `loiter_m`'den yakın en uzun duraklamanın süresi."""
+    if motion is None:
+        return 0
+    return max(
+        (s.minutes for s in motion.stops if s.distance_to_base_m < rules.loiter_m), default=0
+    )
+
+
+def circling_path_m(motion: MotionFinding | None, rules: LevelRules) -> float:
+    """Üssün çevresinde dar bir mesafe bandında kalarak gidilen yol; dolaşmıyorsa 0.
+
+    Görev tanımı s3: araçlar üs çevresinde dolaşır. Üsse mesafesi kayıt boyunca
+    `circle_band_m` içinde kalan, `loiter_m`'den yakın ve en az `circle_min_extent_m`
+    genişliğinde bir yay çizen araç dolaşıyordur; yerinde gidip gelen yerel trafik değil.
+    """
+    if (
+        motion is None
+        or motion.base_distance_max_m >= rules.loiter_m
+        or motion.base_distance_max_m - motion.base_distance_min_m > rules.circle_band_m
+        or motion.extent_m < rules.circle_min_extent_m
+    ):
+        return 0.0
+    return motion.total_distance_m
