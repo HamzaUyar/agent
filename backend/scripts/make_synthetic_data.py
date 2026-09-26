@@ -17,7 +17,7 @@ doğruluğudur. Eşikleri ayarlamak için değil, pipeline'ı sınamak içindir.
 
 Çıktılar (`--out`, varsayılan `synthetic/`):
   package/          organizatör biçiminde veri paketi (görüntüler dahil)
-  detections.json   sahte detektör için tespitler (DETECTOR_MOCK_PATH)
+  detections.json   kayıtlı tespitler (run_eval_set --detections)
   claims.json       raporların ideal ayrıştırması (LLM'siz çalıştırma için)
   labels.toml       değerlendirme seti etiketleri
 """
@@ -46,7 +46,7 @@ from app.data_package import (
     to_minutes,
     write_package,
 )
-from app.pipelines.detection import MIN_CONFIDENCE, STRONG_CONFIDENCE, dump_mock_detections
+from app.pipelines.detection import MIN_CONFIDENCE, STRONG_CONFIDENCE, dump_detections_json
 from app.pipelines.geo import distance_m, in_footprint, nearest_zone, pixel_to_geo
 from app.pipelines.risk import LEVELS, base_level
 from app.schemas.claims import ClaimRecord, ClaimVehicleType, ReportClaim
@@ -787,7 +787,7 @@ def write_outputs(result: SyntheticPackage, out: Path, *, copy_images: bool = Tr
     if copy_images:
         for image_id, src in result.sources.items():
             shutil.copyfile(src, package_dir / "images" / f"{image_id}{src.suffix.lower()}")
-    dump_mock_detections(result.detections, out / "detections.json")
+    dump_detections_json(result.detections, out / "detections.json")
     dump_claims(result.claims, out / "claims.json")
     (out / "labels.toml").write_text(labels_toml(result), encoding="utf-8")
 

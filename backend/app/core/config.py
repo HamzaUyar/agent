@@ -41,34 +41,24 @@ class Settings(BaseSettings):
     """package: veri `data_dir`'den, iddialar `claims_path`'ten; kayıtlar bellekte (çevrimdışı)."""
     claims_path: str = ""
     """Ayrıştırılmış iddiaların JSON'u (`scripts/export_claims.py`); `data_source=package` için."""
-    use_inference: Literal["DEMO", "REAL"] | None = None
+    use_inference: Literal["DEMO", "REAL"] = "DEMO"
     """DEMO: tespitler modelin önceden alınmış çıktısından (Supabase `model_detections` ya da
-    `detections_csv_path`); REAL: görüntü EVREN'deki modele gönderilir. Tanımlıysa
-    `detector_mode`'un yerine geçer."""
+    `detections_csv_path`); REAL: görüntü EVREN'deki modele gönderilir."""
     detections_csv_path: str = "../../stage2/detections_all.csv"
     """DEMO + `data_source=package`: modelin çıktısı (image_id, cls, score, x, y, w, h)."""
     detections_source: str = "detections_all.csv"
     """DEMO + `data_source=supabase`: `model_detections.source` değeri."""
-    detector_mode: Literal["mock", "evren", "model"] = "mock"
-    detector_weights_path: str = ""
     evren_model_api_key: SecretStr = SecretStr("")
     """EVREN model platformu anahtarı (tespit modeli); LLM anahtarından ayrı."""
     evren_detector_model: str = "u84f118304558/d2-y26l-v2-60ep-mixup01"
     """Ekibin EVREN'deki tespit modeli (`sahip/slug`)."""
-    detector_mock_path: str = ""
-    """Sahte tespitlerin JSON dosyası (ör. sentetik `detections.json`); boşsa yerleşik örnek."""
     detector_imgsz: int | None = None
-    """Modelin çıkarım boyutu; boşsa Ultralytics'in varsayılanı."""
+    """EVREN modelinin çıkarım boyutu; boşsa `EVREN_IMAGE_SIZE`."""
 
     @property
     def resolved_data_dir(self) -> Path:
         """`data_dir`, backend klasörüne göre çözümlenmiş hali."""
         return _resolve(self.data_dir)
-
-    @property
-    def resolved_weights_path(self) -> Path | None:
-        """Model ağırlıkları, backend klasörüne göre çözümlenmiş; tanımlı değilse `None`."""
-        return _resolve(Path(self.detector_weights_path)) if self.detector_weights_path else None
 
     @property
     def resolved_claims_path(self) -> Path | None:
@@ -77,11 +67,6 @@ class Settings(BaseSettings):
     @property
     def resolved_detections_csv_path(self) -> Path:
         return _resolve(Path(self.detections_csv_path))
-
-    @property
-    def resolved_mock_path(self) -> Path | None:
-        """Sahte tespit dosyası, backend klasörüne göre çözümlenmiş; tanımlı değilse `None`."""
-        return _resolve(Path(self.detector_mock_path)) if self.detector_mock_path else None
 
 
 def _resolve(path: Path) -> Path:

@@ -2,7 +2,7 @@
 
 Veri ve iddialar varsayılan olarak Supabase'ten okunur; `--package` ile yerel bir paket
 (ve `--claims` ile iddialar) kullanılır. Tespit bileşeni `.env` ayarına göre seçilir
-(`DETECTOR_MODE`); `--detections` sahte tespitleri bir dosyadan verir. Her görüntü baştan
+(`USE_INFERENCE`); `--detections` kayıtlı tespitleri bir dosyadan verir. Her görüntü baştan
 değerlendirilir, önbellek kullanılmaz.
 
 Sentetik paket, Supabase'e yüklemeden:
