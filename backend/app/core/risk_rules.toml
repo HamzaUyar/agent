@@ -10,7 +10,8 @@ stationary_displacement_m = 100
 
 [motion]
 history_minutes = 120
-recent_window_minutes = 10
+# Hız ve yön bu pencereden okunur; eğilimle aynı (görev tanımı s3: tek adımdan değil).
+recent_window_minutes = 30
 # Ardışık noktalar ilk noktadan bu kadar uzaklaşmadıysa duraklama sayılır.
 stop_displacement_m = 50
 stop_min_minutes = 10

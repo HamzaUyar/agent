@@ -422,6 +422,12 @@
   - 16 temas "yüksek"ten düştü (12'si orta, 4'ü düşük), 13 görüntünün seviyesi düştü. Çelişkiler aynı sayıda yakalanıyor, yalnızca seviyeye etkisi yok.
   - Dikkat: hareket tuzaklarındaki yaklaşan araçlar (T0078 8,3 m/s, T0112) de ortaya indi, çünkü üsse 3 km'den uzaklar ve temel tablo onları orta veriyor. Bunları yükseltmek artık LLM'in (+1, gerekçeli) ya da temel tablonun işi.
 
+### Hız ve yön kaydın tamamından (27 Eylül, görev tanımı s3, validate bulgusu #13)
+- `risk_rules.toml` `recent_window_minutes` 10 → 30: hız ve yön eğilimle aynı pencereden. Seviye hesabı değişmedi (eğilim zaten 30 dk'lıktı); gerçek veride 40 görüntünün seviyesi ve 24 çelişki aynı.
+- LLM girdisine `avg_speed_mps` (2 saat), `distance_to_base_30min_ago_km` ve `heading_deg` eklendi; prompt'a alanların anlamı ve "tek andan yorumlama" yazıldı. Brief metni: "üsse uzaklık 30 dk önce X km, şimdi Y km, son 30 dk A m/s, 2 saatlik ortalama B m/s". Sohbet aracı da ortalama hızı döndürüyor.
+- T0122: 30 dk'lık pencerenin 20 dk'sı 13:15 duraklamasının sonu olduğu için hız 6,4 → 2,1 m/s; hemen yeniden hareket etmiş bir aracın anlık hızı artık daha düşük görünüyor, duraklamalar listesi bunu açıklıyor.
+- Testler: T0122 testi güncellendi, LLM girdisi ve brief metni için 1 yeni test. Toplam 221; ruff ve mypy temiz.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

@@ -4,6 +4,7 @@ Senaryolar üssün doğusunda, bilinen mesafelerde kurulan track'lerle yazılır
 görüntünün ortasındaki tek bir temastan oluşur.
 """
 
+import json
 from dataclasses import replace
 from datetime import time
 from math import cos, radians
@@ -11,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from app.agent.decision import build_input
 from app.agent.service import EvaluationService
 from app.core.rules import DEFAULT_RULES_PATH, LevelRules, RiskRules, load_rules
 from app.data_package import from_minutes, read_package, to_minutes
@@ -225,8 +227,12 @@ def test_t0122_motion_summary_matches_the_reference_example() -> None:
     [contact] = [c for c in brief.contacts if c.track_id == "T0122"]
     motion = contact.motion
     assert motion is not None
-    # Organizatör örneği: son 10 dakikada ~6 m/s, 13:15'te 45 dk ve 12:10'da 40 dk bekleme.
-    assert motion.recent_speed_mps == pytest.approx(6.4, abs=0.3)
+    # Organizatör örneği: 13:15'te 45 dk ve 12:10'da 40 dk bekleme. Hız son 30 dakikadan
+    # okunur (görev tanımı s3: tek adımdan değil): 20 dk'sı 13:15 duraklamasının sonu, bu
+    # yüzden yalnızca son 10 dakikaya bakan eski ölçümün ~6,4 m/s'si yerine ~2,1 m/s.
+    assert motion.recent_speed_mps == pytest.approx(2.1, abs=0.2)
+    assert motion.distance_to_base_30min_ago_m is not None
+    assert motion.distance_to_base_30min_ago_m > motion.distance_to_base_m  # yaklaşıyor
     stops = {(s.start, s.minutes) for s in motion.stops}
     assert ("12:10", 40) in stops
     assert ("13:15", 45) in stops
@@ -245,3 +251,27 @@ def test_stationary_contact_has_no_heading_and_one_long_stop() -> None:
     assert contact.motion.heading_deg is None
     assert [s.minutes for s in contact.motion.stops] == [120]
     assert contact.motion.recent_speed_mps == pytest.approx(0, abs=0.01)
+
+
+def test_llm_input_and_brief_carry_the_whole_track_motion_not_a_single_step() -> None:
+    """Görev tanımı s3: hız ve yön tek adımdan değil, kaydın tamamından okunur."""
+    truck = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
+    brief = EvaluationService(
+        InMemoryRepository(PACKAGE), FakeDetector({"img_000860": [truck]})
+    ).run("img_000860")
+    [contact] = [c for c in brief.contacts if c.track_id == "T0122"]
+    motion = contact.motion
+    assert motion is not None and motion.distance_to_base_30min_ago_m is not None
+
+    payload = json.loads(
+        build_input(brief.image_id, brief.zone, brief.capture_time, brief.contacts, [])
+    )
+    [facts] = [c for c in payload["contacts"] if c["track_id"] == "T0122"]
+    assert facts["avg_speed_mps"] == round(motion.avg_speed_mps, 1)
+    assert facts["distance_to_base_30min_ago_km"] == round(
+        motion.distance_to_base_30min_ago_m / 1000, 2
+    )
+    assert facts["heading_deg"] == round(motion.heading_deg or 0)
+
+    assert f"2 saatlik ortalama {motion.avg_speed_mps:.1f} m/s" in brief.text
+    assert f"30 dk önce {motion.distance_to_base_30min_ago_m / 1000:.1f} km" in brief.text

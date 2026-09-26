@@ -656,7 +656,15 @@ def _contact_notes(c: ContactFinding) -> list[str]:
 
 
 def _movement_text(m: MotionFinding) -> str:
-    parts = [TREND_TR[m.trend], f"son dönem {m.recent_speed_mps:.1f} m/s"]
+    parts = [TREND_TR[m.trend]]
+    if m.distance_to_base_30min_ago_m is not None:
+        parts.append(
+            f"üsse uzaklık 30 dk önce {m.distance_to_base_30min_ago_m / 1000:.1f} km, "
+            f"şimdi {m.distance_to_base_m / 1000:.1f} km"
+        )
+    parts.append(
+        f"son 30 dk {m.recent_speed_mps:.1f} m/s, 2 saatlik ortalama {m.avg_speed_mps:.1f} m/s"
+    )
     if m.heading_deg is not None:
         parts.append(f"yön {m.heading_deg:.0f}°")
     if m.stops:

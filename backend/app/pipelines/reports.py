@@ -150,7 +150,7 @@ def _behavior_check(
     if motion is None or motion.trend == "unknown":
         return "unverified", ""
     stopped = motion.current_stop_minutes is not None or motion.trend == "stationary"
-    actual = f"{TREND_TR[motion.trend]}, son dönem {motion.recent_speed_mps:.1f} m/s"
+    actual = f"{TREND_TR[motion.trend]}, son 30 dk {motion.recent_speed_mps:.1f} m/s"
     if claimed == "moving":
         return ("mismatch", "iddia hareket halinde diyor, " + actual) if stopped else ("match", "")
     if claimed == "stationary":

@@ -148,6 +148,7 @@ class ChatTools:
             ],
             "trend": motion.trend,
             "recent_speed_mps": round(motion.recent_speed_mps, 1),
+            "avg_speed_mps": round(motion.avg_speed_mps, 1),
             "heading_deg": round(motion.heading_deg) if motion.heading_deg is not None else None,
             "total_distance_m": round(motion.total_distance_m),
             "stops": [
