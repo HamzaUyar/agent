@@ -6,6 +6,8 @@ import { RISK } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import { useOperasyon } from "@/store/operasyon"
 
+import { SeciliKareSeridi } from "./secili-kare-seridi"
+
 const minutes = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number)
   return h * 60 + m
@@ -37,7 +39,7 @@ export function ZamanAkisi() {
   return (
     <section
       aria-label="Zaman akışı"
-      className="flex h-[var(--zaman-akisi-yukseklik)] flex-col justify-center gap-1 border-t border-cizgi bg-[var(--zaman-akisi-zemin)] px-6"
+      className="flex min-h-[var(--zaman-akisi-yukseklik)] flex-col justify-center gap-1 border-t border-cizgi bg-[var(--zaman-akisi-zemin)] px-6 py-2"
     >
       <div className="flex items-baseline justify-between text-xs">
         <h2 className="font-bold tracking-wider text-metin-soluk uppercase">Günün görüntüleri</h2>
@@ -90,6 +92,7 @@ export function ZamanAkisi() {
           ))}
         </div>
       )}
+      <SeciliKareSeridi />
     </section>
   )
 }

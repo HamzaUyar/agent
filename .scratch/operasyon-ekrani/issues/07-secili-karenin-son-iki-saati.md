@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] Alt şerit: çekim anından iki saat öncesinden çekim anına kadar eksen; çekim anı işareti
-- [ ] Seçili Temas'ın rota saatleri, duraklamaları (`motion.stops`), bağlı rapor saatleri (`report_findings[].report_time`)
-- [ ] Çekim anından sonrası gri ve kapalı; rota saati `null` ise yalnızca duraklama ve rapor saatleri
-- [ ] Sayfa testi: T0122 seçilince duraklama ve 12:35 raporu şeritte; çekim anından sonrası kapalı
+- [x] Alt şerit: çekim anından iki saat öncesinden çekim anına kadar eksen; çekim anı işareti
+- [x] Seçili Temas'ın rota saatleri, duraklamaları (`motion.stops`), bağlı rapor saatleri (`report_findings[].report_time`)
+- [x] Çekim anından sonrası gri ve kapalı; rota saati `null` ise yalnızca duraklama ve rapor saatleri
+- [x] Sayfa testi: T0122 seçilince duraklama ve 12:35 raporu şeritte; çekim anından sonrası kapalı
