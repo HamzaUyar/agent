@@ -27,6 +27,7 @@ dev = [
 [project.scripts]
 make-mock-data = "scripts.make_mock_data:main"
 load-data = "scripts.load_data:main"
+run-eval-set = "scripts.run_eval_set:main"
 
 [build-system]
 requires = ["setuptools>=69"]

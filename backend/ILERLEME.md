@@ -265,6 +265,21 @@
   - Önceki bir karenin dosyası eksikse bütün değerlendirme düşüyordu.
 - Gerçek ağırlık olmadığı için gerçek modelle deneme yapılmadı; ultralytics/torch kurulmadı.
 
+### Ticket 12: Değerlendirme seti koşucusu ✅
+- **Etiket biçimi (TOML):** Görüntü başına beklenen seviye, isteğe bağlı olarak bir tespitle eşleşmesi gereken track'ler ve rapor başına beklenen karar. Rapor, saat ve kaynakla tanımlanıyor; isteğe bağlı `claim_type` raporun yalnızca o türdeki iddialarını değerlendiriyor. `ignored` kararı, rapor o görüntüde hiç değerlendirilmemeli demek (ör. çekim anından sonra). Hatalı seviye, yazım hatalı alan, geçersiz saat ve aynı görüntünün iki kez etiketlenmesi dosya adıyla birlikte reddediliyor. Biçim ve açıklaması `backend/eval/mock_labels.toml`'da.
+- `app/eval_set.py`: `load_labels`, `run_eval_set`, `render`. Her görüntü baştan değerlendiriliyor (önbellek yok); bir görüntünün hatası diğerlerini durdurmuyor.
+- **Ölçümler:**
+  - seviye doğruluğu ve düşük tahmin sayısı (asıl tehlike)
+  - eşleşme: doğru eşleşen / beklenen, fazladan eşleşme
+  - rapor kararı doğruluğu
+  - çelişkili rapor yakalama oranı ve yanlış alarm
+  - LLM'in yazdığı brief sayısı
+- Bir raporun iddiaları farklı karar alırsa raporun kararı: çelişkili > tutarlı > doğrulanamaz > ilgisiz.
+- Komut: `python -m scripts.run_eval_set [etiketler.toml] [--no-llm] [--json çıktı.json]` (`run-eval-set`). Veri ve iddialar Supabase'ten, tespit bileşeni `DETECTOR_MODE`'dan.
+- Testler: `tests/test_eval_set.py` 16 senaryo (sahte etiketler); toplam 161 test.
+- **Gerçek çalıştırma (Supabase, GLM-5.3'ün çıkardığı iddialar):** Kurallarla 2/2 seviye, 1/1 eşleşme, 5/5 rapor kararı. LLM ile de aynı sonuç, 13 sn, iki brief'i de GLM-5.3 yazdı. Sahte veride çelişkili rapor olmadığı için yakalama oranı ölçülemedi (0/0); o senaryo testlerde var.
+- Kod incelemesinde bulgu çıkmadı.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

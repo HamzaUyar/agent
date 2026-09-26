@@ -14,10 +14,10 @@ Asıl plan, `app/.scratch/goruntu-degerlendirme-agent/issues/` altındaki iş ma
 - [x] 09 · Önbellek (LLM brief'i tercihli), yeniden hesaplama, `GET /evaluations/{id}`
 - [x] 10 · Sohbet agent'ı (5 salt okuma aracı, `POST /evaluations/{id}/chat`)
 - [x] 11 · Gerçek tespit modeli entegrasyonu (Ultralytics YOLO, `DETECTOR_MODE=model`)
-- [ ] 12 · Değerlendirme seti koşucusu · engel: 06 ✅, 07 ✅
+- [x] 12 · Değerlendirme seti koşucusu (`run-eval-set`, etiketler `eval/*.toml`)
 - [ ] 13 · Gerçek veri yükleme ve açık soruların kapatılması · engel: 01 ✅, 12 ve 2. aşama verisi
 
-Hemen başlanabilecekler: **12**.
+Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 
 ## Plan dışı işler
 - [x] `app/` için git repo'su başlat, ilk commit'i yap, GitHub'a push et (private)

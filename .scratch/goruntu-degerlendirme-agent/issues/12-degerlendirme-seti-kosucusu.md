@@ -4,8 +4,8 @@
 
 **Blocked by:** 06, 07
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Etiket formatı
-- [ ] Koşucu ve özet rapor
-- [ ] Sahte etiketlerle çalışıyor
+- [x] Etiket formatı
+- [x] Koşucu ve özet rapor
+- [x] Sahte etiketlerle çalışıyor

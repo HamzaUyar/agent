@@ -1,0 +1,51 @@
+# Değerlendirme seti: sahte veri paketi (tests/fixtures/mock_package) için elle etiketler.
+# Gerçek veri gelince aynı biçimde eval/labels.toml yazılacak (ticket 13).
+#
+# Her görüntü:
+#   image_id        zorunlu
+#   level           beklenen görüntü seviyesi: low / medium / high / critical
+#   matched_tracks  isteğe bağlı; bir tespitle eşleşmesi gereken track'ler ([] = hiçbiri)
+#   [[images.reports]]  isteğe bağlı; rapor başına beklenen karar
+#     time, source      raporu tanımlar (SS:DD, official / third_party)
+#     claim_type        isteğe bağlı; raporun yalnızca bu türdeki iddialarını değerlendirir
+#     verdict           consistent / contradicts / unverifiable / irrelevant / ignored
+#                       ignored: rapor bu görüntüde hiç değerlendirilmemeli (ör. çekim anından sonra)
+# Bir raporun birden fazla iddiası varsa karar: çelişkili > tutarlı > doğrulanamaz > ilgisiz.
+
+[[images]]
+image_id = "img_000860"
+note = "Organizatör örneği: T0122 truck, üsse 1,6 km, yaklaşıyor"
+level = "critical"
+matched_tracks = ["T0122"]
+
+  [[images.reports]]
+  time = "11:55"
+  source = "third_party"
+  verdict = "unverifiable"  # konumsuz tatbikat duyurusu
+
+  [[images.reports]]
+  time = "12:35"
+  source = "official"
+  verdict = "consistent"  # o saatte noktada park halindeki T0032 var (RISKLER R7)
+
+  [[images.reports]]
+  time = "13:05"
+  source = "official"
+  verdict = "ignored"  # görüntüden ~2 km uzakta
+
+  [[images.reports]]
+  time = "13:40"
+  source = "third_party"
+  claim_type = "friendly_claim"
+  verdict = "unverifiable"  # üçüncü taraf "mavi dost" iddiası riski düşürmemeli
+
+  [[images.reports]]
+  time = "14:20"
+  source = "official"
+  verdict = "ignored"  # çekim anından (14:10) sonra (ADR-0001)
+
+[[images]]
+image_id = "img_000100"
+note = "T0200 karede ama tespit yok; üsten uzaklaşıyor"
+level = "low"
+matched_tracks = []
