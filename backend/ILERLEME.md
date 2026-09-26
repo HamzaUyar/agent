@@ -354,6 +354,15 @@
 - **Bulgu — brief'teki rapor gürültüsü:** 273 rapor bulgusunun 209'u doğrulanamaz; gün boyu geçerli "tatbikat" dostluk iddiası 81 kez, söylentiler 60 kez her görüntüde listeleniyor.
 - Model sınıf dağılımı (260 kutu): 206 otomobil, 26 minibüs, 24 kamyon, 4 otobüs.
 
+### B1: Arayüz için backend ek uçları (26 Eylül)
+- `GET /zones`: üs ve 8 bölge merkezi, `zones.json` biçiminde (`base {name, lat, lon}`, `zones [{name, center [lat, lon]}]`). Bölge sınırı yok, uydurulmadı.
+- `GET /images/{image_id}`: `image_meta.json` kaydı (`width_px`, `height_px`, `capture_time`, `corner_coordinates` `[lat, lon]`) + `center` (dört köşenin ortası) + `zone` (`/images` ile aynı en yakın merkez kuralı). Veri setinde yoksa 404.
+- `GET /images/{image_id}/file`: `DATA_DIR/images`'tan dosya; `content-type` uzantıdan, `Cache-Control: public, max-age=86400`, `ETag`/`Last-Modified`. Görüntü veri setinde yoksa ya da dosyası eksikse ayrı mesajla 404. Dosya adı veri setindeki kimlikten kurulur.
+- `contacts[].motion.route` noktalarına `time` ("HH:MM") eklendi; `lat`/`lon` aynı, alan isteğe bağlı (önbellekteki eski brief'lerde `null`). Rota çekim anına kadarki kayıtlı noktalardır; ileri kestirilen konum rotaya girmez (ADR-0001). Demo öncesi `recompute: true` ile ısıtılan kayıtlarda saatler dolu gelir.
+- Yeni uçlar bellek içi depodan okur; veritabanı sorgusu eklenmedi.
+- Testler: rota saatleri servis üzerinden (T0122 rotası 12:10–14:10, sonrası yok); üç uç `TestClient` ile, depo ve görüntü klasörü bağımlılık olarak değiştirilerek (spec'e istisna olarak eklendi). Toplam 194.
+- Ortam: `backend/.venv` Anaconda'nın Python 3.12'siyle kuruldu (`/opt/anaconda3/bin/python3.12 -m venv .venv`); zsh'te conda PATH'te değil.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

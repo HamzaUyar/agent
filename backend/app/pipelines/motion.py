@@ -74,7 +74,8 @@ class Motion:
     distance_to_base_m: float
     distance_to_base_window_ago_m: float | None
     trend: Trend
-    route: list[GeoPoint]
+    route: list[TrackPoint]
+    """Çekim anına kadarki kayıtlı noktalar (saatleriyle); ileri kestirim içermez."""
     total_distance_m: float
     avg_speed_mps: float
     recent_speed_mps: float
@@ -174,7 +175,7 @@ def analyze_motion(
         distance_to_base_m=distance_m(current.location, base),
         distance_to_base_window_ago_m=then_dist,
         trend=trend,
-        route=[p.location for p in history],
+        route=list(history),
         total_distance_m=total,
         avg_speed_mps=total / elapsed if elapsed else 0.0,
         recent_speed_mps=recent_speed,

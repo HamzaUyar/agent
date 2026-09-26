@@ -27,6 +27,9 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] `backend/CLAUDE.md`'deki dizin yapısını güncelle (`data_package.py`, `agent/service.py`, `supabase/migrations/`)
 - [ ] Boş test dosyalarını (`test_geo.py`, `test_motion.py`, `test_matching.py`) kaldır ya da doldur. Onaylanan test noktalarına göre bunlar ayrı test edilmiyor; istisna interpolasyon gibi karmaşık hesaplar.
 - [ ] Ayrıntılı analiz tablolarını (`detections`, `track_matches`, `risk_assessments`) doldur; şu an sonuç yalnızca `brief_json` içinde
+- [x] B1 · Arayüz için ek uçlar: `GET /zones`, `GET /images/{id}`, `GET /images/{id}/file`, rota noktalarına `time`
+- [ ] Demo öncesi demo görüntülerini `recompute: true` ile yeniden değerlendir (rota saatleri eski önbellek kayıtlarında `null`)
+- [ ] `tests/` altındaki önceden var olan 30 mypy hatası (`FakeDetector.version`, `SwitchableLLM` → `Provider`); `app/` temiz
 - [ ] `docker-compose.yml`: backend, frontend ve isteğe bağlı yerel Supabase
 - [x] Tip geçmişi için önceki karelerin tespitini önbelleğe al (`UltralyticsDetector` her görüntüyü bir kez çalıştırıyor)
 - [ ] Frontend (Next.js): ayrı spec; API sözleşmesi spec'te tanımlı

@@ -16,6 +16,11 @@ class LatLon(BaseModel):
     lon: float
 
 
+class RoutePoint(LatLon):
+    time: str | None = None
+    """Kayıt saati (SS:DD); bu alandan önce kaydedilmiş brief'lerde yok."""
+
+
 class TrackCandidate(BaseModel):
     track_id: str
     distance_m: float
@@ -36,7 +41,8 @@ class MotionFinding(BaseModel):
     distance_to_base_m: float
     distance_to_base_30min_ago_m: float | None
     trend: Trend
-    route: list[LatLon] = Field(default_factory=list)
+    route: list[RoutePoint] = Field(default_factory=list)
+    """Çekim anına kadarki kayıtlı noktalar, zamana göre sıralı (ADR-0001)."""
     total_distance_m: float
     avg_speed_mps: float
     recent_speed_mps: float
@@ -137,6 +143,47 @@ class StepEvent(BaseModel):
     name: str
     summary: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+Pair = tuple[float, float]
+"""[lat, lon]; veri paketindeki sıra."""
+
+
+class BaseInfo(BaseModel):
+    name: str
+    lat: float
+    lon: float
+
+
+class ZoneInfo(BaseModel):
+    name: str
+    center: Pair
+
+
+class ZonesResponse(BaseModel):
+    """Üs ve bölgeler, `zones.json` biçiminde. Bölgelerin sınırı yok, yalnızca merkezi var."""
+
+    base: BaseInfo
+    zones: list[ZoneInfo]
+
+
+class CornerCoordinates(BaseModel):
+    top_left: Pair
+    top_right: Pair
+    bottom_left: Pair
+    bottom_right: Pair
+
+
+class ImageDetail(BaseModel):
+    """Görüntünün `image_meta.json` kaydı; karenin merkezi ve bölgesiyle."""
+
+    image_id: str
+    width_px: int
+    height_px: int
+    capture_time: str
+    corner_coordinates: CornerCoordinates
+    center: Pair
+    zone: str
 
 
 class ImageSummary(BaseModel):
