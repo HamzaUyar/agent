@@ -64,7 +64,7 @@ export function ZamanAkisi() {
                     aria-label={`${image.image_id} · ${image.zone} · ${image.capture_time} · ${
                       level ? `son seviye ${RISK[level].label}` : "değerlendirilmedi"
                     }`}
-                    title={`${image.image_id} · ${image.zone} · ${image.capture_time}`}
+                    title={`${image.image_id} · ${image.zone} · ${image.capture_time}${level ? ` · ${RISK[level].label}` : ""}`}
                     className={cn(
                       "flex h-8 w-4 items-center justify-center rounded-sm text-sm leading-none",
                       selected ? "bg-secim-zemin ring-2 ring-secim" : "hover:bg-kart",

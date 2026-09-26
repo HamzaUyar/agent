@@ -50,6 +50,35 @@ export function circleRing(center: LngLat, radiusM: number, steps = 64): LngLat[
   return ring
 }
 
+/** `from`'dan `to`'ya yön (derece, kuzeyden saat yönünde, 0–360). */
+export function bearingDeg(from: LngLat, to: LngLat): number {
+  const dx = (to[0] - from[0]) * Math.cos(rad(from[1]))
+  const dy = to[1] - from[1]
+  return ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360
+}
+
+/** Merkezden `bearing` yönünde `distanceM` uzaklıktaki nokta (circleRing ile aynı yerel yaklaşıklık). */
+function offset(center: LngLat, bearing: number, distanceM: number): LngLat {
+  const [lon, lat] = center
+  const t = rad(bearing)
+  const dLat = (distanceM * Math.cos(t)) / EARTH_RADIUS_M
+  const dLon = (distanceM * Math.sin(t)) / (EARTH_RADIUS_M * Math.cos(rad(lat)))
+  return [lon + (dLon * 180) / Math.PI, lat + (dLat * 180) / Math.PI]
+}
+
+/**
+ * Halka dilimi (pasta dilimi, ortası boş): `fromDeg`'den saat yönünde `toDeg`'e, iç ve dış yarıçap
+ * arasında kapalı bir halka. `toDeg < fromDeg` ise kuzeyden geçer (ör. 337,5° → 22,5°).
+ */
+export function sectorRing(center: LngLat, innerM: number, outerM: number, fromDeg: number, toDeg: number, steps = 32): LngLat[] {
+  const span = (((toDeg - fromDeg) % 360) + 360) % 360 || 360
+  const arc = (r: number) =>
+    Array.from({ length: steps + 1 }, (_, i) => offset(center, fromDeg + (span * i) / steps, r))
+  const outer = arc(outerM)
+  const inner = arc(innerM).reverse()
+  return [...outer, ...inner, outer[0]]
+}
+
 /** Noktaları kapsayan en küçük kutu: [güneybatı, kuzeydoğu]. */
 export function boundsOf(points: LngLat[]): Bounds {
   const lons = points.map((p) => p[0])

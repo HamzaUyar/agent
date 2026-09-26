@@ -9,51 +9,106 @@
  *   1. ham değerler      --ham-*
  *   2. anlamlı değerler  --zemin, --metin, --secim, --risk-*, --veri-bayat …
  *   3. bileşen değerleri --ust-cubuk-*, --harita-paneli-*, --cekmece-*, --zaman-akisi-*
- * Yalnızca koyu tema var: operasyon ekranı karanlık bir odada, projektörde kullanılıyor.
+ * İki tema: koyu (varsayılan; karanlık oda, projektör) ve açık (aydınlık ortam). Tema yalnızca
+ * anlamlı katmanı değiştirir; bileşenler anlamlı değerlere bağlı olduğu için kendiliğinden uyar.
+ * Palet nötr grafit/kâğıt tonları ve çelik mavisi seçim; mor, neon ve gradyan yok.
  */
 :root {
   /* 1 · ham */
-  --ham-lacivert-950: #0a101c;
-  --ham-lacivert-900: #0f172a;
-  --ham-lacivert-850: #141d31;
-  --ham-lacivert-800: #1b2336;
-  --ham-lacivert-700: #272f42;
-  --ham-lacivert-600: #3a465c;
-  --ham-gri-400: #94a3b8;
-  --ham-gri-300: #cbd5e1;
-  --ham-gri-50: #f1f5f9;
-  --ham-gok-400: #38bdf8;
-  --ham-gok-950: #082f49;
-  --ham-arduvaz-400: #8b9bb4;
-  --ham-sari-400: #e3b341;
-  --ham-turuncu-400: #f0883e;
-  --ham-kirmizi-400: #f85149;
-  --ham-mor-300: #c4b5fd;
+  --ham-grafit-950: #101214;
+  --ham-grafit-900: #16191c;
+  --ham-grafit-850: #1b1e22;
+  --ham-grafit-800: #22262a;
+  --ham-grafit-700: #2d3136;
+  --ham-grafit-600: #43484e;
+  --ham-tas-400: #8e8c86;
+  --ham-tas-300: #c4c1ba;
+  --ham-tas-50: #eeece7;
+  --ham-kagit-50: #f6f5f1;
+  --ham-kagit-100: #ecebe6;
+  --ham-kagit-200: #e2e0da;
+  --ham-kagit-300: #c9c6be;
+  --ham-murekkep-900: #1c1d1f;
+  --ham-murekkep-700: #3d4043;
+  --ham-murekkep-500: #63666a;
+  --ham-celik-400: #5aa2dc;
+  --ham-celik-700: #1f66a3;
+  --ham-celik-950: #11283b;
+  --ham-celik-100: #d6e6f4;
+  --ham-yesil-400: #4cb963;
+  --ham-yesil-700: #257a38;
+  --ham-sari-400: #f2c230;
+  --ham-sari-700: #9a7400;
+  --ham-turuncu-400: #f28a2e;
+  --ham-turuncu-700: #b85a0c;
+  --ham-kirmizi-400: #f0514a;
+  --ham-kirmizi-700: #c0272d;
+  --ham-kum-400: #c6b184;
+  --ham-kum-700: #7a6430;
+  --ham-beyaz: #ffffff;
+  --ham-siyah: #000000;
 
-  /* 2 · anlamlı */
-  --zemin: var(--ham-lacivert-950);
-  --yuzey: var(--ham-lacivert-900);
-  --kart: var(--ham-lacivert-800);
-  --kart-vurgu: var(--ham-lacivert-700);
-  --cizgi: var(--ham-lacivert-600);
-  --metin: var(--ham-gri-50);
-  --metin-ikincil: var(--ham-gri-300);
-  --metin-soluk: var(--ham-gri-400);
-  /* Seçim tek vurgu rengi. Amber, orta/yüksek seviye renklerine çok yakın olduğu için gök mavisi. */
-  --secim: var(--ham-gok-400);
-  --secim-zemin: var(--ham-gok-950);
-  --risk-dusuk: var(--ham-arduvaz-400);
+  /* Görüntü üzerindeki tespit kutuları: fotoğrafın üstünde, temadan bağımsız.
+     Hepsi tek renk (beyaz, siyah kılıflı); seçili kutu çelik mavisi. */
+  --tespit-kutu: var(--ham-beyaz);
+  --tespit-kutu-kilif: var(--ham-siyah);
+  --tespit-kutu-secili: var(--ham-celik-400);
+}
+
+/* 2 · anlamlı · açık tema */
+:root {
+  --zemin: var(--ham-kagit-100);
+  --yuzey: var(--ham-kagit-50);
+  --kart: var(--ham-beyaz);
+  --kart-vurgu: var(--ham-kagit-200);
+  --cizgi: var(--ham-kagit-300);
+  --metin: var(--ham-murekkep-900);
+  --metin-ikincil: var(--ham-murekkep-700);
+  --metin-soluk: var(--ham-murekkep-500);
+  --secim: var(--ham-celik-700);
+  --secim-zemin: var(--ham-celik-100);
+  --secim-uzeri: var(--ham-beyaz);
+  --risk-dusuk: var(--ham-yesil-700);
+  --risk-orta: var(--ham-sari-700);
+  --risk-yuksek: var(--ham-turuncu-700);
+  --risk-kritik: var(--ham-kirmizi-700);
+  --veri-bayat: var(--ham-murekkep-500);
+  --otomatik-ozet: var(--ham-kum-700);
+  /* Harita çizgilerinin kılıfı: zeminin tersi, açık sokak haritasında da seçilsin. */
+  --harita-kilif: var(--ham-beyaz);
+  --harita-duz-zemin: var(--ham-kagit-200);
+}
+
+/* 2 · anlamlı · koyu tema */
+.dark {
+  --zemin: var(--ham-grafit-950);
+  --yuzey: var(--ham-grafit-900);
+  --kart: var(--ham-grafit-800);
+  --kart-vurgu: var(--ham-grafit-700);
+  --cizgi: var(--ham-grafit-600);
+  --metin: var(--ham-tas-50);
+  --metin-ikincil: var(--ham-tas-300);
+  --metin-soluk: var(--ham-tas-400);
+  --secim: var(--ham-celik-400);
+  --secim-zemin: var(--ham-celik-950);
+  --secim-uzeri: var(--ham-grafit-950);
+  --risk-dusuk: var(--ham-yesil-400);
   --risk-orta: var(--ham-sari-400);
   --risk-yuksek: var(--ham-turuncu-400);
   /* Kırmızı yalnızca kritik için. */
   --risk-kritik: var(--ham-kirmizi-400);
-  --veri-bayat: var(--ham-gri-400);
-  --otomatik-ozet: var(--ham-mor-300);
+  --veri-bayat: var(--ham-tas-400);
+  --otomatik-ozet: var(--ham-kum-400);
+  --harita-kilif: var(--ham-grafit-950);
+  --harita-duz-zemin: var(--ham-grafit-850);
+}
 
+:root,
+.dark {
   /* 3 · bileşen */
   --ust-cubuk-zemin: var(--yuzey);
   --ust-cubuk-yukseklik: 3rem;
-  --harita-paneli-zemin: var(--ham-lacivert-850);
+  --harita-paneli-zemin: var(--harita-duz-zemin);
   --harita-paneli-cerceve: var(--cizgi);
   --harita-paneli-bosluk: 1.25rem;
   --cekmece-zemin: var(--yuzey);
@@ -73,7 +128,7 @@
   --popover: var(--kart);
   --popover-foreground: var(--metin);
   --primary: var(--secim);
-  --primary-foreground: var(--ham-lacivert-950);
+  --primary-foreground: var(--secim-uzeri);
   --secondary: var(--kart-vurgu);
   --secondary-foreground: var(--metin);
   --muted: var(--kart-vurgu);
@@ -137,6 +192,9 @@
   }
   html {
     @apply font-sans;
+    color-scheme: light;
+  }
+  html.dark {
     color-scheme: dark;
   }
   body {
@@ -332,6 +390,21 @@
 }
 
 @layer components {
+  /* Çeyrek daire: pasta dilimi. */
+  .harita-lejant__dilim {
+    display: block;
+    width: 12px;
+    height: 12px;
+    border-top-right-radius: 100%;
+    border: 1px dashed var(--metin-ikincil);
+    border-left-style: solid;
+    border-bottom-style: solid;
+    background: color-mix(in srgb, var(--metin) 12%, transparent);
+  }
+  .harita-lejant__dilim--secili {
+    border: 2px solid var(--secim);
+    background: color-mix(in srgb, var(--secim) 25%, transparent);
+  }
   .harita-lejant__temas {
     display: block;
     width: 10px;

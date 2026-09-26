@@ -6,6 +6,7 @@
 import type { FeatureCollection } from "geojson"
 
 import type { Bounds, LngLat } from "@/lib/geo"
+import type { Tema } from "@/lib/tema"
 
 /** Zemin: uydu görüntüsü, sokak haritası ya da (internet yoksa) düz koyu zemin. */
 export type Basemap = "uydu" | "sokak" | "duz"
@@ -46,6 +47,8 @@ export type MapEvents = {
 
 export interface MapAdapter {
   setBasemap(basemap: Basemap): void
+  /** Tema değişti: katman renkleri token'lardan yeniden okunur, sokak zemini temaya uyar. */
+  setTheme(theme: Tema): void
   setArea(layer: AreaLayer, data: FeatureCollection): void
   setMarkers(group: MarkerGroup, markers: MapMarker[]): void
   fitBounds(bounds: Bounds, paddingPx: number): void

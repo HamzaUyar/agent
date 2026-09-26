@@ -27,7 +27,7 @@ export function SekmeRafi({ side }: { side: Side }) {
 
   const tabs =
     side === "left"
-      ? [leftTab("goruntu", "Görüntü", "G"), leftTab("sohbet", "Sohbet", "S")]
+      ? [leftTab("goruntu", "Görüntü", "G")]
       : [rightTab("temaslar", "Risk & Temaslar", "R"), rightTab("brief", "Brief", "B")]
 
   return (

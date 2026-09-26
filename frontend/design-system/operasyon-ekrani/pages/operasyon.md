@@ -6,7 +6,13 @@
 
 ## Kabul edilenler
 - **Stil:** Minimalism & Swiss. Sade kartlar, net hiyerarşi, ızgara. Efekt yok; geçişler 150–250 ms. Hareket azaltma tercihinde geçişler kapalı.
-- **Zemin:** Koyu lacivert-nötr (`#0a101c` zemin, `#0f172a` yüzey, `#1b2336` kart, `#3a465c` çizgi). Metin `#f1f5f9`, soluk metin `#94a3b8`.
+- **Tema:** Koyu (varsayılan; karanlık oda, projektör) ve açık. Anahtar üst çubuğun en sağında; seçim tarayıcıda saklanır ve sayfa boyanmadan önce uygulanır. Tema yalnızca anlamlı token katmanını değiştirir.
+- **Zemin:** Nötr tonlar; lacivert-gri ve mor yok ("AI paleti" görünümünden kaçınıldı).
+  | | Koyu | Açık |
+  |---|---|---|
+  | Zemin / yüzey / kart | `#101214` / `#16191c` / `#22262a` (grafit) | `#ecebe6` / `#f6f5f1` / `#ffffff` (kâğıt) |
+  | Çizgi | `#43484e` | `#c9c6be` |
+  | Metin / soluk metin | `#eeece7` / `#8e8c86` | `#1c1d1f` / `#63666a` |
 - **Yoğunluk:** Yüksek (dashboard). Gövde 14 px, en küçük yazı 12 px.
 - **Erişilebilirlik:**
   - Bilgi yalnızca renkle verilmez.
@@ -17,30 +23,33 @@
 | Öneri | Neden |
 |---|---|
 | Kalıp: "Real-Time / Operations Landing" (hero, metrikler, CTA) | Bu bir pazarlama sayfası değil, tek ekranlı operasyon aracı. Yerleşim Konsept A. |
-| Vurgu rengi yeşil `#22C55E` | Yeşil "güvenli" gibi okunur ve risk skalasıyla karışır. |
+| Vurgu rengi yeşil `#22C55E` | Yeşil düşük risk seviyesinin rengi; vurgu olarak karışır. |
 | Font Cinzel + Josefin Sans | Gayrimenkul/lüks için önerilmiş, okunabilirliği düşük. |
 | GSAP scroll reveal | Kaydırılan bir sayfa yok; operasyon ekranında dikkat dağıtır. |
 | Glassmorphism, neon, bilim-kurgu efektleri | PDF 2 kararı: okunabilirliği düşürür. |
 
 ## Kararlar
 - **Font:** Atkinson Hyperlegible, metin için. İlk sorgunun erişilebilirlik odaklı önerisi. JetBrains Mono, koordinat, saat ve kimlikler için.
-- **Seçim rengi:** Gök mavisi `#38bdf8`. PDF 2 amber öneriyordu, ama amber orta (sarı) ve yüksek (turuncu) seviyeyle karışıyor. Seçim tek vurgu rengi.
-- **Risk skalası:** Renk, şekil ve kelime birlikte kullanılır.
-  | Seviye | Renk | Şekil |
+- **Seçim rengi:** Çelik mavisi (koyu `#5aa2dc`, açık `#1f66a3`). PDF 2 amber öneriyordu, ama amber orta (sarı) ve yüksek (turuncu) seviyeyle karışıyor. Seçim tek vurgu rengi.
+- **Risk skalası:** Bütün seviyeler aynı simgeyi (◆ baklava) kullanır; seviye renkle ve kelimeyle verilir. Dar yerlerde (zaman akışı) kelime erişilebilir ad ve ipucundadır. Açık temada renkler beyaz zeminde okunacak kadar koyudur.
+  | Seviye | Koyu | Açık |
   |---|---|---|
-  | Düşük | `#8b9bb4` | ● |
-  | Orta | `#e3b341` | ■ |
-  | Yüksek | `#f0883e` | ▲ |
-  | Kritik | `#f85149` | ◆ |
+  | Düşük (yeşil) | `#4cb963` | `#257a38` |
+  | Orta (sarı) | `#f2c230` | `#9a7400` |
+  | Yüksek (turuncu) | `#f28a2e` | `#b85a0c` |
+  | Kritik (kırmızı) | `#f0514a` | `#c0272d` |
 
-  Kırmızı yalnızca kritik için. Kesinlik ayrı bir metin etiketidir.
+  Kırmızı yalnızca kritik için. Kesinlik ayrı bir metin etiketidir. (Önceki karar: seviye başına ayrı şekil ve gri düşük; operatör isteğiyle değişti.)
+- **Tespit kutuları (görüntü üzerinde):** Seviyeden bağımsız tek renk: siyah kılıflı beyaz, her zeminde seçilir. Seçili kutu çelik mavisi `#5aa2dc` ve kalın. Seviye etiketteki renkli baklavada. Katman fotoğrafın üstünde olduğu için temadan bağımsız koyu token'larla çizilir.
+- **Harita:** Varsayılan zemin sokak (OpenFreeMap; koyu temada `dark`, açık temada gri tonlu `positron` stili; renkli sokak haritası seviye renkleriyle karışır). Bölge alanları Üs merkezli pasta dilimleri: her Bölge, Üs'ten bakınca merkezine en yakın yön aralığını alır; dilimler 1 km halkasından başlar (Üs dairesi boş kalır). Komşu dilimler sırayla açık/koyu dolgu, sınır kesikli (kesin sınır değil); seçili karenin Bölge dilimi seçim renginde.
 - **Rozetler:**
   - "Önbellek": `--veri-bayat`, gri.
-  - "Otomatik özet": `--otomatik-ozet`, mor. Sarı değil, çünkü orta seviyeyle karışır.
-- **Token adları:** `--risk-dusuk/orta/yuksek/kritik`, `--secim`, `--veri-bayat`, `--otomatik-ozet`, `--ust-cubuk-*`, `--harita-paneli-*`, `--cekmece-*`, `--zaman-akisi-*`.
+  - "Otomatik özet": `--otomatik-ozet`, kum rengi. Sarı değil, çünkü orta seviyeyle karışır.
+- **Token adları:** `--risk-dusuk/orta/yuksek/kritik`, `--secim`, `--veri-bayat`, `--otomatik-ozet`, `--tespit-kutu*`, `--harita-kilif`, `--harita-duz-zemin`, `--ust-cubuk-*`, `--harita-paneli-*`, `--cekmece-*`, `--zaman-akisi-*`.
   - Üç katman: `--ham-*` → anlamlı → bileşen.
   - shadcn değişkenleri anlamlı katmana bağlıdır.
 - **Çekmeceler:** shadcn `Sheet` kullanılmadı. Sheet ekranın üstüne açılan bir katman, haritayı daraltmaz. Çekmeceler sayfa düzeninin parçası olan paneller.
   - Genişlikler: göz atma 56 px, yarım %30, tam %55.
+  - Solda yalnız Görüntü çekmecesi (Sohbet kaldırıldı). Risk analizi başlayınca Risk & Temaslar kapalıysa yarım açılır.
   - Kenar başına tek çekmece.
   - Esc en son açılanı kapatır. Odak başlığa taşınır, kapanınca açan öğeye döner.

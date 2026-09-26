@@ -55,7 +55,7 @@ describe("Seçili karenin son iki saati", () => {
   it("Temas seçilince rota saatleri, duraklamalar ve bağlı rapor saatleri şeritte", async () => {
     withReports()
     const { user } = await selectFrame()
-    await user.click(screen.getByRole("button", { name: "Sonucu aç (önbellek)" }))
+    await user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
     await screen.findByLabelText("Görüntü risk seviyesi")
     expect(band()).toHaveTextContent("Ayrıntı için bir temas seçin")
 

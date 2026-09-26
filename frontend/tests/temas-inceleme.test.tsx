@@ -50,9 +50,9 @@ async function evaluated() {
   const view = renderEkran()
   const strip = await screen.findByRole("list", { name: "Görüntüler, çekim anına göre" })
   await view.user.click(within(strip).getByRole("button", { name: /^img_000860/ }))
-  await view.user.click(screen.getByRole("button", { name: "Sonucu aç (önbellek)" }))
+  await view.user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
   await screen.findByLabelText("Görüntü risk seviyesi")
-  await view.user.keyboard("r")
+  // Analiz başlayınca Risk & Temaslar kendiliğinden yarım açılır.
   const drawer = screen.getByRole("region", { name: "Risk & Temaslar" })
   return { ...view, drawer }
 }
@@ -69,8 +69,8 @@ describe("Temas listesi", () => {
     const rows = within(list).getAllByRole("button")
     expect(rows.map((r) => r.textContent)).toEqual([
       "T0122kamyon◆KritikEşleşmiş temasüsse 1,6 kmkesinlik: kesin",
-      "T0032tip bilinmiyor■OrtaKaçırılmış temasüsse 1,6 kmkesinlik: olası",
-      "track yokotomobil●DüşükKayıt dışı temasüsse 1,6 kmkesinlik: olası",
+      "T0032tip bilinmiyor◆OrtaKaçırılmış temasüsse 1,6 kmkesinlik: olası",
+      "track yokotomobil◆DüşükKayıt dışı temasüsse 1,6 kmkesinlik: olası",
     ])
     // Düşük seviyeli Temas katlanır grupta.
     expect(within(list).getByText("1 düşük seviyeli temas, en yakını 1,6 km").closest("details")).toContainElement(rows[2])
@@ -181,7 +181,7 @@ describe("Detay kartı", () => {
     await user.click(within(drawer).getByRole("button", { name: /^T0122/ }))
 
     expect(within(section("Eşleşme")).getByRole("note")).toHaveTextContent("Belirsiz eşleşme")
-    expect(section("Seviye")).toHaveTextContent("temel ▲Yüksek → nihai ◆Kritik")
+    expect(section("Seviye")).toHaveTextContent("temel ◆Yüksek → nihai ◆Kritik")
     expect(section("Seviye")).toHaveTextContent("LLM ayarı: Rapor ağır aracın yaklaştığını doğruluyor")
     expect(section("Seviye")).toHaveTextContent("Reddedilen öneri: İki kademe yükseltme önerisi")
   })

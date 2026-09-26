@@ -1,6 +1,7 @@
 /**
  * Arayüz metinleri; terimler kökteki CONTEXT.md ile aynı.
- * Seviye hiçbir yerde yalnızca renkle verilmez: her seviyenin şekli ve kelimesi var.
+ * Seviye hiçbir yerde yalnızca renkle verilmez: her seviyenin simgesi (hepsinde baklava) renkle
+ * birlikte kelimesiyle de yazılır.
  */
 import type {
   Certainty,
@@ -14,9 +15,9 @@ import type {
 export const RISK_LEVELS: readonly RiskLevel[] = ["low", "medium", "high", "critical"]
 
 export const RISK: Record<RiskLevel, { label: string; shape: string; order: number }> = {
-  low: { label: "Düşük", shape: "●", order: 0 },
-  medium: { label: "Orta", shape: "■", order: 1 },
-  high: { label: "Yüksek", shape: "▲", order: 2 },
+  low: { label: "Düşük", shape: "◆", order: 0 },
+  medium: { label: "Orta", shape: "◆", order: 1 },
+  high: { label: "Yüksek", shape: "◆", order: 2 },
   critical: { label: "Kritik", shape: "◆", order: 3 },
 }
 

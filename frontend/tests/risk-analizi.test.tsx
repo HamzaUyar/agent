@@ -19,7 +19,7 @@ async function selectAndStart(imageId = "img_000860") {
   const view = renderEkran()
   const strip = await screen.findByRole("list", { name: "Görüntüler, çekim anına göre" })
   await view.user.click(within(strip).getByRole("button", { name: new RegExp(`^${imageId}`) }))
-  const start = screen.getByRole("button", { name: /Risk analizini başlat|Sonucu aç \(önbellek\)/ })
+  const start = screen.getByRole("button", { name: "Risk analizini başlat" })
   await view.user.click(start)
   return view
 }
@@ -44,8 +44,7 @@ afterEach(() => {
 describe("Risk analizi akışı", () => {
   it("adımlar geldikçe üst çubukta ve Risk & Temaslar çekmecesinde görünür; sabit bir adım listesi yok", async () => {
     useEvaluationStream(events, { delayMs: 15 })
-    const { user } = await selectAndStart()
-    await user.keyboard("r")
+    await selectAndStart()
 
     // İlk adım geldiğinde son adım henüz yok: liste gelen olaylardan oluşuyor.
     await within(stepsList()).findByText("goruntu")
@@ -62,16 +61,17 @@ describe("Risk analizi akışı", () => {
     )
   })
 
-  it("Brief gelince üst çubukta seviye (şekil + kelime) ve önerilen eylem; sağ çekmece göz atma hâlinde sayılarla belirir", async () => {
+  it("analiz başlayınca kapalı Risk & Temaslar yarım açılır; Brief gelince üst çubukta seviye (baklava + kelime) ve önerilen eylem", async () => {
+    expect(screen.queryByRole("region", { name: "Risk & Temaslar" })).not.toBeInTheDocument()
     await selectAndStart()
+
+    const drawer = screen.getByRole("region", { name: "Risk & Temaslar" })
+    expect(drawer).toHaveAttribute("data-state", "half")
 
     const level = await screen.findByLabelText("Görüntü risk seviyesi")
     expect(level).toHaveTextContent("◆Kritik")
     expect(level).toHaveTextContent(`→ ${brief.recommended_action}`)
-
-    const drawer = screen.getByRole("region", { name: "Risk & Temaslar" })
-    expect(drawer).toHaveAttribute("data-state", "peek")
-    expect(within(drawer).getByRole("button", { name: /çekmecesini aç/ })).toHaveTextContent("◆ Kritik · 3 temas")
+    expect(drawer).toHaveAttribute("data-state", "half")
 
     // Otomatik özet rozeti ve sebebi.
     expect(screen.getAllByText("otomatik özet")[0]).toBeInTheDocument()
@@ -119,7 +119,7 @@ describe("Risk analizi akışı", () => {
 
     await waitFor(() => expect(bodies).toHaveLength(2))
     expect(bodies).toEqual([
-      { image_id: "img_000860", recompute: false },
+      { image_id: "img_000860", recompute: true },
       { image_id: "img_000860", recompute: true },
     ])
   })
@@ -131,7 +131,6 @@ describe("Risk analizi akışı", () => {
       { event: "error", data: { run_id: "run-fixture-1", message: "Değerlendirme başarısız" } },
     ])
     const { user } = await selectAndStart()
-    await user.keyboard("r")
 
     const alert = await screen.findByRole("alert")
     expect(alert).toHaveTextContent("Değerlendirme başarısız")
@@ -144,8 +143,7 @@ describe("Risk analizi akışı", () => {
   })
 
   it("404'te (görüntü backend'de yok) aynı hata durumuna düşer", async () => {
-    const { user } = await selectAndStart(UNEVALUATED)
-    await user.keyboard("r")
+    await selectAndStart(UNEVALUATED)
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Görüntü veri setinde bulunamadı.")
     expect(screen.getByRole("button", { name: "Tekrar dene" })).toBeInTheDocument()
@@ -169,7 +167,7 @@ describe("Risk analizi akışı", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const strip = await screen.findByRole("list", { name: "Görüntüler, çekim anına göre" })
     await user.click(within(strip).getByRole("button", { name: /^img_000860/ }))
-    await user.click(screen.getByRole("button", { name: "Sonucu aç (önbellek)" }))
+    await user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
     await screen.findByText("Değerlendirme başladı")
     expect(screen.queryByText(/Model yanıtı bekleniyor/)).not.toBeInTheDocument()
 

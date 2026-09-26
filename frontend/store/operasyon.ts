@@ -13,11 +13,12 @@ import type {
   ZonesResponse,
 } from "@/lib/api/types"
 import type { Basemap } from "@/lib/harita/types"
+import { uygulaTema, type Tema } from "@/lib/tema"
 
 export type Side = "left" | "right"
 /** Kapalı: yalnız sekme · göz atma: dar şerit · yarım: liste · tam: ayrıntı. */
 export type DrawerState = "closed" | "peek" | "half" | "full"
-export type LeftPanel = "goruntu" | "sohbet"
+export type LeftPanel = "goruntu"
 export type RightPanel = "risk"
 export type RiskTab = "temaslar" | "brief"
 
@@ -44,6 +45,10 @@ export type Evaluation = {
 }
 
 type OperasyonState = {
+  /** Açık / koyu tema; değişince `<html>` sınıfı ve kayıt da güncellenir. */
+  theme: Tema
+  setTheme: (theme: Tema) => void
+
   zones: Load<ZonesResponse>
   loadZones: () => Promise<void>
   basemap: Basemap
@@ -105,6 +110,12 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
   }
 
   return {
+    theme: "koyu",
+    setTheme: (theme) => {
+      uygulaTema(theme)
+      set({ theme })
+    },
+
     zones: { status: "idle" },
     loadZones: async () => {
       set({ zones: { status: "loading" } })
@@ -114,7 +125,7 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
         set({ zones: { status: "error", message: errorMessage(e) } })
       }
     },
-    basemap: "uydu",
+    basemap: "sokak",
     basemapFailed: false,
     setBasemap: (basemap) => set({ basemap, basemapFailed: false }),
     basemapError: () => set({ basemap: "duz", basemapFailed: true }),
@@ -171,6 +182,8 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
         clearTimeout(slowTimer)
         slowTimer = setTimeout(() => patchEvaluation(signal, { slow: true }), SLOW_AFTER_MS)
       }
+      // Analiz başlayınca adımlar görünsün: Risk & Temaslar kapalıysa yarım açılır (açıksa dokunulmaz).
+      if (get().right.panel === null) get().openRight("temaslar")
       set({
         selectedContactKey: null,
         evaluation: {

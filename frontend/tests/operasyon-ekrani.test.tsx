@@ -39,7 +39,7 @@ describe("Operasyon ekranı kabuğu", () => {
     expect(tab).toHaveFocus()
   })
 
-  it("kısayollar: R Risk & Temaslar, B Brief sekmesi, G Görüntü, S Sohbet; aynı kısayol kapatır", async () => {
+  it("kısayollar: R Risk & Temaslar, B Brief sekmesi, G Görüntü; aynı kısayol kapatır", async () => {
     const { user } = setup()
 
     await user.keyboard("b")
@@ -57,10 +57,37 @@ describe("Operasyon ekranı kabuğu", () => {
 
     await user.keyboard("g")
     expect(drawer("Görüntü")).toBeInTheDocument()
-    await user.keyboard("s")
-    // Solda aynı anda tek çekmece: Sohbet, Görüntü'nün yerini alır.
-    expect(drawer("Sohbet")).toBeInTheDocument()
+    await user.keyboard("g")
     expect(drawer("Görüntü")).not.toBeInTheDocument()
+  })
+
+  it("Sohbet çekmecesi yok: ne sekmesi ne kısayolu", async () => {
+    const { user } = setup()
+
+    expect(screen.queryByRole("button", { name: "Sohbet" })).not.toBeInTheDocument()
+    await user.keyboard("s")
+    expect(drawer("Sohbet")).not.toBeInTheDocument()
+  })
+
+  it("tema düğmesi üst çubuğun en sağında; koyu ↔ açık geçer, seçim saklanır ve harita da temaya uyar", async () => {
+    const { user, map } = setup()
+    const bar = screen.getByRole("banner")
+    const button = within(bar).getByRole("button", { name: "Açık temaya geç" })
+    // En sağda: üst çubuktaki son düğme.
+    expect(within(bar).getAllByRole("button").at(-1)).toBe(button)
+    expect(document.documentElement).toHaveClass("dark")
+
+    await user.click(button)
+
+    expect(document.documentElement).not.toHaveClass("dark")
+    expect(localStorage.getItem("operasyon-tema")).toBe("acik")
+    expect(map.theme).toBe("acik")
+
+    await user.click(within(bar).getByRole("button", { name: "Koyu temaya geç" }))
+
+    expect(document.documentElement).toHaveClass("dark")
+    expect(localStorage.getItem("operasyon-tema")).toBe("koyu")
+    expect(map.theme).toBe("koyu")
   })
 
   it("sağ ve sol çekmece birlikte açık kalabilir; Esc önce en son açılanı kapatır", async () => {

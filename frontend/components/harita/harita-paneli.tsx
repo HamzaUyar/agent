@@ -33,7 +33,12 @@ export function HaritaPaneli() {
   const selectedImageId = useOperasyon((s) => s.selectedImageId)
   const imageDetail = useOperasyon((s) => s.imageDetail)
 
-  const scene = useMemo(() => (zones.status === "ready" ? buildScene(zones.data) : null), [zones])
+  const theme = useOperasyon((s) => s.theme)
+  const selectedZone = imageDetail.status === "ready" ? imageDetail.data.zone : null
+  const scene = useMemo(
+    () => (zones.status === "ready" ? buildScene(zones.data, selectedZone) : null),
+    [zones, selectedZone],
+  )
   const footprint = useMemo(
     () => (imageDetail.status === "ready" ? buildFootprint(imageDetail.data) : null),
     [imageDetail],
@@ -79,6 +84,7 @@ export function HaritaPaneli() {
     >
       <Harita
         basemap={basemap}
+        theme={theme}
         areas={areas}
         markers={markers}
         // Seçili Temas varsa rotasına, yoksa kareye; ikisi de yoksa bütün sahneye.

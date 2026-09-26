@@ -9,11 +9,19 @@ import { server } from "./msw/server"
 
 const initialState = useOperasyon.getState()
 
+/** Sayfa düzeni (app/layout.tsx) gibi koyu temayla başlar. */
+function resetTheme() {
+  document.documentElement.classList.add("dark")
+  localStorage.clear()
+}
+resetTheme()
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
 afterEach(() => {
   cleanup()
   resetOperasyonStreams()
   server.resetHandlers()
   useOperasyon.setState(initialState, true)
+  resetTheme()
 })
 afterAll(() => server.close())

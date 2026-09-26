@@ -14,9 +14,11 @@ import type {
   MapMarker,
   MarkerGroup,
 } from "@/lib/harita/types"
+import type { Tema } from "@/lib/tema"
 
 export class FakeMap implements MapAdapter {
   basemap: Basemap = "uydu"
+  theme: Tema | null = null
   areas = new Map<AreaLayer, FeatureCollection>()
   markers = new Map<MarkerGroup, MapMarker[]>()
   fits: Bounds[] = []
@@ -31,6 +33,9 @@ export class FakeMap implements MapAdapter {
 
   setBasemap(basemap: Basemap) {
     this.basemap = basemap
+  }
+  setTheme(theme: Tema) {
+    this.theme = theme
   }
   setArea(layer: AreaLayer, data: FeatureCollection) {
     this.areas.set(layer, data)

@@ -58,7 +58,7 @@ describe("40 Görüntü'den seçim", () => {
     await user.selectOptions(level, "Değerlendirilmedi")
     expect(cards(drawer)).toHaveLength(37)
 
-    await user.selectOptions(level, "▲ Yüksek")
+    await user.selectOptions(level, "◆ Yüksek")
     expect(cards(drawer).map((c) => c.textContent)).toEqual([expect.stringContaining("img_000860")])
 
     await user.selectOptions(level, "")
@@ -116,14 +116,14 @@ describe("40 Görüntü'den seçim", () => {
     expect(frames[index - 1]).toHaveAttribute("aria-pressed", "true")
   })
 
-  it("seçim analizi başlatmaz; düğme önceden değerlendirilmiş karede 'Sonucu aç (önbellek)' der", async () => {
+  it("seçim analizi başlatmaz; önceden değerlendirilmiş karede de düğme canlı analiz başlatır", async () => {
     const { drawer, user } = await openGoruntu()
 
     await user.click(within(drawer).getByRole("button", { name: new RegExp(`^${UNEVALUATED}`) }))
     expect(screen.getByRole("button", { name: "Risk analizini başlat" })).toBeInTheDocument()
 
     await user.click(within(drawer).getByRole("button", { name: /^img_000860/ }))
-    expect(screen.getByRole("button", { name: "Sonucu aç (önbellek)" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Risk analizini başlat" })).toBeInTheDocument()
     expect(screen.queryByRole("region", { name: "Değerlendirme adımları" })).not.toBeInTheDocument()
   })
 })

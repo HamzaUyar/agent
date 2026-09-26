@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Atkinson_Hyperlegible, JetBrains_Mono } from "next/font/google"
 
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { TEMA_BETIGI } from "@/lib/tema"
 
 import "maplibre-gl/dist/maplibre-gl.css"
 import "./globals.css"
@@ -24,7 +25,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="tr" className={`${atkinson.variable} ${jetbrainsMono.variable} dark h-full antialiased`}>
+    // Tema sınıfı ilk boyamadan önce betikle değişebilir; bu yüzden hidrasyon uyarısı bastırılır.
+    <html
+      lang="tr"
+      className={`${atkinson.variable} ${jetbrainsMono.variable} dark h-full antialiased`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TEMA_BETIGI }} />
+      </head>
       <body className="h-full overflow-hidden">
         <TooltipProvider>{children}</TooltipProvider>
       </body>

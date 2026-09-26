@@ -22,7 +22,7 @@ async function evaluated() {
   const view = renderEkran()
   const strip = await screen.findByRole("list", { name: "Görüntüler, çekim anına göre" })
   await view.user.click(within(strip).getByRole("button", { name: /^img_000860/ }))
-  await view.user.click(screen.getByRole("button", { name: "Sonucu aç (önbellek)" }))
+  await view.user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
   await screen.findByLabelText("Görüntü risk seviyesi")
   return { ...view, strip }
 }
@@ -30,7 +30,7 @@ async function evaluated() {
 const byKind = (kind: ContactFinding["kind"]) => brief.contacts.find((c) => c.kind === kind)!
 
 describe("Temas'lar ve rotalar haritada", () => {
-  it("her Temas çekim anındaki konumunda; tür ve seviye işaretin görünümünde, seviye etikette şekil + kelime", async () => {
+  it("her Temas çekim anındaki konumunda; tür ve seviye işaretin görünümünde, seviye etikette baklava + kelime", async () => {
     const { map } = await evaluated()
 
     const markers = map.markers.get("temaslar")!
@@ -44,8 +44,8 @@ describe("Temas'lar ve rotalar haritada", () => {
       variant: ["matched", "critical"],
     })
     expect(truck.description).toMatch(/Eşleşmiş temas · sınıf kamyon · seviye Kritik · kesinlik kesin · üsse 1,6 km/)
-    expect(unregistered).toMatchObject({ label: "● kayıt dışı otomobil", variant: ["unregistered", "low"] })
-    expect(missed).toMatchObject({ label: "■ T0032 · duruyor", variant: ["missed", "medium"] })
+    expect(unregistered).toMatchObject({ label: "◆ kayıt dışı otomobil", variant: ["unregistered", "low"] })
+    expect(missed).toMatchObject({ label: "◆ T0032 · duruyor", variant: ["missed", "medium"] })
     expect(missed.description).toMatch(/Kaçırılmış temas · sınıf tip bilinmiyor · seviye Orta/)
   })
 

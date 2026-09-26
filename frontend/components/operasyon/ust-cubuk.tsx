@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useOperasyon } from "@/store/operasyon"
 
 import { SeviyeRozeti } from "./seviye-rozeti"
+import { TemaDugmesi } from "./tema-dugmesi"
 
 /** Üst durum çubuğu: Üs, seçili kare · Bölge · çekim anı, canlı adımlar, seviye ve önerilen eylem, kaynak rozetleri. */
 export function UstCubuk() {
@@ -89,6 +90,7 @@ export function UstCubuk() {
             )}
           </>
         )}
+        <TemaDugmesi />
       </div>
     </header>
   )

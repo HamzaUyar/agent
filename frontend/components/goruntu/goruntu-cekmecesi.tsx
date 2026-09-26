@@ -191,13 +191,9 @@ function SeciliKare() {
         )}
       </div>
       {!hasResult && (
-        <Button onClick={() => void startEvaluation(false)} disabled={streaming}>
+        <Button onClick={() => void startEvaluation(true)} disabled={streaming}>
           <Play />
-          {streaming
-            ? "Değerlendiriliyor…"
-            : summary?.last_risk_level
-              ? "Sonucu aç (önbellek)"
-              : "Risk analizini başlat"}
+          {streaming ? "Değerlendiriliyor…" : "Risk analizini başlat"}
         </Button>
       )}
       {hasResult && (

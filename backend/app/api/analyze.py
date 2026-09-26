@@ -22,6 +22,9 @@ from app.schemas.api import Brief, ChatRequest, EvaluationRecord, EvaluationRequ
 
 router = APIRouter(tags=["evaluations"])
 
+# no-transform: Next.js proxy'si SSE'yi gzip'leyip olayları sona kadar biriktirmesin.
+SSE_HEADERS = {"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"}
+
 
 def get_detector(request: Request) -> Detector:
     detector: Detector = request.app.state.detector
@@ -78,7 +81,7 @@ def start_evaluation(
     return StreamingResponse(
         _stream(service, payload.image_id, detector.version, payload.recompute),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers=SSE_HEADERS,
     )
 
 
@@ -163,5 +166,5 @@ def chat(
             detector.version,
         ),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers=SSE_HEADERS,
     )

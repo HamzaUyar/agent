@@ -9,6 +9,17 @@ import { server } from "./msw/server"
 import { renderEkran } from "./render"
 
 const base = toLngLat(fixtures.zones.base)
+
+/** Işın atma: nokta kapalı halkanın içinde mi. */
+function inRing([x, y]: [number, number], ring: number[][]) {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]
+    const [xj, yj] = ring[j]
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
 const centers = fixtures.zones.zones.map((z) => toLngLat(z.center as [number, number]))
 
 describe("Açılış haritası: Üs, halkalar ve yaklaşık bölge alanları", () => {
@@ -29,24 +40,28 @@ describe("Açılış haritası: Üs, halkalar ve yaklaşık bölge alanları", (
     expect(screen.getByText("Merkez Us")).toBeInTheDocument()
   })
 
-  it("her Bölge'nin yaklaşık alanı: yarıçap en yakın komşu merkeze uzaklığın yarısı, 'yaklaşık' olarak işaretli", async () => {
+  it("her Bölge'nin yaklaşık alanı Üs merkezli bir pasta dilimi: merkezi yalnızca kendi diliminde, Üs'ün 1 km dairesi boş", async () => {
     const { map } = renderEkran()
     await waitFor(() => expect(map.areas.get("bolge-alanlari")).toBeDefined())
 
     const areas = map.areas.get("bolge-alanlari")!.features
+    const rings = areas.map((f) => (f.geometry as GeoJSON.Polygon).coordinates[0])
     expect(areas).toHaveLength(8)
     areas.forEach((area, i) => {
-      const nearest = Math.min(...centers.filter((_, j) => j !== i).map((c) => haversineM(centers[i], c)))
-      expect(area.properties).toMatchObject({ name: fixtures.zones.zones[i].name, approximate: true })
-      expect(area.properties!.radius_m).toBeCloseTo(nearest / 2, 3)
+      expect(area.properties).toMatchObject({ name: fixtures.zones.zones[i].name, approximate: true, selected: false })
+      rings.forEach((ring, j) => expect(inRing(centers[i], ring)).toBe(i === j))
+      // Dilim 1 km halkasından başlar: Üs'ün dairesine taşmaz.
+      expect(Math.min(...rings[i].map((p) => haversineM(base, p as [number, number])))).toBeGreaterThan(999)
     })
+    // Komşu dilimler sırayla açık/koyu dolgu alır.
+    expect(new Set(areas.map((a) => a.properties!.parity))).toEqual(new Set([0, 1]))
 
     // Tooltip ve lejant alanın kesin sınır olmadığını söyler.
     for (const marker of map.markers.get("bolgeler")!) {
-      expect(marker.description).toMatch(/yaklaşık alan, kesin sınır değil/)
+      expect(marker.description).toMatch(/yaklaşık alan .*kesin sınır değil/)
     }
     const legend = screen.getByRole("group", { name: "Lejant" })
-    expect(within(legend).getByText("Yaklaşık bölge alanı (kesin sınır değil)")).toBeInTheDocument()
+    expect(within(legend).getByText("Yaklaşık bölge alanı: Üs'ten yön dilimi (kesin sınır değil)")).toBeInTheDocument()
     expect(within(legend).getByText("Üsse 1 km ve 3 km mesafe halkaları")).toBeInTheDocument()
   })
 
@@ -67,16 +82,28 @@ describe("Açılış haritası: Üs, halkalar ve yaklaşık bölge alanları", (
     }
   })
 
-  it("varsayılan zemin uydu; Sokak'a geçilebilir", async () => {
+  it("seçili karenin Bölge dilimi vurgulanır; diğerleri vurgulanmaz", async () => {
+    const { map, user } = renderEkran()
+    const strip = await screen.findByRole("list", { name: "Görüntüler, çekim anına göre" })
+    await user.click(within(strip).getByRole("button", { name: /^img_000860/ }))
+
+    await waitFor(() =>
+      expect(
+        map.areas.get("bolge-alanlari")!.features.filter((f) => f.properties!.selected).map((f) => f.properties!.name),
+      ).toEqual(["Dogu Yolu"]),
+    )
+  })
+
+  it("varsayılan zemin sokak; Uydu'ya geçilebilir", async () => {
     const { map, user } = renderEkran()
     const group = screen.getByRole("group", { name: "Harita zemini" })
+    await waitFor(() => expect(map.basemap).toBe("sokak"))
+    expect(within(group).getByRole("button", { name: "Sokak" })).toHaveAttribute("aria-pressed", "true")
+
+    await user.click(within(group).getByRole("button", { name: "Uydu" }))
+
     expect(map.basemap).toBe("uydu")
     expect(within(group).getByRole("button", { name: "Uydu" })).toHaveAttribute("aria-pressed", "true")
-
-    await user.click(within(group).getByRole("button", { name: "Sokak" }))
-
-    expect(map.basemap).toBe("sokak")
-    expect(within(group).getByRole("button", { name: "Sokak" })).toHaveAttribute("aria-pressed", "true")
   })
 
   it("zemin yüklenemezse düz zemine düşer, bunu söyler ve katmanlar yerinde kalır", async () => {

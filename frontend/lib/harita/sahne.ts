@@ -1,12 +1,24 @@
 /**
  * Sahne katmanları: Üs, 1/3 km halkaları, Bölge merkezleri ve yaklaşık bölge alanları.
- * Kaynak `GET /zones`; Bölge'lerin veride sınırı yok, alan yalnızca görsel bir yaklaşıklıktır.
+ * Kaynak `GET /zones`; Bölge'lerin veride sınırı yok, alan yalnızca görsel bir yaklaşıklıktır:
+ * Üs merkezli pasta dilimleri. Her Bölge, Üs'ten bakınca merkezine en yakın yön aralığını alır
+ * (komşu merkezlerin yönlerinin ortası sınırdır). Dilimler 1 km halkasından başlar; Üs'ün dairesi boş kalır.
  */
 import type { FeatureCollection } from "geojson"
 
 import type { ImageDetail, ZonesResponse } from "@/lib/api/types"
 import { formatDistance } from "@/lib/format"
-import { approxZoneRadiiM, boundsOf, circleRing, toLngLat, type Bounds } from "@/lib/geo"
+import {
+  approxZoneRadiiM,
+  bearingDeg,
+  boundsOf,
+  circleRing,
+  haversineM,
+  sectorRing,
+  toLngLat,
+  type Bounds,
+  type LngLat,
+} from "@/lib/geo"
 
 import type { AreaLayer, MapMarker, MarkerGroup } from "./types"
 
@@ -18,18 +30,48 @@ export type Scene = {
   bounds: Bounds
 }
 
-export function buildScene({ base, zones }: ZonesResponse): Scene {
+/** Her Bölge'nin dilimi: yön aralığı [from, to) ve yön sırasındaki yeri (dolgu sırayla değişir). */
+function zoneSectors(base: LngLat, centers: LngLat[]) {
+  const bearings = centers.map((c) => bearingDeg(base, c))
+  const order = bearings.map((_, i) => i).sort((a, b) => bearings[a] - bearings[b])
+  const sectors = new Array<{ from: number; to: number; parity: number }>(centers.length)
+  order.forEach((i, k) => {
+    const prev = bearings[order[(k - 1 + order.length) % order.length]]
+    const next = bearings[order[(k + 1) % order.length]]
+    const own = bearings[i]
+    // Komşuya olan açı farkı saat yönünde ölçülür; tek Bölge varsa dilim tam daire.
+    const before = order.length > 1 ? ((own - prev + 360) % 360) / 2 : 180
+    const after = order.length > 1 ? ((next - own + 360) % 360) / 2 : 180
+    sectors[i] = { from: (own - before + 360) % 360, to: (own + after) % 360, parity: k % 2 }
+  })
+  return sectors
+}
+
+/** `selectedZone`: seçili karenin Bölge'si; dilimi seçim rengiyle vurgulanır. */
+export function buildScene({ base, zones }: ZonesResponse, selectedZone: string | null = null): Scene {
   const baseLngLat = toLngLat(base)
   const centers = zones.map((z) => toLngLat(z.center))
   const radii = approxZoneRadiiM(centers)
+  const sectors = zoneSectors(baseLngLat, centers)
+  // Bütün dilimler aynı dış yarıçapta: en uzak Bölge merkezi ve onun yaklaşık yarıçapı kadar ötesi.
+  const outerM = Math.max(BASE_RINGS_M[1], ...centers.map((c, i) => haversineM(baseLngLat, c) + radii[i]))
+  const innerM = BASE_RINGS_M[0]
 
   const zoneAreas: FeatureCollection = {
     type: "FeatureCollection",
     features: zones.map((zone, i) => ({
       type: "Feature",
       id: i,
-      properties: { name: zone.name, radius_m: radii[i], approximate: true },
-      geometry: { type: "Polygon", coordinates: [circleRing(centers[i], radii[i])] },
+      properties: {
+        name: zone.name,
+        approximate: true,
+        parity: sectors[i].parity,
+        selected: zone.name === selectedZone,
+      },
+      geometry: {
+        type: "Polygon",
+        coordinates: [sectorRing(baseLngLat, innerM, outerM, sectors[i].from, sectors[i].to)],
+      },
     })),
   }
 
@@ -56,12 +98,12 @@ export function buildScene({ base, zones }: ZonesResponse): Scene {
         id: zone.name,
         lngLat: centers[i],
         label: zone.name,
-        description: `Bölge: ${zone.name} · yaklaşık alan, kesin sınır değil (yarıçap ~${formatDistance(radii[i])})`,
+        description: `Bölge: ${zone.name} · yaklaşık alan (Üs'ten yön dilimi), kesin sınır değil`,
       })),
       "halka-etiketleri": ringLabels,
     },
-    // Üs ve bütün Bölge'ler, yaklaşık alanlarıyla birlikte görünsün.
-    bounds: boundsOf([baseLngLat, ...centers.flatMap((c, i) => circleRing(c, radii[i], 16))]),
+    // Üs ve bütün Bölge dilimleri görünsün.
+    bounds: boundsOf(circleRing(baseLngLat, outerM, 16)),
   }
 }
 

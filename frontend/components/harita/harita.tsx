@@ -12,9 +12,11 @@ import type {
   MapMarker,
   MarkerGroup,
 } from "@/lib/harita/types"
+import type { Tema } from "@/lib/tema"
 
 export type HaritaProps = {
   basemap: Basemap
+  theme: Tema
   areas: Partial<Record<AreaLayer, FeatureCollection>>
   markers: Partial<Record<MarkerGroup, MapMarker[]>>
   /** Görünümün sığdırılacağı kutu; kutu değişince yeniden sığdırılır. */
@@ -27,7 +29,7 @@ export type HaritaProps = {
  * Bildirimsel harita: prop'lar değiştikçe harita arayüzüne (`MapAdapter`) aktarılır.
  * Hangi sağlayıcının kullanılacağı `MapAdapterProvider`'dan gelir.
  */
-export function Harita({ basemap, areas, markers, fitTo, onBasemapError, onMarkerClick }: HaritaProps) {
+export function Harita({ basemap, theme, areas, markers, fitTo, onBasemapError, onMarkerClick }: HaritaProps) {
   const factory = useMapAdapterFactory()
   const containerRef = useRef<HTMLDivElement>(null)
   const [adapter, setAdapter] = useState<MapAdapter | null>(null)
@@ -58,6 +60,7 @@ export function Harita({ basemap, areas, markers, fitTo, onBasemapError, onMarke
     }
   }, [factory])
 
+  useEffect(() => adapter?.setTheme(theme), [adapter, theme])
   useEffect(() => adapter?.setBasemap(basemap), [adapter, basemap])
 
   useEffect(() => {

@@ -91,7 +91,7 @@ function DegerlendirmeDurumu({ evaluation }: { evaluation: Evaluation }) {
       {evaluation.status === "error" && (
         <div role="alert" className="rounded-md border border-risk-kritik/50 p-3">
           <p className="font-bold">{evaluation.error ?? "Değerlendirme başarısız."}</p>
-          <Button className="mt-2" size="sm" onClick={() => void startEvaluation(false)}>
+          <Button className="mt-2" size="sm" onClick={() => void startEvaluation(true)}>
             Tekrar dene
           </Button>
         </div>

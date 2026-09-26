@@ -20,7 +20,7 @@ function usesArrows(target: EventTarget | null): boolean {
 }
 
 /**
- * Kısayollar: R Risk & Temaslar · B Brief · G Görüntü · S Sohbet · Esc kapat · ←/→ önceki/sonraki kare.
+ * Kısayollar: R Risk & Temaslar · B Brief · G Görüntü · Esc kapat · ←/→ önceki/sonraki kare.
  * Aynı kısayol açık çekmeceyi kapatır. Yazı alanındayken yalnızca Esc çalışır.
  */
 export function useKisayollar() {
@@ -59,10 +59,6 @@ export function useKisayollar() {
         case "g":
           if (s.left.panel === "goruntu") s.close("left")
           else s.openLeft("goruntu")
-          break
-        case "s":
-          if (s.left.panel === "sohbet") s.close("left")
-          else s.openLeft("sohbet")
           break
         default:
           return

@@ -28,8 +28,12 @@ export function Lejant({ withContacts = false }: { withContacts?: boolean }) {
           Bölge merkezi
         </li>
         <li className="flex items-center gap-2">
-          <span aria-hidden className="size-3 rounded-full border border-dashed border-metin-ikincil" />
-          Yaklaşık bölge alanı (kesin sınır değil)
+          <span aria-hidden className="harita-lejant__dilim harita-lejant__dilim--secili" />
+          Seçili karenin bölgesi
+        </li>
+        <li className="flex items-center gap-2">
+          <span aria-hidden className="harita-lejant__dilim" />
+          Yaklaşık bölge alanı: Üs&apos;ten yön dilimi (kesin sınır değil)
         </li>
         {withContacts && (
           <>

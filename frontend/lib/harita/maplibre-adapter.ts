@@ -1,9 +1,10 @@
 /**
  * Harita arayüzünün MapLibre GL uygulaması. Yalnızca tarayıcıda, dinamik olarak yüklenir.
  *
- * Zeminler anahtarsız: uydu Esri World Imagery (raster), sokak OpenFreeMap (vektör).
- * Kendi katmanlarımız `op-` önekiyle tutulur ve zemin değişince yeni stile taşınır.
- * Zemin yüklenemezse düz koyu zemine geçilir; katmanlar yerel GeoJSON'dan çizildiği için çalışmaya devam eder.
+ * Zeminler anahtarsız: uydu Esri World Imagery (raster), sokak OpenFreeMap (vektör; koyu temada
+ * "dark", açık temada gri tonlu "positron" stili; renkli sokak haritası seviye renkleriyle karışır). Kendi katmanlarımız `op-` önekiyle tutulur ve zemin değişince
+ * yeni stile taşınır; renkleri token'lardan okunur, tema ya da stil değişince yeniden boyanır.
+ * Zemin yüklenemezse düz zemine geçilir; katmanlar yerel GeoJSON'dan çizildiği için çalışmaya devam eder.
  */
 import type { FeatureCollection } from "geojson"
 import {
@@ -18,6 +19,7 @@ import {
 } from "maplibre-gl"
 
 import type { Bounds } from "@/lib/geo"
+import type { Tema } from "@/lib/tema"
 
 import {
   AREA_LAYERS,
@@ -34,11 +36,14 @@ import {
 setWorkerUrl("/maplibre/maplibre-gl-worker.mjs")
 
 const PREFIX = "op-"
-const DUZ_ZEMIN = "#141d31"
 
 const ESRI_ATTRIBUTION =
   'Uydu: <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>, Maxar, Earthstar Geographics'
-const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
+const openFreeMapStyle = (theme: Tema) =>
+  `https://tiles.openfreemap.org/styles/${theme === "koyu" ? "dark" : "positron"}`
+
+const css = (name: string) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#8e8c86"
 
 function rasterStyle(): StyleSpecification {
   return {
@@ -55,7 +60,7 @@ function rasterStyle(): StyleSpecification {
       },
     },
     layers: [
-      { id: "zemin-arka", type: "background", paint: { "background-color": DUZ_ZEMIN } },
+      { id: "zemin-arka", type: "background", paint: { "background-color": css("--harita-duz-zemin") } },
       { id: "zemin", type: "raster", source: "zemin" },
     ],
   }
@@ -65,16 +70,13 @@ function plainStyle(): StyleSpecification {
   return {
     version: 8,
     sources: {},
-    layers: [{ id: "zemin-arka", type: "background", paint: { "background-color": DUZ_ZEMIN } }],
+    layers: [{ id: "zemin-arka", type: "background", paint: { "background-color": css("--harita-duz-zemin") } }],
   }
 }
 
-const css = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#94a3b8"
-
 /**
  * Katman kimliği → MapLibre katmanları. Renkler tasarım token'larından okunur.
- * Çizgilerin altında koyu bir kılıf var: hem uydu görüntüsünde hem açık sokak haritasında seçilsinler.
+ * Çizgilerin altında zeminin tersi bir kılıf var: hem uydu görüntüsünde hem sokak haritasında seçilsinler.
  */
 function overlayLayers(layer: AreaLayer): LayerSpecification[] {
   const source = PREFIX + layer
@@ -82,28 +84,42 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
     id: `${source}-kilif`,
     type: "line",
     source,
-    paint: { "line-color": css("--zemin"), "line-opacity": 0.55, "line-width": width },
+    paint: { "line-color": css("--harita-kilif"), "line-opacity": 0.55, "line-width": width },
   })
   switch (layer) {
+    // Pasta dilimleri: komşu dilimler sırayla açık/koyu dolgu, seçili karenin Bölge'si seçim renginde.
+    // Sınır kesikli: kesin sınır değil.
     case "bolge-alanlari":
       return [
         {
           id: `${source}-dolgu`,
           type: "fill",
           source,
-          paint: { "fill-color": css("--metin"), "fill-opacity": 0.06 },
+          paint: {
+            "fill-color": ["case", ["get", "selected"], css("--secim"), css("--metin")],
+            "fill-opacity": ["case", ["get", "selected"], 0.2, ["==", ["get", "parity"], 1], 0.12, 0.04],
+          },
         },
-        casing(3.5),
+        casing(3),
         {
           id: `${source}-cizgi`,
           type: "line",
           source,
+          layout: { "line-join": "round" },
           paint: {
             "line-color": css("--metin"),
-            "line-opacity": 0.9,
-            "line-width": 1.5,
+            "line-opacity": 0.7,
+            "line-width": 1.25,
             "line-dasharray": [4, 3],
           },
+        },
+        {
+          id: `${source}-secili`,
+          type: "line",
+          source,
+          filter: ["==", ["get", "selected"], true],
+          layout: { "line-join": "round" },
+          paint: { "line-color": css("--secim"), "line-width": 2.5 },
         },
       ]
     case "ayak-izi":
@@ -217,12 +233,14 @@ function declutter(map: MapLibreMap, list: Marker[]) {
 }
 
 export function createMapLibreAdapter(container: HTMLElement, events: MapEvents): MapAdapter {
-  let basemap: Basemap = "uydu"
+  // İlk zemin sayfadan gelir (setBasemap); o gelene kadar düz zemin, gereksiz karo indirilmesin.
+  let basemap: Basemap | null = null
+  let theme: Tema = "koyu"
   const markers = new Map<MarkerGroup, Marker[]>()
 
   const map = new MapLibreMap({
     container,
-    style: rasterStyle(),
+    style: plainStyle(),
     center: [32.853, 39.922],
     zoom: 12,
     attributionControl: { compact: false },
@@ -236,7 +254,7 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
   /** Zemin kaynaklarından gelen hata (bizim `op-` kaynaklarımız değil) → düz zemin. */
   map.on("error", (event) => {
     const sourceId = (event as { sourceId?: string }).sourceId
-    if (basemap === "duz" || (sourceId && sourceId.startsWith(PREFIX))) return
+    if (basemap === null || basemap === "duz" || (sourceId && sourceId.startsWith(PREFIX))) return
     basemap = "duz"
     applyStyle(plainStyle())
     events.onBasemapError()
@@ -262,6 +280,21 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
   // çakışıyorsa aşağı kaydırılır ve noktaya ince bir çizgiyle bağlanır.
   map.on("zoom", () => DECLUTTERED.forEach((g) => declutter(map, markers.get(g) ?? [])))
 
+  /** Kendi katmanlarımızın renklerini güncel token'lardan yeniden okur (tema ya da stil değişti). */
+  function repaint() {
+    for (const layer of AREA_LAYERS) {
+      for (const spec of overlayLayers(layer)) {
+        if (!map.getLayer(spec.id) || !("paint" in spec) || !spec.paint) continue
+        for (const [prop, value] of Object.entries(spec.paint))
+          map.setPaintProperty(spec.id, prop as Parameters<typeof map.setPaintProperty>[1], value)
+      }
+    }
+    if (map.getLayer("zemin-arka")) map.setPaintProperty("zemin-arka", "background-color", css("--harita-duz-zemin"))
+  }
+  map.on("style.load", repaint)
+
+  const styleFor = (b: Basemap) => (b === "uydu" ? rasterStyle() : b === "sokak" ? openFreeMapStyle(theme) : plainStyle())
+
   function withStyle(fn: () => void) {
     if (map.isStyleLoaded()) fn()
     else map.once("idle", fn)
@@ -271,7 +304,15 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
     setBasemap(next) {
       if (next === basemap) return
       basemap = next
-      applyStyle(next === "uydu" ? rasterStyle() : next === "sokak" ? OPENFREEMAP_STYLE : plainStyle())
+      applyStyle(styleFor(next))
+    },
+
+    setTheme(next) {
+      if (next === theme) return
+      theme = next
+      // Sokak zemininin kendi koyu/açık stili var; diğer zeminlerde yalnızca katmanlar boyanır.
+      if (basemap === "sokak") applyStyle(styleFor("sokak"))
+      else withStyle(repaint)
     },
 
     setArea(layer, data: FeatureCollection) {

@@ -6,14 +6,13 @@ import { GoruntuCekmecesi } from "@/components/goruntu/goruntu-cekmecesi"
 import { HaritaPaneli } from "@/components/harita/harita-paneli"
 import { RiskCekmecesi, RiskOzeti } from "@/components/risk/risk-cekmecesi"
 import { ZamanAkisi } from "@/components/zaman-akisi/zaman-akisi"
+import { okuTema } from "@/lib/tema"
 import { useOperasyon } from "@/store/operasyon"
 
 import { Cekmece } from "./cekmece"
 import { SekmeRafi } from "./sekme-rafi"
 import { UstCubuk } from "./ust-cubuk"
 import { useKisayollar } from "./use-kisayollar"
-
-const LEFT_TITLES = { goruntu: "Görüntü", sohbet: "Sohbet" } as const
 
 /**
  * Tek operasyon ekranı (Konsept A): üst durum çubuğu, çerçeveli harita paneli, alt zaman akışı
@@ -26,6 +25,8 @@ export function OperasyonEkrani() {
 
   useEffect(() => {
     const s = useOperasyon.getState()
+    // Tema sayfa boyanmadan önce <html>'e uygulandı (TEMA_BETIGI); depo ona eşitlenir.
+    useOperasyon.setState({ theme: okuTema() })
     if (s.zones.status === "idle") void s.loadZones()
     if (s.images.status === "idle") void s.loadImages()
   }, [])
@@ -38,14 +39,11 @@ export function OperasyonEkrani() {
         <SekmeRafi side="left" />
         <Cekmece
           side="left"
-          title={left.panel ? LEFT_TITLES[left.panel] : "Sol çekmece"}
+          title="Görüntü"
           panelKey={left.panel}
           state={left.state}
         >
           {left.panel === "goruntu" && <GoruntuCekmecesi />}
-          {left.panel === "sohbet" && (
-            <p className="text-metin-soluk">Sohbet, tamamlanmış bir değerlendirmeden sonra açılır.</p>
-          )}
         </Cekmece>
 
         <main className="flex min-w-0 flex-1 p-[var(--harita-paneli-bosluk)]">
