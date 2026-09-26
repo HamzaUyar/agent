@@ -1,7 +1,8 @@
 # Model kataloğu ve görev → model zinciri. Zincir sırayla denenir: kimlik bilgisi
 # olmayan model atlanır, hata veren ya da şemaya uymayan cevapta sıradakine geçilir.
-# Metin görevleri GLM-5.3 ile başlar. VLM için görüntü destekli bir model gerekir
-# (GLM-5.3 görüntü almıyor).
+# Bütün görevler organizatörlerin gateway'indeki glm-5.3-flash ile başlar (görev tanımı s4;
+# görüntü de okur, s7). GLM_API_KEY yoksa ya da bütçe dolduysa EVREN'e geçilir. EVREN'deki
+# glm-5.3 görüntü almadığı için VLM yedekleri başka modellerdir.
 
 # --- EVREN (SSB, https://evren-llmapi.ssyz.org.tr/v1) ---------------------------
 [models.glm53]
@@ -26,9 +27,12 @@ model_id = "gemma-4-31b"
 
 # --- Organizatörlerin GLM uç noktası (GLM_API_KEY / GLM_API_BASE) ----------------
 [models.glm_org]
-# Model adı anahtarla birlikte doğrulanacak.
+# Gateway yalnızca bu adı kabul eder; başka ad 400 "key not allowed to access model".
 provider = "glm"
-model_id = "glm-5.3"
+model_id = "glm-5.3-flash"
+# Gateway'de düşünme kapatılamaz ve `thinking` parametresi hata verir; miktarı
+# reasoning_effort ayarlar (low: ~10-15 sn).
+extra_body = { reasoning_effort = "low" }
 
 # --- Claude (ANTHROPIC_API_KEY tanımlıysa) ---------------------------------------
 [models.haiku]
@@ -44,7 +48,7 @@ provider = "anthropic"
 model_id = "claude-opus-5-5"
 
 [tasks]
-report_parse = ["glm53", "glm_org", "deepseek", "haiku"]
-vision = ["qwen_vl", "gemma", "deepseek", "sonnet"]
-reasoning = ["glm53", "glm_org", "deepseek", "opus"]
-chat = ["glm53", "glm_org", "deepseek", "sonnet"]
+report_parse = ["glm_org", "glm53", "deepseek", "haiku"]
+vision = ["glm_org", "qwen_vl", "gemma", "deepseek", "sonnet"]
+reasoning = ["glm_org", "glm53", "deepseek", "opus"]
+chat = ["glm_org", "glm53", "deepseek", "sonnet"]

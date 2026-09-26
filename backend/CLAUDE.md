@@ -50,8 +50,8 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
   - Bu değerler testlerde kullanılmalı.
 
 ## İlkeler
-- **Hesaplar kodla, akıl yürütme LLM ile.** Koordinat, mesafe, hız ve eşleme deterministik Python koduyla yapılır; LLM sayı hesaplamaz. Maliyet kısıtı yok, bunun sebebi doğruluk ve tekrarlanabilirlik.
-- **Model seçimi görev bazlı.** Görev → model zinciri `app/llm/models.toml` dosyasında. Claude modelleri resmi `anthropic` SDK'sıyla çağrılır; GLM yedeği OpenAI uyumlu uç noktasından ayrı bir sağlayıcıdır. Zincir sırayla denenir (kimlik bilgisi yoksa atla, hata veya şemaya uymayan cevapta sıradakine geç). Takıma 15 $ GLM kredisi verildi, ama başka modeller de kullanılabilir.
+- **Hesaplar kodla, akıl yürütme LLM ile.** Koordinat, mesafe, hız ve eşleme deterministik Python koduyla yapılır; LLM sayı hesaplamaz; bunun sebebi doğruluk ve tekrarlanabilirlik.
+- **Model seçimi görev bazlı.** Görev → model zinciri `app/llm/models.toml` dosyasında. Her zincir organizatörlerin gateway'indeki `glm-5.3-flash` ile başlar (görev tanımı s4); EVREN ve Claude yedektir. Zincir sırayla denenir (kimlik bilgisi yoksa ya da bütçe dolduysa atla, hata veya şemaya uymayan cevapta sıradakine geç). Gateway'e takım limitleri uygulanır (`app/llm/limits.py`): 4 eşzamanlı istek, 60 istek/dk, 15 USD; 429'da aynı modelde üstel bekleme.
   - rapor parse etme: hızlı LLM
   - renk ve yük çıkarımı: VLM
   - karar ve brief: en güçlü akıl yürütme modeli

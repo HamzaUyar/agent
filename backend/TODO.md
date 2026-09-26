@@ -22,7 +22,7 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 ## Plan dışı işler
 - [x] `app/` için git repo'su başlat, ilk commit'i yap, GitHub'a push et (private)
 - [x] EVREN anahtarı, şart kabulü ve rapor ayrıştırma (6 iddia `report_claims`'te)
-- [ ] Organizatörlerin GLM anahtarı gelince: `.env`'e `GLM_API_KEY`/`GLM_API_BASE`, `models.toml`'da `glm_org` model adını doğrula
+- [ ] Organizatörlerin GLM anahtarı gelince: `.env`'e `GLM_API_KEY` yaz, `GLM_API_BASE=` satırını sil (boş değer varsayılan URL'i ezer), `curl .../key/info` ile doğrula
 - [x] GLM-5.3 gecikmesi ölçüldü; düşünme kapatıldı (13–20 sn), zaman sınırı ve otomatik özet (ticket 07)
 - [ ] `backend/CLAUDE.md`'deki dizin yapısını güncelle (`data_package.py`, `agent/service.py`, `supabase/migrations/`)
 - [ ] Boş test dosyalarını (`test_geo.py`, `test_motion.py`, `test_matching.py`) kaldır ya da doldur. Onaylanan test noktalarına göre bunlar ayrı test edilmiyor; istisna interpolasyon gibi karmaşık hesaplar.
@@ -52,7 +52,9 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] Raporların kayıt dışı temaslara bağlanabilmesi (şu an bağlama track konumuna dayanıyor; temasın track dışında bir kimliği gerekiyor)
 - [x] `field_reports` doğal anahtarı: `seq` sütunu (migration 08; 137/137 rapor yüklü)
 - [x] Stage2 verisini Supabase'e yükle (`load_data ../../stage2 --replace`), `parse_reports`, `.env` `DATA_DIR=../../stage2` ve `DETECTOR_MOCK_PATH=../../stage2/detections_evren.json`
-- [ ] `models.toml` `glm_org`: model adı `glm-5.3-flash`, base URL görev tanımında; düşünme kapatılamıyor (`reasoning_effort`)
+- [x] `models.toml` `glm_org`: model adı `glm-5.3-flash`, `reasoning_effort = "low"`, bütün zincirlerde (VLM dahil) ilk sırada; base URL varsayılan
+- [x] Gateway limitleri (`llm/limits.py`): 4 eşzamanlı, 60 istek/dk, fiyat verilirse 15 USD bütçe; 429'da aynı modelde üstel bekleme; `max_tokens`'ta kesik cevap reddediliyor
+- [ ] glm-5.3-flash fiyatını öğren, `.env`'e `GLM_PRICE_INPUT_PER_MTOK`/`GLM_PRICE_OUTPUT_PER_MTOK` yaz (yoksa bütçe sınırı devrede değil)
 - [ ] Sentetik üretecin varsayılan Kaggle yolu: `train/` artık `Desktop/train`'de
 
 - [x] Ekibin tespit modeli (EVREN, `DETECTOR_MODE=evren`) ve tespitlerin dosyaya aktarılması (`stage2/detections_evren.json`)

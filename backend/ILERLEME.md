@@ -397,6 +397,15 @@
   - T0112 ("5 kamyon durdu") ve T0093 ("ağır araç bekliyor") zaten tip çelişkisiyle çelişkiliydi; gerekçelerine hareket uyuşmazlığı eklendi. Beklenmeyen yeni çelişki yok.
   - Seviyesi yükselen 3 görüntü: img_000733 ve img_001147 orta → yüksek, img_006444 düşük → yüksek (sahte dost bildirimi).
 
+### Gateway uyumu: glm-5.3-flash ve takım limitleri (27 Eylül, görev tanımı s4-s11)
+- `/validate stage2/gorev_tanimi.pdf against app/backend` bulguları #1, #4, #5 ve #8.
+- `models.toml`: `glm_org` model adı `glm-5.3-flash` (gateway başka adı 400 ile reddeder), `reasoning_effort = "low"` (`thinking` gönderilmez, düşünme kapatılamaz). Bütün zincirlerde ilk sırada, VLM zinciri dahil (model görüntü okur, s7). Anahtar yoksa EVREN'e geçilir; davranış anahtar gelene kadar öncekiyle aynı.
+- `config.py`: `glm_api_base` varsayılanı gateway URL'i; `data_dir` varsayılanı `../../stage2`. `.env.example` buna göre (detektör dosyası dahil).
+- `llm/limits.py` `GatewayLimits`: süreç geneli `BoundedSemaphore(4)`, 60 sn'lik kayan pencerede 60 istek, token sayacı ve fiyat verilirse bütçe kesicisi (`BudgetExceededError` → zincirde sıradaki model). Zaman aşımında arka planda süren çağrılar da semaforu tuttuğu için eşzamanlılık 4'ü aşmıyor.
+- `client.py` `LimitedProvider`: 429'da aynı modelde 2, 4, 8, 16 sn bekleyerek yeniden dener (beklerken yeri bırakır); SDK'nın kendi yeniden denemesi kapalı ki her deneme sayaca girsin. `finish_reason == "length"` olan cevap reddediliyor (sohbette de).
+- Testler: `test_llm_limits.py` 13 senaryo (61. istek bekler, 5. eşzamanlı istek bekler, bütçe, 429 backoff ve yedeğe geçiş, istek gövdesi: model adı / `max_tokens` ≥ 1000 / `reasoning_effort` / `thinking` yok / base64 `image_url`, kesik cevap). Zincir sırasını sabitleyen 3 test güncellendi. Toplam 220; ruff ve mypy temiz.
+- Açık: gateway fiyatı bilinmiyor, bu yüzden bütçe kesicisi fiyatlar `.env`'e girilene kadar devrede değil; gerçek harcama `/key/info`'da.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

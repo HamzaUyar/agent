@@ -261,12 +261,12 @@ def test_task_routing_comes_from_the_models_file() -> None:
         for task, names in CONFIG.tasks.items()
     }
 
-    # Metin görevleri GLM-5.3 ile başlar; VLM görüntü destekli bir modelle.
-    assert chains["report_parse"][0] == "glm-5.3"
-    assert chains["reasoning"][0] == "glm-5.3"
-    assert chains["chat"][0] == "glm-5.3"
-    assert chains["vision"][0] == "qwen3-vl-30b"
-    assert CONFIG.models[CONFIG.tasks["report_parse"][0]].provider == "evren"
+    # Görev tanımı s4: bütün görevler organizatör gateway'inin glm-5.3-flash'ıyla başlar
+    # (görüntü de okur, s7); EVREN yedektir.
+    for task, chain in chains.items():
+        assert chain[0] == "glm-5.3-flash", task
+        assert CONFIG.models[CONFIG.tasks[task][0]].provider == "glm", task
+        assert CONFIG.models[CONFIG.tasks[task][1]].provider == "evren", task
 
 
 def test_text_coordinates_are_kept_when_the_named_zone_is_unknown() -> None:
@@ -285,4 +285,5 @@ def test_model_specific_request_options_reach_the_provider() -> None:
     parser(llm).parse(report(TRUCK_TEXT))
 
     assert llm.extra_bodies == [PRIMARY.extra_body or None]
-    assert PRIMARY.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+    # Gateway'de düşünme kapatılamaz ve `thinking` hata verir (görev tanımı s11).
+    assert PRIMARY.extra_body == {"reasoning_effort": "low"}

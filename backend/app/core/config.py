@@ -22,11 +22,18 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr = SecretStr("")
     openai_api_key: SecretStr = SecretStr("")
     glm_api_key: SecretStr = SecretStr("")
-    glm_api_base: str = ""
+    glm_api_base: str = "https://berriailitellm-databasev1826rc3-production-d691.up.railway.app/v1"
+    """Organizatörlerin gateway'i (görev tanımı s4)."""
+    glm_max_concurrent: int = 4
+    glm_requests_per_minute: int = 60
+    glm_budget_usd: float = 15.0
+    glm_price_input_per_mtok: float = 0.0
+    """Harcama tahmini için fiyat (USD / 1M token); 0 ise bütçe sınırı devreye girmez."""
+    glm_price_output_per_mtok: float = 0.0
     evren_api_key: SecretStr = SecretStr("")
     evren_api_base: str = "https://evren-llmapi.ssyz.org.tr/v1"
 
-    data_dir: Path = Path("../../data")
+    data_dir: Path = Path("../../stage2")
     detector_mode: Literal["mock", "evren", "model"] = "mock"
     detector_weights_path: str = ""
     evren_model_api_key: SecretStr = SecretStr("")

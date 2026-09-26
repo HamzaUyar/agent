@@ -376,7 +376,7 @@ def test_vlm_verifier_sends_an_enlarged_crop_of_the_box(tmp_path: Path) -> None:
 
     assert result is not None
     assert (result.is_vehicle, result.color, result.cargo) == (True, "beyaz", None)
-    assert result.model.startswith("evren/")
+    assert result.model == "glm/glm-5.3-flash"
     [sent] = provider.images
     with Image.open(io.BytesIO(sent)) as crop:
         assert crop.format == "JPEG"

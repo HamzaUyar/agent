@@ -1,9 +1,9 @@
 """LLM katmanı: görev → model zinciri, sağlayıcılar ve yedek modele geçiş.
 
-Ana sağlayıcı EVREN (SSB, OpenAI uyumlu uç nokta). Organizatörlerin GLM uç noktası
-da OpenAI uyumlu ayrı bir sağlayıcıdır. Claude modelleri, anahtar tanımlıysa, resmi
-`anthropic` SDK'sıyla çağrılır. Hangi görevde hangi modelin kullanılacağı
-`models.toml` dosyasındadır.
+Ana sağlayıcı organizatörlerin GLM gateway'i (OpenAI uyumlu, `glm-5.3-flash`); takım
+limitleri (`limits.py`) bu sağlayıcıya uygulanır. EVREN (SSB) OpenAI uyumlu yedek
+sağlayıcıdır. Claude modelleri, anahtar tanımlıysa, resmi `anthropic` SDK'sıyla çağrılır.
+Hangi görevde hangi modelin kullanılacağı `models.toml` dosyasındadır.
 """
 
 import base64
@@ -21,6 +21,7 @@ import openai
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
+from app.llm.limits import GatewayLimits
 
 logger = logging.getLogger(__name__)
 
@@ -176,16 +177,46 @@ class AnthropicProvider:
 MIN_OPENAI_COMPAT_TOKENS = 4096
 
 
+UsageHook = Callable[[int, int], None]
+"""Cevaptaki girdi ve çıktı (düşünme dahil) token sayıları."""
+
+
 class OpenAICompatibleProvider:
     """OpenAI uyumlu uç nokta (EVREN, organizatör GLM'i); şema `json_schema` ile istenir."""
 
-    def __init__(self, api_key: str, base_url: str) -> None:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        *,
+        max_retries: int = openai.DEFAULT_MAX_RETRIES,
+        on_usage: UsageHook | None = None,
+    ) -> None:
         self._api_key = api_key
         self._base_url = base_url
+        self._max_retries = max_retries
+        self._on_usage = on_usage
         self._client: openai.OpenAI | None = None
 
     def is_available(self) -> bool:
         return bool(self._api_key and self._base_url)
+
+    def _get_client(self) -> openai.OpenAI:
+        if self._client is None:
+            self._client = openai.OpenAI(
+                api_key=self._api_key, base_url=self._base_url, max_retries=self._max_retries
+            )
+        return self._client
+
+    def _message(self, response: Any, model_id: str) -> Any:
+        """Kullanımı bildirir; `max_tokens`'ta kesilmiş cevabı reddeder."""
+        if self._on_usage is not None and response.usage is not None:
+            self._on_usage(response.usage.prompt_tokens, response.usage.completion_tokens)
+        choice = response.choices[0]
+        if choice.finish_reason == "length":
+            # Düşünme de max_tokens'tan harcar; kesik JSON ya da yarım cevap kabul edilmez.
+            raise ValueError(f"{model_id} cevabı max_tokens sınırında kesildi")
+        return choice.message
 
     def complete_json(
         self,
@@ -197,8 +228,6 @@ class OpenAICompatibleProvider:
         extra_body: Mapping[str, Any] | None = None,
         image: bytes | None = None,
     ) -> BaseModel:
-        if self._client is None:
-            self._client = openai.OpenAI(api_key=self._api_key, base_url=self._base_url)
         json_schema = schema.model_json_schema()
         schema_text = json.dumps(json_schema, ensure_ascii=False)
         content: Any = user
@@ -210,7 +239,7 @@ class OpenAICompatibleProvider:
                     "image_url": {"url": f"data:image/jpeg;base64,{_b64(image)}"},
                 },
             ]
-        response = self._client.chat.completions.create(
+        response = self._get_client().chat.completions.create(
             model=model_id,
             max_tokens=max(max_tokens, MIN_OPENAI_COMPAT_TOKENS),
             response_format={
@@ -227,7 +256,8 @@ class OpenAICompatibleProvider:
                 {"role": "user", "content": content},
             ],
         )
-        text = response.choices[0].message.content
+        # Düşünce metni `reasoning_content`'te ayrı gelir; cevap yalnızca `content`'tir.
+        text = self._message(response, model_id).content
         if not text:
             raise ValueError(f"{model_id} boş cevap döndürdü")
         return schema.model_validate_json(text)
@@ -240,11 +270,9 @@ class OpenAICompatibleProvider:
         max_tokens: int,
         extra_body: Mapping[str, Any] | None = None,
     ) -> ChatTurn:
-        if self._client is None:
-            self._client = openai.OpenAI(api_key=self._api_key, base_url=self._base_url)
         # Mesaj ve araç listeleri dinamik (dict) üretiliyor; SDK'nın aşırı yüklemeleri
         # TypedDict beklediği için bu çağrıda tip denetimini gevşetiyoruz.
-        completions: Any = self._client.chat.completions
+        completions: Any = self._get_client().chat.completions
         response = completions.create(
             model=model_id,
             max_tokens=max(max_tokens, MIN_OPENAI_COMPAT_TOKENS),
@@ -253,7 +281,7 @@ class OpenAICompatibleProvider:
             tool_choice="auto",
             extra_body=dict(extra_body) if extra_body else None,
         )
-        message = response.choices[0].message
+        message = self._message(response, model_id)
         calls = [
             ToolCall(id=c.id, name=c.function.name, arguments=c.function.arguments or "{}")
             for c in message.tool_calls or []
@@ -262,6 +290,78 @@ class OpenAICompatibleProvider:
         if not calls and not message.content:
             raise ValueError(f"{model_id} boş cevap döndürdü")
         return ChatTurn(content=message.content, tool_calls=calls)
+
+
+RATE_LIMIT_RETRIES = 4
+RATE_LIMIT_BACKOFF_S = 2.0
+
+
+class LimitedProvider:
+    """Sağlayıcıyı gateway limitleriyle sarar; 429'da aynı modelde üstel beklemeyle yeniden dener.
+
+    İçteki SDK'nın kendi yeniden denemesi kapalı olmalı (`max_retries=0`); böylece her deneme
+    dakikalık sayaca girer. Beklerken eşzamanlılık yeri bırakılır.
+    """
+
+    def __init__(
+        self,
+        inner: Provider,
+        limits: GatewayLimits,
+        *,
+        retries: int = RATE_LIMIT_RETRIES,
+        backoff_s: float = RATE_LIMIT_BACKOFF_S,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._inner = inner
+        self._limits = limits
+        self._retries = retries
+        self._backoff_s = backoff_s
+        self._sleep = sleep
+
+    def is_available(self) -> bool:
+        return self._inner.is_available()
+
+    def _call(self, fn: Callable[[], R]) -> R:
+        for attempt in range(self._retries):
+            try:
+                with self._limits.slot():
+                    return fn()
+            except openai.RateLimitError:
+                wait = self._backoff_s * 2**attempt
+                logger.warning("429: %.0f sn sonra yeniden denenecek", wait)
+                self._sleep(wait)
+        with self._limits.slot():
+            return fn()
+
+    def complete_json(
+        self,
+        model_id: str,
+        system: str,
+        user: str,
+        schema: type[BaseModel],
+        max_tokens: int,
+        extra_body: Mapping[str, Any] | None = None,
+        image: bytes | None = None,
+    ) -> BaseModel:
+        # Görüntüsüz çağrıda `image` iletilmez; sarılan sağlayıcının imzası değişmez.
+        extra: dict[str, Any] = {"image": image} if image is not None else {}
+        return self._call(
+            lambda: self._inner.complete_json(
+                model_id, system, user, schema, max_tokens, extra_body, **extra
+            )
+        )
+
+    def chat(
+        self,
+        model_id: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        max_tokens: int,
+        extra_body: Mapping[str, Any] | None = None,
+    ) -> ChatTurn:
+        return self._call(
+            lambda: self._inner.chat(model_id, messages, tools, max_tokens, extra_body)
+        )
 
 
 class LLMUnavailableError(RuntimeError):
@@ -349,9 +449,22 @@ class LLMRouter:
 
 def build_router(settings: Settings | None = None, config: ModelConfig | None = None) -> LLMRouter:
     s = settings or get_settings()
+    glm_limits = GatewayLimits(
+        max_concurrent=s.glm_max_concurrent,
+        per_minute=s.glm_requests_per_minute,
+        budget_usd=s.glm_budget_usd,
+        price_input_per_mtok=s.glm_price_input_per_mtok,
+        price_output_per_mtok=s.glm_price_output_per_mtok,
+    )
+    glm = OpenAICompatibleProvider(
+        s.glm_api_key.get_secret_value(),
+        s.glm_api_base,
+        max_retries=0,
+        on_usage=glm_limits.record_usage,
+    )
     providers: dict[str, Provider] = {
         "evren": OpenAICompatibleProvider(s.evren_api_key.get_secret_value(), s.evren_api_base),
-        "glm": OpenAICompatibleProvider(s.glm_api_key.get_secret_value(), s.glm_api_base),
+        "glm": LimitedProvider(glm, glm_limits),
         "anthropic": AnthropicProvider(s.anthropic_api_key.get_secret_value()),
     }
     return LLMRouter(config or load_model_config(), providers)
