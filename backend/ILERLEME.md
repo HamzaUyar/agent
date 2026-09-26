@@ -329,6 +329,15 @@
 - **Etki (sentetik paketler, aynı veri):** %60 kapsamada 217 kayıt dışı temasın 216'sı düşük; düşük görüntü 0 → 6, yüksek 15 → 10, kritik değişmedi (8). Tam kapsamada düşük 5 → 8.
 - Testler: kural tablosu satırları (< 1 km orta, 1,5 ve 2,5 km düşük), gerekçe metni, eşiğin dosyadan okunması; toplam 178.
 
+### Ekibin tespit modeli pipeline'a bağlandı (EVREN model platformu)
+- Model: `u84f118304558/d2-y26l-v2-60ep-mixup01` (YOLO26-L, sınıflar car/van/truck/bus, imgsz 1280), EVREN'de barındırılıyor. Resmi `evren-sdk` (0.9.2, PyPI, SSB) kuruldu; kurulmadan önce paket incelendi (tek bağımlılık httpx; istek adresi `api.ssyz.org.tr`).
+- `EvrenDetector` (`DETECTOR_MODE=evren`): görüntüyü EVREN'e gönderiyor; normalize `[x1, y1, x2, y2]` kutuları piksele çeviriyor; sınıf adlarını eşliyor; her görüntüyü süreç içinde bir kez çalıştırıyor. `UltralyticsDetector` ile ortak temel sınıfı (`_FileModelDetector`) paylaşıyor. Ayarlar: `EVREN_MODEL_API_KEY` (LLM anahtarından ayrı, `.env`'de), `EVREN_DETECTOR_MODEL`, `DETECTOR_IMGSZ` (varsayılan 1280).
+- `scripts/export_detections.py`: 40 görüntünün tespitlerini bir kez alıp JSON'a yazıyor (14 sn). Demoda `DETECTOR_MODE=mock` + `DETECTOR_MOCK_PATH` ile kullanılınca değerlendirme anında başlıyor ve EVREN kesintilerinden etkilenmiyor. Sürüm adı dosyayı taşıyor (`file:detections_evren.json`), önbellek karışmıyor. Çıktı: `stage2/detections_evren.json`.
+- **Canlı sonuç (img_000860):** 4 otomobil bulundu; dördü de kendi track'ine 0,1–0,2 m ile eşlendi. Organizatör örneğindeki kamyonu (727, 284) model 0,05 güvende bile görmüyor. Kamyonun track'i T0122 kaçırılmış temas olarak yakalandı ve hareketinden yüksek hesaplandı; kamyon tespit edilseydi seviye kritik olurdu.
+- **40 gerçek görüntü (kurallar, raporsuz):** 260 tespit; 190'ı track'le eşleşti (ortanca 0,17 m, en fazla 14,1 m); 39 kayıt dışı (hepsi düşük); 16 kaçırılmış; modelin track'li araçlarda yakalama oranı ~%92. Görüntü başına ortanca 6 araç. Görüntü seviyeleri: 23 orta, 15 yüksek, 1 kritik, 1 düşük.
+- **Performans bulgusu:** Doğrudan EVREN modunda ilk değerlendirme, tip geçmişi için önceki bütün karelerin tespitini EVREN'den istediğinden ~13 sn sürüyor; dosyadan okunan tespitlerle bu sorun kalkıyor.
+- Testler: `EvrenDetector` (sahte istemci; normalize ve piksel kutular, istek parametreleri, önbellek, eksik dosya, ayarla kurulum) ve dışa aktarma; toplam 188.
+
 ### Açık konular
 - `app/` git repo'su oldu ve GitHub'a (private) push edildi.
 - Gerçek veride kontrol edilecek sorular aynı: 12:35 raporu, `capture_time` hizası, veri boyutu.

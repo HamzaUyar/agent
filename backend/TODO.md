@@ -55,6 +55,11 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [ ] `models.toml` `glm_org`: model adı `glm-5.3-flash`, base URL görev tanımında; düşünme kapatılamıyor (`reasoning_effort`)
 - [ ] Sentetik üretecin varsayılan Kaggle yolu: `train/` artık `Desktop/train`'de
 
+- [x] Ekibin tespit modeli (EVREN, `DETECTOR_MODE=evren`) ve tespitlerin dosyaya aktarılması (`stage2/detections_evren.json`)
+- [ ] Model ekibine: img_000860'taki kamyonu (727, 284, 58, 34) görmüyor; 40 görüntüde track'li 16 araç kaçırılıyor
+- [ ] 14,1 m'lik eşleşmeyi kontrol et (15 m eşiğine yakın; yanlış eşleşme olabilir)
+- [ ] Doğrudan EVREN modunda API açılışında tespit önbelleğini ısıt ya da demoda dosyayı kullan
+
 ## Açık kararlar
 - [ ] Zaman kaydırıcılı risk haritası yapılacak mı (spec'te kapsam dışı, sonraya bırakıldı)?
 - [ ] Embedding modeli ve `report_claims.embedding` boyutu

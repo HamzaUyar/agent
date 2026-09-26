@@ -34,6 +34,8 @@ def build_service(args: argparse.Namespace) -> EvaluationService:
     """Veri Supabase'ten ya da `--package`'tan; tespit `.env`'den ya da `--detections`'tan."""
     settings = get_settings()
     if args.package:
+        # Detektör de görüntüleri paketin klasöründen okusun.
+        settings = settings.model_copy(update={"data_dir": Path(args.package).resolve()})
         claims = load_claims(args.claims) if args.claims else []
         repo = InMemoryRepository(read_package(args.package), claims=claims)
     else:

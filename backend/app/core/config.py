@@ -27,8 +27,12 @@ class Settings(BaseSettings):
     evren_api_base: str = "https://evren-llmapi.ssyz.org.tr/v1"
 
     data_dir: Path = Path("../../data")
-    detector_mode: Literal["mock", "model"] = "mock"
+    detector_mode: Literal["mock", "evren", "model"] = "mock"
     detector_weights_path: str = ""
+    evren_model_api_key: SecretStr = SecretStr("")
+    """EVREN model platformu anahtarı (tespit modeli); LLM anahtarından ayrı."""
+    evren_detector_model: str = "u84f118304558/d2-y26l-v2-60ep-mixup01"
+    """Ekibin EVREN'deki tespit modeli (`sahip/slug`)."""
     detector_mock_path: str = ""
     """Sahte tespitlerin JSON dosyası (ör. sentetik `detections.json`); boşsa yerleşik örnek."""
     detector_imgsz: int | None = None
