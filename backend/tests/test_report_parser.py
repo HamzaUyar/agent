@@ -287,3 +287,30 @@ def test_model_specific_request_options_reach_the_provider() -> None:
     assert llm.extra_bodies == [PRIMARY.extra_body or None]
     # Gateway'de düşünme kapatılamaz ve `thinking` hata verir (görev tanımı s11).
     assert PRIMARY.extra_body == {"reasoning_effort": "low"}
+
+
+def test_negated_heavy_vehicle_claim_becomes_light() -> None:
+    """Gerçek veri: GLM "agir arac hareketi yok, yalnizca binek" raporunu "heavy" ayrıştırdı."""
+    llm = FakeProvider(
+        {
+            MODEL: {
+                "claims": [
+                    claim(location_type="zone", zone="Guneybati Yolu", vehicle_type="heavy"),
+                    claim(location_type="zone", zone="Guneybati Yolu", vehicle_type="car"),
+                ]
+            }
+        }
+    )
+    text = "Guneybati Yolu bolgesinde agir arac hareketi yok, yalnizca binek araclar goruluyor."
+
+    claims = parser(llm).parse(report(text)).claims
+
+    assert [c.vehicle_type for c in claims] == ["light", "light"]
+
+
+def test_affirmative_heavy_vehicle_claim_is_kept() -> None:
+    llm = FakeProvider({MODEL: {"claims": [claim(vehicle_type="heavy")]}})
+
+    [c] = parser(llm).parse(report("39.9253N 32.8718E cevresinde 1 agir arac bulunuyor.")).claims
+
+    assert c.vehicle_type == "heavy"

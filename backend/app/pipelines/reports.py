@@ -208,7 +208,8 @@ def evaluate_claims(
         if claim.location_type == "zone":
             if in_window and claim.zone == image_zone:
                 results.append(
-                    ClaimEvaluation(
+                    _evaluate_zone_type(record, contacts)
+                    or ClaimEvaluation(
                         record,
                         None,
                         "unverifiable",
@@ -249,6 +250,52 @@ def evaluate_claims(
         if evaluation is not None:
             results.append(evaluation)
     return results
+
+
+def _evaluate_zone_type(record: ClaimRecord, contacts: list[ContactView]) -> ClaimEvaluation | None:
+    """Görüntünün bölgesini anan tip gözlemi karedeki tespitlerle (s2: tip karşılaştırması).
+
+    Kare bölgenin yalnızca bir parçası: "yalnızca hafif araç" iddiası karede ağır araç
+    görülürse çelişir; "ağır araç var" iddiası ancak karede görülürse doğrulanır. Tespite
+    dayandığı ve rapor çekimden önce olduğu için kesinlik "olası"; seviye değişmez.
+    """
+    claim = record.claim
+    if claim.claim_type != "observation" or claim.vehicle_type not in ("light", "heavy"):
+        return None
+    when = format_hhmm(record.report.time)
+    heavy = [c for c in contacts if c.label in TYPE_GROUPS["heavy"]]
+    if claim.vehicle_type == "light" and heavy:
+        c = heavy[0]
+        who = c.track_id or "kayıt dışı temas"
+        label = c.label.value if c.label else ""
+        return ClaimEvaluation(
+            record,
+            c.track_id,
+            "contradicts",
+            "likely",
+            "none",
+            f"bölgede yalnızca hafif araç dendi (saat {when}) ama karede ağır araç var "
+            f"({who}, {label}); tespit esas alındı",
+        )
+    if claim.vehicle_type == "light" and any(c.label is not None for c in contacts):
+        return ClaimEvaluation(
+            record,
+            None,
+            "consistent",
+            "likely",
+            "none",
+            "bölgede yalnızca hafif araç iddiası karedeki tespitlerle uyuşuyor",
+        )
+    if claim.vehicle_type == "heavy" and heavy:
+        return ClaimEvaluation(
+            record,
+            heavy[0].track_id,
+            "consistent",
+            "likely",
+            "none",
+            "bölgede ağır araç iddiası karedeki tespitle uyuşuyor",
+        )
+    return None
 
 
 TIME_NOTE: dict[TimeCheck, str] = {

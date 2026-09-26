@@ -7,6 +7,7 @@ Kurallar:
 - Koordinatlar "39.9374N 32.8483E" biçimindedir: N enlem, E boylamdır.
 - Bölge adını metinde geçtiği gibi yaz; bilinen bölgeler aşağıda.
 - "yuklu" (yük taşıyor) → cargo=loaded, "bos" (kasası boş) → cargo=empty; yük söylenmiyorsa cargo=null.
+- "agir arac yok", "yalnizca binek araclar" → vehicle_type=light (yalnızca hafif araç var); olumsuz cümlede geçen tipi iddianın tipi yapma.
 - "dost", "devriye", "tatbikat", "kimlik teyidi" gibi ifadeler dostluk iddiasıdır (friendly_claim).
 - "dogrulanmamis ihbar", "duyum", "soylenti" gibi ifadeler rumor'dur.
 - "dun gece", "gun icinde" gibi belirsiz zamanlarda time_reference'ı doldur ve is_verifiable=false yap.

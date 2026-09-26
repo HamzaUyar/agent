@@ -223,6 +223,47 @@ def test_claim_naming_the_image_zone_is_listed_other_zones_are_not() -> None:
     assert finding(brief, 10).verdict == "unverifiable"
 
 
+def zone_claim(vehicle_type: str) -> ClaimRecord:
+    return record(
+        10,
+        time(13, 0),
+        OFFICIAL,
+        "Dogu Yolu bolgesinde agir arac hareketi yok, yalnizca binek araclar goruluyor.",
+        claim(location_type="zone", zone="Dogu Yolu", vehicle_type=vehicle_type),
+    )
+
+
+def test_only_light_vehicles_in_the_zone_contradicts_a_truck_in_the_frame() -> None:
+    """s2: tip iddiası tespitle karşılaştırılır; karede kamyon (T0122) var."""
+    brief = evaluate([zone_claim("light")])
+
+    f = finding(brief, 10)
+    assert (f.verdict, f.certainty, f.effect, f.track_id) == (
+        "contradicts",
+        "likely",
+        "none",
+        "T0122",
+    )
+    assert contact(brief, "T0122").final_level == contact(brief, "T0122").base_level
+
+
+def test_only_light_vehicles_in_the_zone_matches_a_frame_of_cars() -> None:
+    car = replace(TRUCK, label=VehicleClass.CAR)
+
+    brief = evaluate([zone_claim("light")], detections={"img_000860": [car]})
+
+    assert finding(brief, 10).verdict == "consistent"
+
+
+def test_heavy_vehicle_in_the_zone_is_unverifiable_when_the_frame_shows_none() -> None:
+    """Kare bölgenin yalnızca bir parçası: görülmeyen ağır araç çelişki değildir."""
+    car = replace(TRUCK, label=VehicleClass.CAR)
+
+    brief = evaluate([zone_claim("heavy")], detections={"img_000860": [car]})
+
+    assert finding(brief, 10).verdict == "unverifiable"
+
+
 def test_irrelevant_and_rumor_claims_do_not_affect_risk() -> None:
     rumor = record(10, time(13, 50), THIRD, "duyum", at(SPOT, claim_type="rumor"))
     noise = record(11, time(13, 50), THIRD, "ilgisiz", at(SPOT, claim_type="irrelevant"))

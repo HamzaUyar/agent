@@ -19,6 +19,9 @@ PROMPT_PATH = Path(__file__).parents[1] / "agent" / "prompts" / "report_parse.md
 
 COORDINATE = re.compile(r"(\d{1,2}\.\d+)\s*°?\s*N[\s,;/-]+(\d{1,3}\.\d+)\s*°?\s*E", re.IGNORECASE)
 _FOLD = str.maketrans("ıİşŞğĞüÜöÖçÇâÂîÎûÛ", "iissgguuooccaaiiuu")
+# "…agir arac hareketi yok, yalnizca binek araclar goruluyor": iddia hafif araç, ağır değil.
+# LLM olumsuzluğu kaçırıp "heavy" diyebiliyor (gerçek veride 3 rapor).
+ONLY_LIGHT = re.compile(r"agir arac\w*(?: hareketi)? yok|yalnizca binek")
 
 
 def _fold(name: str) -> str:
@@ -27,6 +30,13 @@ def _fold(name: str) -> str:
 
 def coordinates_in(text: str) -> list[GeoPoint]:
     return [GeoPoint(float(lat), float(lon)) for lat, lon in COORDINATE.findall(text)]
+
+
+def apply_text_rules(text: str, claim: ReportClaim) -> ReportClaim:
+    """LLM'in kaçırabildiği kalıpları metinden kodla düzeltir; LLM'siz de uygulanabilir."""
+    if claim.vehicle_type != "light" and ONLY_LIGHT.search(_fold(text)):
+        return claim.model_copy(update={"vehicle_type": "light"})
+    return claim
 
 
 def rounding_error_m(text: str, point: GeoPoint) -> float:
@@ -66,7 +76,8 @@ class ReportParser:
         user = f"Rapor ({format_hhmm(report.time)}, kaynak: {report.source.value}):\n{report.text}"
         parsed, model_id = self._router.complete_json(TASK, self._system, user, ParsedReport)
         coords = coordinates_in(report.text)
-        return ParseResult([self._normalize(c, coords) for c in parsed.claims], model_id)
+        claims = [apply_text_rules(report.text, self._normalize(c, coords)) for c in parsed.claims]
+        return ParseResult(claims, model_id)
 
     def _normalize(self, claim: ReportClaim, coords: list[GeoPoint]) -> ReportClaim:
         zone = self._zones.get(_fold(claim.zone)) if claim.zone else None

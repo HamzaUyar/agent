@@ -238,6 +238,15 @@ def replace_claims(
             )
 
 
+def update_claim_vehicle_type(conn: psycopg.Connection, claim_id: int, vehicle_type: str) -> None:
+    """Saklanmış bir iddianın araç tipini düzeltir (`parse_reports --renormalize`)."""
+    with conn.transaction():
+        conn.execute(
+            "update public.report_claims set vehicle_type = %s where id = %s",
+            (vehicle_type, claim_id),
+        )
+
+
 def fetch_claims(conn: psycopg.Connection) -> list[ClaimRecord]:
     """Saklanmış iddialar, raporlarıyla birlikte."""
     rows = conn.execute(
