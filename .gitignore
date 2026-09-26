@@ -13,16 +13,33 @@ __pycache__/
 .ruff_cache/
 
 # Veri ve model ağırlıkları repoya girmez
-data/
+# (yalnız bu klasörler; her "data/" adlı klasör değil)
+/data/
+/backend/data/
 *.pt
 *.onnx
 
-# Node / Next.js (frontend)
+# Node / Next.js (frontend; ayrıntılar frontend/.gitignore'da)
 node_modules/
 .next/
+# Backend Node projesi değil; yanlışlıkla oluşan npm dosyaları
+/backend/package.json
+/backend/package-lock.json
 
-# Sistem
+# Claude Code: kişisel ayarlar
+# (frontend/.claude/skills takımın ortak skill'leri, .claude/launch.json ortak sunucu ayarı; repoda kalır)
+/.claude/skills/
+.claude/settings.local.json
+.claude/worktrees/
+
+# Editör ve sistem
 .DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.log
 .coverage
 htmlcov/
 
