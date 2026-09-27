@@ -35,30 +35,43 @@ function useEvaluationStream(list: SseEvent[], opts?: { delayMs?: number }) {
   return bodies
 }
 
-const stepsList = () => screen.getByRole("region", { name: "Değerlendirme adımları" })
+const stepsList = () => screen.getByRole("region", { name: "Orkestratör izi" })
 
 afterEach(() => {
   vi.useRealTimers()
 })
 
 describe("Risk analizi akışı", () => {
-  it("adımlar geldikçe üst çubukta ve Risk & Temaslar çekmecesinde görünür; sabit bir adım listesi yok", async () => {
+  it("adımlar geldikçe orkestratörün çağrıları olarak üst çubukta ve çekmecede görünür; sabit bir liste yok", async () => {
     useEvaluationStream(events, { delayMs: 15 })
     await selectAndStart()
 
-    // İlk adım geldiğinde son adım henüz yok: liste gelen olaylardan oluşuyor.
-    await within(stepsList()).findByText("goruntu")
-    expect(within(stepsList()).queryByText("karar")).not.toBeInTheDocument()
+    // İlk çağrı geldiğinde son çağrı henüz yok: iz gelen olaylardan oluşuyor.
+    await within(stepsList()).findByText("goruntu_baglami")
+    expect(within(stepsList()).queryByText("karar_agent")).not.toBeInTheDocument()
     expect(screen.getByText(/^Adım \d · /)).toBeInTheDocument()
 
     await screen.findByLabelText("Görüntü risk seviyesi", {}, { timeout: 2000 })
-    // Brief gelince adımlar katlanır bir gruba geçer; sıraları aynı kalır.
-    const done = screen.getByRole("group", { name: "Değerlendirme adımları" })
-    expect(within(done).getByText("Değerlendirme adımları (8)")).toBeInTheDocument()
-    const items = within(done).getAllByRole("listitem")
-    expect(items.map((li) => li.textContent)).toEqual(
-      steps.map((s) => `${(s.data as { step_no: number }).step_no}${(s.data as { name: string }).name}${(s.data as { summary: string }).summary}`),
-    )
+    // Brief gelince iz katlanır bir gruba geçer; her adım bir araç, model ya da agent çağrısı.
+    const done = screen.getByRole("group", { name: "Orkestratör izi" })
+    expect(within(done).getByText("Orkestratör izi · 8 çağrı, 2 agent")).toBeInTheDocument()
+    const names = within(done)
+      .getAllByRole("listitem")
+      .map((li) => li.querySelector(".font-bold")?.firstChild?.textContent)
+      .filter(Boolean)
+    expect(names).toEqual([
+      "goruntu_baglami",
+      "tespit_modeli.detect",
+      "piksel_to_konum",
+      "track_eslestir",
+      "risk_motoru.hareket",
+      "rapor_dogrulama_agent",
+      "risk_motoru.seviye",
+      "karar_agent",
+    ])
+    // Fixture'da LLM yok: karar agent'ı kural özetine düştüğünü söyler.
+    expect(within(done).getByText("↳ yedek: kural özeti")).toBeInTheDocument()
+    for (const s of steps) expect(done).toHaveTextContent((s.data as { summary: string }).summary)
   })
 
   it("analiz başlayınca kapalı Risk & Temaslar yarım açılır; Brief gelince üst çubukta seviye (baklava + kelime) ve önerilen eylem", async () => {
@@ -225,7 +238,7 @@ describe("Risk analizi akışı", () => {
     const strip = await screen.findByRole("list", { name: "Görüntüler, çekim anına göre" })
     await user.click(within(strip).getByRole("button", { name: /^img_000860/ }))
     await user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
-    await screen.findByText("Değerlendirme başladı")
+    await screen.findByText("Orkestratör başladı")
     expect(screen.queryByText(/Model yanıtı bekleniyor/)).not.toBeInTheDocument()
 
     await act(async () => {

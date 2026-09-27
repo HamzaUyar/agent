@@ -12,10 +12,11 @@ import { keyedContacts } from "@/lib/temas"
 import { useOperasyon, type Evaluation, type RiskTab } from "@/store/operasyon"
 
 import { BriefPaneli } from "./brief-paneli"
+import { OrkestratorIzi, callCounts } from "./orkestrator-izi"
 import { TemasKarti } from "./temas-karti"
 import { TemasListesi } from "./temas-listesi"
 
-/** Sağ çekmece: Araçlar (değerlendirme adımları, araç listesi, seçili araç) ve Brief sekmeleri. */
+/** Sağ çekmece: Araçlar (orkestratör izi, araç listesi, seçili araç) ve Brief sekmeleri. */
 export function RiskCekmecesi() {
   const riskTab = useOperasyon((s) => s.riskTab)
   const setRiskTab = useOperasyon((s) => s.setRiskTab)
@@ -55,25 +56,8 @@ function DegerlendirmeDurumu({ evaluation }: { evaluation: Evaluation }) {
   const startEvaluation = useOperasyon((s) => s.startEvaluation)
   const brief = evaluation.brief
 
-  const steps = (
-    <ol className="flex flex-col gap-1.5">
-      {evaluation.steps.map((step) => (
-        <li key={step.step_no} className="grid grid-cols-[1.5rem_1fr] gap-x-2 text-xs">
-          <span className="font-mono text-metin-soluk">{step.step_no}</span>
-          <span>
-            <span className="font-mono font-bold">{step.name}</span>
-            <span className="block text-metin-ikincil">{step.summary}</span>
-          </span>
-        </li>
-      ))}
-      {evaluation.status === "streaming" && (
-        <li className="flex items-center gap-2 text-xs text-metin-soluk">
-          <Loader2 aria-hidden className="size-3.5 animate-spin" />
-          {evaluation.slow ? "Model yanıtı bekleniyor (en fazla 45 sn)" : "Sonraki adım bekleniyor…"}
-        </li>
-      )}
-    </ol>
-  )
+  const trace = <OrkestratorIzi evaluation={evaluation} />
+  const { total, agents } = callCounts(evaluation)
 
   return (
     <>
@@ -97,19 +81,17 @@ function DegerlendirmeDurumu({ evaluation }: { evaluation: Evaluation }) {
       {brief && <SeciliTemas brief={brief} />}
       {brief && <TemasListesi brief={brief} />}
       {brief ? (
-        // Brief geldikten sonra adımlar katlanır; gerekçe için açılabilir.
-        <details aria-label="Değerlendirme adımları" className="rounded-md border border-cizgi bg-kart px-2 py-1.5">
+        // Brief geldikten sonra iz katlanır; gerekçe için açılabilir.
+        <details aria-label="Orkestratör izi" className="rounded-md border border-cizgi bg-kart px-2 py-1.5">
           <summary className="text-xs font-bold tracking-wider text-metin-soluk uppercase select-none">
-            Değerlendirme adımları ({evaluation.steps.length})
+            Orkestratör izi · {total} çağrı, {agents} agent
           </summary>
-          <div className="mt-2">{steps}</div>
+          <div className="mt-2">{trace}</div>
         </details>
       ) : (
-        <section aria-label="Değerlendirme adımları">
-          <h3 className="mb-1 text-xs font-bold tracking-wider text-metin-soluk uppercase">
-            Değerlendirme adımları
-          </h3>
-          {steps}
+        <section aria-label="Orkestratör izi">
+          <h3 className="mb-1 text-xs font-bold tracking-wider text-metin-soluk uppercase">Orkestratör izi</h3>
+          {trace}
         </section>
       )}
     </>

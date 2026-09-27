@@ -5,6 +5,7 @@ import { Loader2, RotateCcw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { orchestratorCalls } from "@/lib/orkestrator"
 import { useOperasyon } from "@/store/operasyon"
 
 import { SeviyeRozeti } from "./seviye-rozeti"
@@ -21,7 +22,8 @@ export function UstCubuk() {
   const summary =
     images.status === "ready" ? images.data.find((i) => i.image_id === selectedImageId) : undefined
   const brief = evaluation?.status === "done" ? evaluation.brief : null
-  const lastStep = evaluation?.steps.at(-1)
+  const calls = orchestratorCalls(evaluation?.steps ?? [])
+  const lastCall = calls.at(-1)
 
   return (
     <header className="flex h-[var(--ust-cubuk-yukseklik)] items-center gap-4 border-b border-cizgi bg-[var(--ust-cubuk-zemin)] px-4 text-sm">
@@ -53,10 +55,13 @@ export function UstCubuk() {
           {evaluation?.status === "streaming" && (
             <>
               <Loader2 aria-hidden className="size-3.5 animate-spin" />
-              {lastStep ? `Adım ${lastStep.step_no} · ${lastStep.name}: ${lastStep.summary}` : "Değerlendirme başladı"}
+              {lastCall
+                ? `Adım ${calls.length} · ${lastCall.kind === "agent" ? "agent " : ""}${lastCall.name}: ${lastCall.result}`
+                : "Orkestratör başladı"}
             </>
           )}
-          {evaluation?.status === "done" && `${evaluation.steps.length} adım tamamlandı`}
+          {evaluation?.status === "done" &&
+            `${calls.length} çağrı tamamlandı · ${calls.filter((c) => c.kind === "agent").length} agent`}
         </p>
         {evaluation?.status === "streaming" && evaluation.slow && (
           <span className="text-xs text-metin-soluk">Model yanıtı bekleniyor (en fazla 45 sn)</span>

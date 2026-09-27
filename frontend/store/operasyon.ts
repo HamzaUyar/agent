@@ -66,6 +66,8 @@ export type Evaluation = {
   runId: string | null
   cached: boolean
   steps: StepEvent[]
+  /** Her adımın bir önceki olaydan (ilki başlangıçtan) beri geçen süresi, ms; `steps` ile aynı sırada. */
+  stepDurations: number[]
   brief: Brief | null
   error: string | null
   /** Son olaydan beri SLOW_AFTER_MS geçti. */
@@ -291,12 +293,14 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
           runId: null,
           cached: false,
           steps: [],
+          stepDurations: [],
           brief: null,
           error: null,
           slow: false,
         },
       })
       armSlowTimer()
+      let lastEventAt = performance.now()
       try {
         for await (const event of streamEvaluation(imageId, recompute, signal)) {
           if (signal.aborted) return
@@ -304,13 +308,19 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
           switch (event.event) {
             case "run":
               patchEvaluation(signal, { runId: event.data.run_id, cached: event.data.cached, slow: false })
+              lastEventAt = performance.now()
               break
-            case "step":
+            case "step": {
+              const now = performance.now()
+              const current = get().evaluation
               patchEvaluation(signal, {
-                steps: [...(get().evaluation?.steps ?? []), event.data],
+                steps: [...(current?.steps ?? []), event.data],
+                stepDurations: [...(current?.stepDurations ?? []), now - lastEventAt],
                 slow: false,
               })
+              lastEventAt = now
               break
+            }
             case "brief": {
               patchEvaluation(signal, { status: "done", brief: event.data, slow: false })
               // Listedeki son seviye bu değerlendirmeyle güncellenir (zaman akışı, kartlar, filtre).
