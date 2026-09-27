@@ -332,3 +332,37 @@ describe("İz analizi: track seçimi Risk & Araçlar'a yansır", () => {
     server.events.removeAllListeners()
   })
 })
+
+describe("Harita: genel görünüm ve odağı kaldırma", () => {
+  it("Genel görünüm seçimi bozmadan haritayı açılıştaki kutuya geri sığdırır", async () => {
+    const { map, user } = await opened()
+    await waitFor(() => expect(map.fits.length).toBeGreaterThan(0))
+    const overview = map.fits.at(-1)!
+
+    act(() => map.events!.onAreaClick?.("izler", "T0122"))
+    await screen.findByRole("article", { name: /^Araç: T0122/ })
+    expect(map.fits.at(-1)).not.toEqual(overview)
+
+    await user.click(screen.getByRole("button", { name: "Genel görünüm" }))
+
+    expect(map.fits.at(-1)).toEqual(overview)
+    expect(useOperasyon.getState().selectedContactKey).toBe("T0122")
+  })
+
+  it("Odağı kaldır seçili aracı, vurguyu ve kareyi bırakır; harita genel görünüme döner", async () => {
+    const { map, user } = await opened()
+    await waitFor(() => expect(map.fits.length).toBeGreaterThan(0))
+    const overview = map.fits.at(-1)!
+    expect(screen.queryByRole("button", { name: "Odağı kaldır" })).not.toBeInTheDocument()
+
+    act(() => map.events!.onAreaClick?.("izler", "T0122"))
+    await screen.findByRole("article", { name: /^Araç: T0122/ })
+
+    await user.click(screen.getByRole("button", { name: "Odağı kaldır" }))
+
+    const s = useOperasyon.getState()
+    expect([s.selectedContactKey, s.izHighlight, s.selectedImageId, s.evaluation]).toEqual([null, null, null, null])
+    await waitFor(() => expect(map.fits.at(-1)).toEqual(overview))
+    expect(screen.queryByRole("button", { name: "Odağı kaldır" })).not.toBeInTheDocument()
+  })
+})

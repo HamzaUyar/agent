@@ -156,6 +156,11 @@ type OperasyonState = {
   pendingContactKey: string | null
   /** Haritada boş bir yere tıklandı: araç seçimi ve iz vurgusu kalkar. */
   clearMapSelection: () => void
+  /**
+   * Odağı kaldırır: seçili araç, iz vurgusu ve seçili kare bırakılır; harita genel görünüme döner.
+   * Süren analiz varsa kare ve değerlendirme kalır, yalnızca seçimler kalkar.
+   */
+  clearFocus: () => void
   riskTab: RiskTab
   /** En son açılan kenar; Esc önce onu kapatır. */
   lastSide: Side | null
@@ -485,6 +490,10 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
       } else set({ pendingContactKey: trackId })
     },
     clearMapSelection: () => set({ selectedContactKey: null, izHighlight: null }),
+    clearFocus: () => {
+      set({ selectedContactKey: null, izHighlight: null, pendingContactKey: null })
+      get().clearImage()
+    },
   }
 })
 

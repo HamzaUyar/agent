@@ -3,7 +3,7 @@
 import type { FeatureCollection } from "geojson"
 import { useMemo, useState } from "react"
 
-import { CircleAlert, TriangleAlert } from "lucide-react"
+import { CircleAlert, Fullscreen, TriangleAlert, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { toLngLat } from "@/lib/geo"
@@ -62,6 +62,14 @@ export function HaritaPaneli() {
   // Panel açılınca harita günün bütün track'lerine sığar (süzgeç değişince yeniden sığmaz).
   const izBounds = useMemo(() => (izOpen ? izSinirlari(izTracks) : null), [izOpen, izTracks])
   const [adapter, setAdapter] = useState<MapAdapter | null>(null)
+  // Genel görünüm: seçim yokken sığdırılan kutu (İz analizi açıksa bütün track'ler, değilse sahne).
+  const overviewBounds = izBounds ?? scene?.bounds ?? null
+  const fitInsetRight = izOpen ? 336 : 0
+  const focused = useOperasyon(
+    (s) => s.selectedContactKey !== null || s.izHighlight !== null || s.selectedImageId !== null,
+  )
+  const clearFocus = useOperasyon((s) => s.clearFocus)
+  const resetView = () => overviewBounds && adapter?.fitBounds(overviewBounds, 48, fitInsetRight)
   // Seçili kare ön planda: rotaları ve araçları tam renkli, İz analizinin izleri soluk (IzKatmani).
   const contactLayers = useMemo(
     () => (brief ? buildContactLayers(brief, selectedContactKey) : null),
@@ -114,12 +122,9 @@ export function HaritaPaneli() {
         markers={markers}
         // Seçili veri önce: seçili araç varsa rotasına, seçili kare varsa kareye; yoksa İz analizi
         // açıksa bütün track'lere, değilse bütün sahneye.
-        fitTo={
-          selectedBounds ??
-          (selectedImageId ? (footprint?.bounds ?? null) : (izBounds ?? scene?.bounds ?? null))
-        }
+        fitTo={selectedBounds ?? (selectedImageId ? (footprint?.bounds ?? null) : overviewBounds)}
         // İz analizi kartı sağ üstte haritanın üstünde (w-80 + kenar payı).
-        fitInsetRight={izOpen ? 336 : 0}
+        fitInsetRight={fitInsetRight}
         onBasemapError={basemapError}
         onMarkerClick={onMarkerClick}
         onAreaClick={onAreaClick}
@@ -132,27 +137,46 @@ export function HaritaPaneli() {
 
       {/* Zemin anahtarı sol üstte, yakınlaştırma düğmelerinin yanında; sağ üst İz analizi kartının. */}
       <div className="absolute top-2.5 left-12 z-10 flex flex-col items-start gap-2">
-        <div
-          role="group"
-          aria-label="Harita zemini"
-          className="flex gap-0.5 rounded-md border border-cizgi bg-yuzey p-0.5 shadow-golge"
-        >
-          {BASEMAPS.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              aria-pressed={basemap === b.id}
-              onClick={() => setBasemap(b.id)}
-              className={cn(
-                "rounded px-3 py-1 text-xs font-bold transition-colors focus-visible:outline-offset-0",
-                basemap === b.id
-                  ? "bg-birincil text-birincil-uzeri"
-                  : "text-metin-ikincil hover:bg-kart-hover hover:text-metin",
-              )}
-            >
-              {b.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div
+            role="group"
+            aria-label="Harita zemini"
+            className="flex gap-0.5 rounded-md border border-cizgi bg-yuzey p-0.5 shadow-golge"
+          >
+            {BASEMAPS.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                aria-pressed={basemap === b.id}
+                onClick={() => setBasemap(b.id)}
+                className={cn(
+                  "rounded px-3 py-1 text-xs font-bold transition-colors focus-visible:outline-offset-0",
+                  basemap === b.id
+                    ? "bg-birincil text-birincil-uzeri"
+                    : "text-metin-ikincil hover:bg-kart-hover hover:text-metin",
+                )}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Genel görünüm"
+            title="Genel görünüm: haritayı ilk boyutuna sığdır"
+            disabled={!overviewBounds || !adapter}
+            onClick={resetView}
+            className="bg-yuzey shadow-golge"
+          >
+            <Fullscreen />
+          </Button>
+          {focused && (
+            <Button variant="outline" size="sm" onClick={clearFocus} className="bg-yuzey shadow-golge">
+              <X />
+              Odağı kaldır
+            </Button>
+          )}
         </div>
         {basemapFailed && (
           <p
