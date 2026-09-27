@@ -30,7 +30,8 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
   → geo: lat/lon, bölge      hız, yön, rota, duraklama,
                              üsse mesafe trendi
         └──────► matching: capture_time'da birebir atama (eşik 5 m)   ◄──┘
-                    → risk: hareket riski × tip katsayısı + rapor değerlendirmesi
+                    → risk: hareket riski × tip katsayısı (raporlar seviyeyi değiştirmez)
+                    → rapor doğrulama: kanıt dosyası (kod) → LLM kararı + kural ikinci görüşü
                     → agent (LLM): gerekçeli brief
 ```
 - **Piksel → koordinat:** doğrusal oran.
@@ -41,7 +42,7 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
 - **Eşleşmeyen durumlar da sinyaldir:**
   - tespit var, track yok → kayıt dışı araç
   - track var, tespit yok → tipi bilinmiyor
-- **Rapor kontrolü:** İddia, **çekim anında** noktasına en yakın temasa bağlanır (≤ 60 m). Saat ayrı bir kontroldür: temasın rapor saatindeki track konumu noktaya ≤ 150 m ise tutar. Saat tutmayan dostluk iddiası riski düşüremez (ADR-0002 notu).
+- **Rapor kontrolü (`app/reports_v2`):** Kod her ilgili rapor için kanıt dosyası çıkarır (çekim anında noktadaki araç, tip, sayı, hareket; bölge raporunda raporun saatindeki bölge hareketliliği; konvoy/tatbikat/gece ihbarı/telsiz için gün düzeyindeki bağlam sinyalleri). Karar tek LLM çağrısıyla verilir (`report_verify` görevi), kurallar (`reports_v2/rules.py`) ikinci görüştür; ayrışırsa rapor "operatör incelemeli" olur. Rapor seviyeyi değiştirmez, kimlik iddiası hiçbir zaman "tutarlı" sayılmaz, zaman kayması çelişki değildir (ADR-0002 notu). LLM cevapları veri klasörünün yanındaki `report_verdicts_cache.json`'da; demo öncesi bir kez doldurmak yeterli. Ölçüm: `scripts/eval_reports.py`, doğru cevaplar `eval/report_gold.json`.
 - **Referans örnek** (organizatörlerin demosu):
   - `img_000860`, 14:10, Doğu Yolu
   - truck, kutu (727, 284, 58, 34), merkez piksel (756, 301) → 39.92531, 32.87183
@@ -81,7 +82,8 @@ app/
   core/              config.py (ayarlar), rules.py + risk_rules.toml (eşikler)
   api/               analyze.py (SSE, sohbet), data.py, stores.py
   db/                session, models, repositories
-  pipelines/         detection, vision, geo, motion, matching, report_parser, reports, risk
+  pipelines/         detection, vision, geo, motion, matching, report_parser, risk
+  reports_v2/        rapor doğrulama: evidence, context, rules, agents (LLM), stage, prompts/
   agent/
     service.py       EvaluationService: ince orkestratör, aşama başına bir SSE adımı
     stages.py        tipli aşamalar (ImageContext → Detections ∥ TrackBranch → Matches
@@ -94,7 +96,7 @@ app/
     prompts/         brief, chat, report_parse, vision
   llm/               client.py, limits.py, models.toml
   schemas/           domain, api, claims, chat, runs
-scripts/             load_data, parse_reports, run_eval_set, trace_evaluation, ...
+scripts/             load_data, parse_reports, run_eval_set, eval_reports, trace_evaluation, ...
 tests/               test_evaluation (ana test noktası), test_stages, ..., fixtures/
 ../supabase/migrations/  şema migration'ları (01 … 10)
 ```
