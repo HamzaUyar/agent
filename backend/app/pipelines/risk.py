@@ -117,3 +117,30 @@ def circling_path_m(motion: MotionFinding | None, rules: LevelRules) -> float:
     ):
         return 0.0
     return motion.total_distance_m
+
+
+def engine_basis(
+    decision: LevelDecision,
+    motion: MotionFinding | None,
+    levels: LevelRules,
+    *,
+    missed: bool = False,
+) -> list[AttentionReason]:
+    """Risk motorunun seviyede zaten saydığı dikkat nedenleri (ADR-0002, çift sayım yok).
+
+    Motor track'in bütün hareketini değerlendirir: yaklaşma, üsse yakın duraklama ve
+    dolaşma veride varsa seviyeye yansımıştır; kaçırılmış temasta tipin bilinmemesi de
+    (tip bilinmeyen araç ağır sayılmaz, ADR-0004). LLM bu nedenlerle seviyeyi yükseltemez;
+    yalnızca kuralların kullanmadığı bir kanıtla (tutarlı tehdit uyarısı gibi) ±1 önerebilir.
+    Koşullar karar LLM'inin nedeni doğrularken kullandıklarıyla aynıdır.
+    """
+    found: list[AttentionReason] = [decision.basis] if decision.basis else []
+    if motion is not None and motion.trend == "approaching":
+        found.append("yaklasma")
+    if loiter_minutes(motion, levels) >= levels.loiter_minutes:
+        found.append("uzun_duraklama")
+    if circling_path_m(motion, levels) >= levels.circle_min_path_m:
+        found.append("dolasma")
+    if missed:
+        found.append("kacirilmis_temas")
+    return list(dict.fromkeys(found))

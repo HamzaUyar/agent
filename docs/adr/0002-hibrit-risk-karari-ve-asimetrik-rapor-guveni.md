@@ -42,3 +42,9 @@ Saat, tip ve renk gibi bir özelliktir (`time_check`: ok, mismatch, unknown): ba
 
 Neden: `eval/report_gold.json`'daki 137 gerçek raporla ölçüldü. Eski kurallar 35 yalanın 23'ünü, 15 tehlikeli güvencenin 3'ünü yakalıyordu. Yeni akış 34/35 ve 15/15 yakalıyor. Kurallar tek başına orijinal metinlerde benzer skor alıyor ama ifadesi değiştirilmiş raporlarda (genelleme testi) 23/35'e düşüyor, çünkü ayrıştırıcının etiketine bağımlı; LLM aynı testte 34/35'te kaldı. Ölçüm: `python -m scripts.eval_reports B C --package … --claims … --detections … --out …`.
 
+
+## Not: LLM, risk motorunun saydığı nedenle seviyeyi yükseltemez (27 Eylül)
+
+Risk motoru (ADR-0004) track'in bütün hareketini değerlendirir. Temasın `level_basis`'i artık yalnızca seviyeyi belirleyen satırın nedeni değil; verideki bütün hareket nedenleri: yaklaşma, üsse yakın uzun duraklama, üs çevresinde dolaşma. Kaçırılmış temasta tipin bilinmemesi (`kacirilmis_temas`) de eklenir, çünkü motor tipi bilinmeyen aracı bilerek ağır saymaz. LLM'in ±1 yükseltmesi yalnızca kuralların kullanmadığı bir kanıtla, örneğin temasla tutarlı bir tehdit uyarısıyla kabul edilir.
+
+Neden: yeni motorla yapılan ilk koşuda LLM 237 temasın 33'ünü bir kademe yükseltti. Bunların çoğu, motorun bilerek yüksek bıraktığı "üssün 1 km yakınında park edip ayrılan" araçlardı; LLM "uzun duraklama" gerekçesiyle onları kritik yaptı. Kalan yükseltmeler de uzakta duran ya da kaçırılmış temaslardı. Sonuç olarak kritik görüntü sayısı 14'ten 25'e çıktı ve motorun kalibrasyonu bozuldu (`pipelines/risk.py: engine_basis`).

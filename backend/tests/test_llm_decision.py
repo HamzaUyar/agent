@@ -255,15 +255,18 @@ def test_approach_claimed_for_a_standing_contact_is_rejected_with_its_level_chan
     assert "T0032" not in brief.text.split("Değerlendirme:")[1].split("\n")[0]
 
 
-def test_verified_reason_allows_a_one_step_raise_with_a_code_written_reason() -> None:
-    # T0032'nin ORTA'sı duraklamadan geliyor; tipinin bilinmemesi kuralların saymadığı bir neden.
+def test_missed_contact_cannot_be_raised_for_its_unknown_type() -> None:
+    """Seçenek 1 (çift sayım yok): risk motoru kaçırılmış temasın tipinin bilinmediğini
+    zaten sayar (tip bilinmeyen araç ağır sayılmaz, ADR-0004); LLM bununla yükseltemez.
+    Gerçek veride iki kaçırılmış temas bu yolla ORTA'dan YÜKSEK'e çıkıyordu."""
     brief = run(FakeProvider(draft([item("T0032", "kacirilmis_temas", ["tur"], "high")])))
 
-    assert level_of(brief, "T0032") == ("medium", "high")
+    assert level_of(brief, "T0032") == ("medium", "medium")
     [a] = attention(brief, "T0032")
-    assert (a.accepted, a.level_accepted, a.rejection) == (True, True, None)
+    assert (a.accepted, a.level_accepted) == (True, False)
     assert a.text == "karede ama tespit edilmedi (kaçırılmış temas), tipi bilinmiyor"
-    assert contact(brief, "T0032").adjustment_reason == a.text
+    assert a.rejection is not None and "zaten sayıldı" in a.rejection
+    assert contact(brief, "T0032").adjustment_rejected == a.rejection
     assert brief.is_fallback is False
     assert brief.model == f"{PRIMARY.provider}/{PRIMARY.model_id}"
 
@@ -449,7 +452,7 @@ def test_a_threat_warning_does_not_raise_the_level_by_itself() -> None:
     brief = run(FakeProvider(draft([])), claims=[CONSISTENT_CLAIM, THREAT_ABOUT_T0032])
 
     assert level_of(brief, "T0032") == ("medium", "medium")
-    assert contact(brief, "T0032").level_basis == ["uzun_duraklama"]
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama", "kacirilmis_temas"]
 
 
 def test_lowering_citing_an_olagan_report_about_an_approaching_contact_is_rejected() -> None:
@@ -671,11 +674,12 @@ def test_a_rejected_proposal_does_not_block_a_verified_one_for_the_same_contact(
             draft(
                 [
                     item("T0032", "yaklasma", ["hareket"], "high"),
-                    item("T0032", "kacirilmis_temas", ["tur"], "high"),
+                    item("T0032", "tehdit_uyarisi", [9], "high"),
                     item("T0032", "uzun_duraklama", ["duraklamalar"], "critical"),
                 ]
             )
-        )
+        ),
+        claims=[THREAT_ABOUT_T0032],
     )
 
     assert level_of(brief, "T0032") == ("medium", "high")
@@ -691,7 +695,7 @@ def test_raise_with_the_reason_the_rules_already_counted_is_rejected() -> None:
     aynı girdi bir koşuda ORTA, bir koşuda YÜKSEK veriyordu."""
     brief = run(FakeProvider(draft([item("T0032", "uzun_duraklama", ["duraklamalar"], "high")])))
 
-    assert contact(brief, "T0032").level_basis == ["uzun_duraklama"]
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama", "kacirilmis_temas"]
     assert level_of(brief, "T0032") == ("medium", "medium")
     [a] = attention(brief, "T0032")
     assert (a.accepted, a.level_accepted) == (True, False)
@@ -706,7 +710,7 @@ def test_a_consistent_threat_warning_lets_the_llm_raise_one_step() -> None:
         claims=[THREAT_ABOUT_T0032],
     )
 
-    assert contact(brief, "T0032").level_basis == ["uzun_duraklama"]
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama", "kacirilmis_temas"]
     assert level_of(brief, "T0032") == ("medium", "high")
     [a] = attention(brief, "T0032")
     assert (a.accepted, a.level_accepted) == (True, True)
@@ -717,7 +721,7 @@ def test_the_rules_basis_is_given_to_the_llm() -> None:
     run(primary)
 
     [user] = primary.users
-    assert "  seviye: ORTA (kuralların saydığı neden: uzun_duraklama)" in user
+    assert "  seviye: ORTA (kuralların saydığı neden: uzun_duraklama, kacirilmis_temas)" in user
 
 
 # --- kayıt dışı temas -----------------------------------------------------------------
@@ -877,7 +881,7 @@ def test_llm_input_says_a_stop_is_ongoing_and_compares_it_with_the_threshold() -
         "  duraklamalar: 12:10–14:10 (en az 120 dk, sürüyor, üsse 1,6 km)",
         "  yakin_duraklama: en az 120 dk, eşik 30 dk: aşıyor",
         "  cevrede_dolasma: yok",
-        "  seviye: ORTA (kuralların saydığı neden: uzun_duraklama)",
+        "  seviye: ORTA (kuralların saydığı neden: uzun_duraklama, kacirilmis_temas)",
         "  raporlar:",
         "    [2] 12:35 resmi gözlem — karar: tutarlı; gerekçe: iddia tespit ve hareketle uyuşuyor",
     ]
