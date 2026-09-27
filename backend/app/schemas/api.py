@@ -128,11 +128,13 @@ class ContactFinding(BaseModel):
 
 Verdict = Literal["consistent", "contradicts", "unverifiable", "irrelevant"]
 Effect = Literal["raises", "lowers", "none"]
-TimeCheck = Literal["ok", "mismatch", "unknown"]
 
 
 class ReportFinding(BaseModel):
-    """Rapor kararı: bir iddianın bu değerlendirmedeki sonucu ve riske etkisi."""
+    """Rapor kararı: bir iddianın bu değerlendirmedeki sonucu (app/reports_v2).
+
+    Rapor risk seviyesini değiştirmez; `effect` her zaman "none"dır (ön yüzle uyum için duruyor).
+    """
 
     claim_id: int
     report_time: str
@@ -143,9 +145,16 @@ class ReportFinding(BaseModel):
     verdict: Verdict
     certainty: Certainty
     effect: Effect
-    # Bağlanan temasın rapor saatindeki konumu iddiayla uyuşuyor mu.
-    time_check: TimeCheck
     reasoning: str
+    detail_verdict: str | None = None
+    """v2'nin beş sınıflı kararı (consistent, partial, contradicts, unverifiable, irrelevant)."""
+    dangerous_reassurance: bool = False
+    """Rapor riski düşüren bir şey söylüyor ama kanıt aksini gösteriyor."""
+    context_flags: list[str] = Field(default_factory=list)
+    """Bağlam bayrakları: olası örtü hikâyesi, telsiz kopukluğu + ağır araç hareketi, ..."""
+    needs_review: bool = False
+    """Kurallar ile LLM çelişki konusunda ayrıştı: operatör incelemeli."""
+    rule_verdict: str | None = None
 
 
 class AttentionFinding(BaseModel):

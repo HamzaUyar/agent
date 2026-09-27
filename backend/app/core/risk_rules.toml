@@ -32,25 +32,6 @@ recent_window_minutes = 30
 stop_displacement_m = 50
 stop_min_minutes = 10
 
-[reports]
-# Çekim anından önceki bu kadar dakikalık raporlar değerlendirilir. Konumu olmayan dostluk
-# iddiası, tehdit uyarısı ve söylentiler pencere dışında da "doğrulanamaz" olarak listelenir.
-window_minutes = 120
-# İddianın konumu görüntüye ya da bir temasa bu kadar yakınsa ilgili sayılır.
-relevance_m = 500
-# İddia, çekim anında konumu iddia noktasına bu kadar yakın olan en yakın temasa bağlanır.
-# Gerçek veride koordinatlı raporların hepsi çekim anında bir temasa ≤ 54 m. Bu eşiğe ve
-# `match_m`'ye koordinatın yuvarlama payı eklenir (3 ondalıkta ~70 m, 5 ondalıkta < 1 m).
-bind_now_m = 60
-# Bağlanan temasın rapor saatindeki konumu iddia noktasına bu kadar yakınsa saat tutar.
-match_m = 150
-# "Uzun süredir hareketsiz" gibi süresi belirtilmemiş duraklama iddiası için en kısa süre (dk).
-long_stop_minutes = 30
-# Sayı iddiası: noktanın bu yarıçapındaki bütün temaslar sayılır (model tipleri karıştırabildiği
-# için tipten bağımsız). Görülen, iddianın bu oranından azsa sayı uyuşmuyor.
-count_radius_m = 30
-count_ratio = 0.5
-
 [brief]
 # LLM karar ayarı ve brief için süre sınırı (sn); aşılırsa otomatik özete geçilir.
 timeout_s = 45
