@@ -1,10 +1,11 @@
-import { screen, waitFor, within } from "@testing-library/react"
+import { act, screen, waitFor, within } from "@testing-library/react"
 import { http } from "msw"
 import { describe, expect, it } from "vitest"
 
 import type { Brief, ReportFinding } from "@/lib/api/types"
 import { formatSpeed } from "@/lib/format"
 import { toLngLat } from "@/lib/geo"
+import { useOperasyon } from "@/store/operasyon"
 
 import { API, fixtures, sseResponse, type SseEvent } from "./msw/handlers"
 import { server } from "./msw/server"
@@ -25,6 +26,7 @@ const REPORTS: ReportFinding[] = [
     verdict: "contradicts",
     certainty: "likely",
     effect: "raises",
+    time_check: "mismatch",
     reasoning: "rapor saatinde noktanın 300 m içinde track yok",
   },
   {
@@ -37,6 +39,7 @@ const REPORTS: ReportFinding[] = [
     verdict: "unverifiable",
     certainty: "unverified",
     effect: "none",
+    time_check: "unknown",
     reasoning: "zamanı ve konumu belirsiz",
   },
 ]
@@ -53,27 +56,50 @@ async function evaluated() {
   await view.user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
   await screen.findByLabelText("Görüntü risk seviyesi")
   // Analiz başlayınca Risk & Temaslar kendiliğinden yarım açılır.
-  const drawer = screen.getByRole("region", { name: "Risk & Temaslar" })
+  const drawer = screen.getByRole("region", { name: "Risk & Araçlar" })
   return { ...view, drawer }
 }
 
-const card = () => screen.queryByRole("article", { name: /^Temas: / })
+const card = () => screen.queryByRole("article", { name: /^Araç: / })
 const section = (name: string) => within(card()!).getByRole("region", { name })
 
 describe("Temas listesi", () => {
-  it("seviyeye göre sıralı; düşük seviyeliler katlanır grupta; satırda tür, sınıf, track, mesafe, seviye, kesinlik", async () => {
-    const { drawer } = await evaluated()
-    const list = within(drawer).getByRole("region", { name: "Temaslar" })
+  const rows = (list: HTMLElement) => within(list).getAllByRole("listitem").map((li) => within(li).getByRole("button"))
 
-    expect(within(list).getByText("3 temas")).toBeInTheDocument()
-    const rows = within(list).getAllByRole("button")
-    expect(rows.map((r) => r.textContent)).toEqual([
-      "T0122kamyon◆KritikEşleşmiş temasüsse 1,6 kmkesinlik: kesin",
-      "T0032tip bilinmiyor◆OrtaKaçırılmış temasüsse 1,6 kmkesinlik: olası",
-      "track yokotomobil◆DüşükKayıt dışı temasüsse 1,6 kmkesinlik: olası",
+  it("seviyeye göre sıralı; düşük seviyeliler katlanır grupta; satırda track, sınıf, seviye ve mesafe (kesinlik ve tür sütunu yok)", async () => {
+    const { drawer } = await evaluated()
+    const list = within(drawer).getByRole("region", { name: "Araçlar" })
+
+    expect(within(list).getByText("3 araç")).toBeInTheDocument()
+    expect(rows(list).map((r) => r.textContent)).toEqual([
+      "T0122kamyon◆Kritiküsse 1,6 km",
+      "T0032tip bilinmiyor◆Ortaüsse 1,6 km",
+      "track yokotomobil◆Düşüküsse 1,6 km",
     ])
-    // Düşük seviyeli Temas katlanır grupta.
-    expect(within(list).getByText("1 düşük seviyeli temas, en yakını 1,6 km").closest("details")).toContainElement(rows[2])
+    // Tür ve kesinlik erişilebilir adda kalır.
+    expect(rows(list)[0]).toHaveAccessibleName("T0122 · kamyon · Eşleşmiş temas · Yüksek kesinlik")
+    // Düşük seviyeli araç katlanır grupta.
+    expect(within(list).getByText("1 düşük seviyeli araç, en yakını 1,6 km").closest("details")).toContainElement(rows(list)[2])
+  })
+
+  it("tespit güvenilirliği özeti kaç sonucun hangi kesinlikte olduğunu söyler; bir gruba tıklamak listeyi süzer", async () => {
+    const { drawer, user } = await evaluated()
+    const list = within(drawer).getByRole("region", { name: "Araçlar" })
+    const summary = within(list).getByRole("group", { name: "Tespit güvenilirliği" })
+
+    expect(within(summary).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "1Yüksek kesinlik",
+      "2Orta kesinlik",
+      "0Düşük kesinlik",
+    ])
+    expect(within(summary).getByRole("button", { name: "0Düşük kesinlik" })).toBeDisabled()
+
+    await user.click(within(summary).getByRole("button", { name: "2Orta kesinlik" }))
+    expect(within(list).getByText("2 / 3 araç")).toBeInTheDocument()
+    expect(rows(list).map((r) => r.textContent?.slice(0, 5))).toEqual(["T0032", "track"])
+
+    await user.click(within(summary).getByRole("button", { name: "2Orta kesinlik" }))
+    expect(within(list).getByText("3 araç")).toBeInTheDocument()
   })
 })
 
@@ -83,7 +109,7 @@ describe("Temas seçimi: üç görünüm aynı Temas'a odaklanır", () => {
 
     await user.click(within(drawer).getByRole("button", { name: /^T0122/ }))
 
-    expect(card()).toHaveAccessibleName("Temas: T0122")
+    expect(card()).toHaveAccessibleName("Araç: T0122")
     expect(drawer).toHaveAttribute("data-state", "half")
     // Harita
     const truckMarker = map.markers.get("temaslar")!.find((m) => m.id === "T0122")!
@@ -113,8 +139,8 @@ describe("Temas seçimi: üç görünüm aynı Temas'a odaklanır", () => {
 
     map.clickMarker("temaslar", "T0032")
 
-    await waitFor(() => expect(card()).toHaveAccessibleName("Temas: T0032"))
-    expect(screen.getByRole("region", { name: "Risk & Temaslar" })).toHaveAttribute("data-state", "half")
+    await waitFor(() => expect(card()).toHaveAccessibleName("Araç: T0032"))
+    expect(screen.getByRole("region", { name: "Risk & Araçlar" })).toHaveAttribute("data-state", "half")
     expect(within(screen.getByRole("list", { name: "Tespitler" })).getByRole("button", { name: /^T0032/ })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -126,10 +152,10 @@ describe("Temas seçimi: üç görünüm aynı Temas'a odaklanır", () => {
 
     await user.click(screen.getByRole("button", { name: /^otomobil %83 · track yok/ }))
 
-    expect(card()).toHaveAccessibleName("Temas: kayıt dışı otomobil")
+    expect(card()).toHaveAccessibleName("Araç: kayıt dışı otomobil")
     expect(map.markers.get("temaslar")!.find((m) => m.id === "kayit-disi-1")!.variant).toContain("secili")
     expect(section("Eşleşme")).toHaveTextContent("Kayıt dışı temas: track yok")
-    expect(section("Rapor kararları")).toHaveTextContent("Bu temasa rapor bağlanamıyor")
+    expect(section("Rapor kararları")).toHaveTextContent("Bu araca rapor bağlanamıyor")
   })
 })
 
@@ -141,7 +167,7 @@ describe("Detay kartı", () => {
 
     expect(section("Tespit")).toHaveTextContent("Sınıfkamyon")
     expect(section("Tespit")).toHaveTextContent("Güven%91")
-    expect(section("Tespit")).toHaveTextContent("Zayıf tespithayır")
+    expect(section("Tespit")).toHaveTextContent("KesinlikYüksek kesinlik")
     expect(section("Eşleşme")).toHaveTextContent("TrackT0122")
     expect(section("Eşleşme")).toHaveTextContent("Eşleşme mesafesi0,4 m")
     expect(section("Eşleşme")).toHaveTextContent("İkinci adayT0032 · 41 m")
@@ -195,5 +221,48 @@ describe("Detay kartı", () => {
     await user.click(within(drawer).getByRole("button", { name: /^T0122/ }))
 
     expect(within(section("Hareket")).getByRole("img")).toHaveAccessibleName(/\(saat bilgisi yok\)$/)
+  })
+})
+
+describe("Kesinlik süzgeci", () => {
+  it("etkin süzgecin grubunda sonuç kalmasa da düğmesi kapatılabilir; kare değişince süzgeç sıfırlanır", async () => {
+    const { drawer, user } = await evaluated()
+    act(() => useOperasyon.getState().setCertaintyFilter("weak"))
+    const summary = within(drawer).getByRole("group", { name: "Tespit güvenilirliği" })
+    const weak = within(summary).getByRole("button", { name: "0Düşük kesinlik" })
+
+    expect(weak).toBeEnabled()
+    await user.click(weak)
+    expect(useOperasyon.getState().certaintyFilter).toBeNull()
+
+    act(() => useOperasyon.getState().setCertaintyFilter("likely"))
+    act(() => useOperasyon.getState().selectImage("img_008333"))
+    expect(useOperasyon.getState().certaintyFilter).toBeNull()
+  })
+})
+
+describe("Seçimi kaldırma", () => {
+  it("seçili aracın haritadaki işaretine tekrar tıklamak ya da haritada boş yere tıklamak seçimi kaldırır", async () => {
+    const { map } = await evaluated()
+
+    act(() => map.events!.onMarkerClick?.("temaslar", "T0122"))
+    expect(useOperasyon.getState().selectedContactKey).toBe("T0122")
+    act(() => map.events!.onMarkerClick?.("temaslar", "T0122"))
+    expect(useOperasyon.getState().selectedContactKey).toBeNull()
+
+    act(() => map.events!.onMarkerClick?.("temaslar", "T0122"))
+    act(() => map.events!.onMapClick?.())
+    expect(useOperasyon.getState().selectedContactKey).toBeNull()
+  })
+
+  it("Görüntü çekmecesi kapanınca seçili kare bırakılır: ayak izi kalkar, üst çubuk kare beklemeye döner", async () => {
+    const { map, user } = await evaluated()
+    expect(map.areas.get("ayak-izi")!.features).toHaveLength(1)
+
+    await user.click(within(screen.getByRole("region", { name: "Görüntü" })).getByRole("button", { name: "Kapat (Esc)" }))
+
+    expect(useOperasyon.getState().selectedImageId).toBeNull()
+    expect(map.areas.get("ayak-izi")!.features).toEqual([])
+    expect(screen.getByText("Zaman akışından bir kare seçin")).toBeInTheDocument()
   })
 })

@@ -8,6 +8,7 @@ import type {
   EvaluationEvent,
   ImageDetail,
   ImageSummary,
+  TrackOverview,
   ZonesResponse,
 } from "./types"
 
@@ -46,6 +47,9 @@ export const getImages = (signal?: AbortSignal) => getJson<ImageSummary[]>("/ima
 
 export const getImage = (imageId: string, signal?: AbortSignal) =>
   getJson<ImageDetail>(`/images/${encodeURIComponent(imageId)}`, signal)
+
+/** Bütün track'ler, kayıtlarıyla; seviye bittiği görüntünün son değerlendirmesinden. */
+export const getTracks = (signal?: AbortSignal) => getJson<TrackOverview[]>("/tracks", signal)
 
 export const imageFileUrl = (imageId: string) =>
   `${API_BASE}/images/${encodeURIComponent(imageId)}/file`

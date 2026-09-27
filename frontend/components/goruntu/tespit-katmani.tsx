@@ -1,10 +1,12 @@
 "use client"
 
+import { useEffect, useMemo, useRef, useState } from "react"
+
 import type { Brief, ImageDetail } from "@/lib/api/types"
 import { formatConfidence } from "@/lib/format"
 import { RISK, vehicleClass, vehicleTone } from "@/lib/labels"
 import { cn } from "@/lib/utils"
-import { keyedContacts, toPixel } from "@/lib/temas"
+import { keyedContacts, secondaryDetections, toPixel } from "@/lib/temas"
 import { useOperasyon } from "@/store/operasyon"
 
 /**
@@ -17,17 +19,39 @@ import { useOperasyon } from "@/store/operasyon"
  *   seçim       kalın çizgi + beyaz/siyah çift hale; diğer kutular soluklaşır
  * Siyah kılıf her fotoğraf zemininde ayrışmayı sağlar.
  */
-const CASING = "shadow-[0_0_0_1px_var(--tespit-kutu-kilif),inset_0_0_0_1px_var(--tespit-kutu-kilif)]"
-const SELECTED_HALO =
-  "shadow-[0_0_0_1px_var(--tespit-kutu-kilif),0_0_0_3px_var(--tespit-kutu-secili-hale),0_0_0_4px_var(--tespit-kutu-kilif),inset_0_0_0_1px_var(--tespit-kutu-kilif)]"
+/**
+ * Çerçeve kutunun içine çizilir (kutu hiçbir zaman modelin verdiği alandan büyük görünmez);
+ * dış kılıf yok, koyu kılıf da içeride. Kalınlık gösterilen kutu boyutuna göre: küçük/uzak araçta
+ * 1 px, normalde 2 px; seçili kutu bir kademe kalın ve içte beyaz hale.
+ */
+const INNER_CASING = "shadow-[inset_0_0_0_1px_var(--tespit-kutu-kilif)]"
+const SELECTED_INNER =
+  "shadow-[inset_0_0_0_1px_var(--tespit-kutu-kilif),inset_0_0_0_2px_var(--tespit-kutu-secili-hale)]"
+/** Gösterilen kutunun kısa kenarı bundan küçükse ince çizgi. */
+const SMALL_BOX_PX = 16
 
-const box = ({ selected, dimmed, weak, dashed }: { selected: boolean; dimmed: boolean; weak?: boolean; dashed?: boolean }) =>
-  cn(
-    "border-[color:var(--sinif)] transition-[opacity,border-width,box-shadow] duration-150",
-    selected ? cn("border-3", SELECTED_HALO) : cn(weak ? "border-[1.5px]" : "border-2", CASING, "hover:border-3"),
+const box = ({
+  selected,
+  dimmed,
+  weak,
+  dashed,
+  small,
+}: {
+  selected: boolean
+  dimmed: boolean
+  weak?: boolean
+  dashed?: boolean
+  small: boolean
+}) => {
+  const width = selected ? (small ? "border-2" : "border-3") : small ? "border" : weak ? "border-[1.5px]" : "border-2"
+  return cn(
+    "box-border border-[color:var(--sinif)] transition-[opacity,border-width] duration-150",
+    width,
+    !small && (selected ? SELECTED_INNER : INNER_CASING),
     dashed && "border-dashed",
     dimmed && "opacity-55 hover:opacity-100",
   )
+}
 
 /** Etiket çipi: koyu yarı saydam zemin; seçili kutuda sınıf renginde dolgu. */
 const chip = (selected: boolean) =>
@@ -50,10 +74,27 @@ export function TespitKatmani({ brief, image }: { brief: Brief; image: ImageDeta
   const { width_px: W, height_px: H } = image
   const selectedKey = useOperasyon((s) => s.selectedContactKey)
   const selectContact = useOperasyon((s) => s.selectContact)
+  // Gösterilen boyut / görüntü boyutu: çizgi kalınlığı gösterilen kutuya göre seçilir.
+  const listRef = useRef<HTMLUListElement>(null)
+  const [scale, setScale] = useState(1)
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const update = () => setScale(el.clientWidth / W || 1)
+    update()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [W])
+  // Aynı araca ikinci (daha düşük güvenli) sınıf: çizilmez; listede soluk gösterilir.
+  const secondary = useMemo(() => secondaryDetections(brief), [brief])
 
   return (
-    <ul aria-label="Tespitler" className="dark absolute inset-0">
-      {keyedContacts(brief).map(({ key, contact }) => {
+    <ul ref={listRef} aria-label="Tespitler" className="dark absolute inset-0">
+      {keyedContacts(brief)
+        .filter(({ key }) => !secondary.has(key))
+        .map(({ key, contact }) => {
         const level = contact.final_level
         const name = contact.track_id ?? "track yok"
         const selected = key === selectedKey
@@ -64,6 +105,7 @@ export function TespitKatmani({ brief, image }: { brief: Brief; image: ImageDeta
             contact.confidence != null ? formatConfidence(contact.confidence) : ""
           } · ${name}`
           const tone = vehicleTone(contact.effective_label ?? contact.label)
+          const small = Math.min(w, h) * scale < SMALL_BOX_PX
           return (
             <li
               key={key}
@@ -77,7 +119,7 @@ export function TespitKatmani({ brief, image }: { brief: Brief; image: ImageDeta
                 onClick={() => selectContact(key)}
                 className={cn(
                   "peer absolute inset-0 rounded-[2px] focus-visible:outline-offset-4",
-                  box({ selected, dimmed, weak: contact.is_weak, dashed: !contact.track_id }),
+                  box({ selected, dimmed, weak: contact.is_weak, dashed: !contact.track_id, small }),
                 )}
               />
               <span
@@ -110,7 +152,7 @@ export function TespitKatmani({ brief, image }: { brief: Brief; image: ImageDeta
               onClick={() => selectContact(key)}
               className={cn(
                 "peer absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-dotted text-[var(--sinif)]",
-                box({ selected, dimmed }),
+                box({ selected, dimmed, small: false }),
                 "border-dotted",
               )}
             >

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Brief, ContactFinding, ReportFinding } from "@/lib/api/types"
 import { formatConfidence, formatDegrees, formatDistance, formatSpeed } from "@/lib/format"
-import { CARGO, CERTAINTY, EFFECT, reportSource, TREND, VERDICT, vehicleClass, vehicleTone } from "@/lib/labels"
+import { CARGO, certaintyLabel, EFFECT, reportSource, TREND, VERDICT, vehicleClass, vehicleTone } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 import { contactName, distanceSeries } from "@/lib/temas"
 import { useOperasyon } from "@/store/operasyon"
@@ -44,7 +44,7 @@ export function TemasKarti({ brief, contact }: { brief: Brief; contact: ContactF
 
   return (
     <article
-      aria-label={`Temas: ${contactName(contact)}`}
+      aria-label={`Araç: ${contactName(contact)}`}
       className="flex flex-col gap-2 rounded-md border border-secim bg-kart p-3 shadow-golge ring-1 ring-secim"
     >
       <header className="flex flex-wrap items-center gap-2">
@@ -59,7 +59,7 @@ export function TemasKarti({ brief, contact }: { brief: Brief; contact: ContactF
           variant="ghost"
           size="icon-xs"
           className="ml-auto"
-          aria-label="Temas seçimini kaldır"
+          aria-label="Araç seçimini kaldır"
           onClick={() => selectContact(null)}
         >
           <X />
@@ -79,7 +79,6 @@ export function TemasKarti({ brief, contact }: { brief: Brief; contact: ContactF
                 )}
               </Satir>
               {contact.confidence != null && <Satir label="Güven">{formatConfidence(contact.confidence)}</Satir>}
-              <Satir label="Zayıf tespit">{contact.is_weak ? "evet (track'le eşleştiği için temas sayıldı)" : "hayır"}</Satir>
             </>
           )}
           {contact.type_conflict && (
@@ -95,7 +94,10 @@ export function TemasKarti({ brief, contact }: { brief: Brief; contact: ContactF
               <span className="text-metin-soluk"> ({contact.visual.model})</span>
             </Satir>
           )}
-          <Satir label="Kesinlik">{CERTAINTY[contact.certainty]}</Satir>
+          <Satir label="Kesinlik">
+            {certaintyLabel(contact.certainty)}
+            {contact.is_weak && " · zayıf tespit (track'le eşleştiği için araç sayıldı)"}
+          </Satir>
         </dl>
       </Bolum>
 
@@ -184,11 +186,11 @@ export function TemasKarti({ brief, contact }: { brief: Brief; contact: ContactF
       <Bolum title="Rapor kararları">
         {!contact.track_id ? (
           <p className="text-xs text-metin-ikincil">
-            Bu temasa rapor bağlanamıyor: raporlar aracın rapor saatindeki track konumuyla eşleştiriliyor,
+            Bu araca rapor bağlanamıyor: raporlar aracın rapor saatindeki track konumuyla eşleştiriliyor,
             kayıt dışı temasın track&apos;i yok.
           </p>
         ) : reports.length === 0 ? (
-          <p className="text-xs text-metin-ikincil">Bu temasa bağlı rapor yok.</p>
+          <p className="text-xs text-metin-ikincil">Bu araca bağlı rapor yok.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {reports.map((r) => (

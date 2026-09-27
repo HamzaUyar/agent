@@ -25,6 +25,7 @@ function withReports() {
         verdict: "contradicts",
         certainty: "likely",
         effect: "raises",
+      time_check: "mismatch",
         reasoning: "rapor saatinde noktanın 300 m içinde track yok",
       },
     ],
@@ -57,7 +58,7 @@ describe("Seçili karenin son iki saati", () => {
     const { user } = await selectFrame()
     await user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
     await screen.findByLabelText("Görüntü risk seviyesi")
-    expect(band()).toHaveTextContent("Ayrıntı için bir temas seçin")
+    expect(band()).toHaveTextContent("Ayrıntı için bir araç seçin")
 
     await user.click(screen.getByRole("button", { name: /· T0122 ·/ }))
 

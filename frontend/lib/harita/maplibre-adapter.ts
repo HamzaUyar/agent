@@ -13,9 +13,11 @@ import {
   Map as MapLibreMap,
   Marker,
   NavigationControl,
+  Popup,
   ScaleControl,
   setWorkerUrl,
   type GeoJSONSource,
+  type FilterSpecification,
   type LayerSpecification,
   type StyleSpecification,
 } from "maplibre-gl"
@@ -131,10 +133,65 @@ function plainStyle(): StyleSpecification {
   }
 }
 
+const ICON_PREFIX = "iz-seviye-"
+const ICON_PX = 13
+
+/**
+ * Seviye baklavası (dolgu seviyeyle artar; `.seviye-simge` ile aynı merdiven): tema token'larından
+ * tuvalde çizilir, tema değişince yeniden üretilir.
+ */
+function levelIcon(level: string): ImageData {
+  const ratio = 2
+  const size = (ICON_PX + 6) * ratio
+  const canvas = document.createElement("canvas")
+  canvas.width = canvas.height = size
+  const ctx = canvas.getContext("2d")!
+  const c = size / 2
+  const r = (ICON_PX / 2) * ratio
+  const diamond = (radius: number) => {
+    ctx.beginPath()
+    ctx.moveTo(c, c - radius)
+    ctx.lineTo(c + radius, c)
+    ctx.lineTo(c, c + radius)
+    ctx.lineTo(c - radius, c)
+    ctx.closePath()
+  }
+  const color = css(
+    { critical: "--seviye-kritik-canli", high: "--seviye-yuksek-canli", medium: "--seviye-orta-canli", low: "--seviye-dusuk-canli" }[
+      level
+    ] ?? "--seviye-yok",
+  )
+  // Zeminden ayrışsın diye zemin renginde kılıf.
+  diamond(r + 2 * ratio)
+  ctx.fillStyle = css("--harita-kilif")
+  ctx.fill()
+  diamond(r)
+  ctx.lineWidth = 1.5 * ratio
+  ctx.strokeStyle = color
+  if (level === "yok") ctx.setLineDash([2 * ratio, 1.5 * ratio])
+  if (level === "high" || level === "critical") {
+    ctx.fillStyle = color
+    ctx.fill()
+  } else if (level === "medium") {
+    ctx.save()
+    ctx.clip()
+    ctx.fillStyle = color
+    ctx.fillRect(0, c, size, size)
+    ctx.restore()
+  }
+  ctx.stroke()
+  if (level === "critical") {
+    diamond(r + 3.5 * ratio)
+    ctx.lineWidth = 1.25 * ratio
+    ctx.stroke()
+  }
+  return ctx.getImageData(0, 0, size, size)
+}
+
 /** Rota rengi = araç sınıfı (seviye değil); sınıfı bilinmeyen (kaçırılmış) temas nötr. */
-const vehicleColor = (): unknown => [
+const vehicleColor = (property = "vehicle"): unknown => [
   "match",
-  ["get", "vehicle"],
+  ["get", property],
   "car",
   css("--sinif-car"),
   "van",
@@ -238,6 +295,66 @@ function overlayLayers(layer: AreaLayer): LayerSpecification[] {
           } as never,
         },
       ]
+    // İz analizi: çizgi rengi sınıf; hazır hâlinde ince ve yarı saydam (yüzlerce çizgi haritayı
+    // doldurmasın), oynatmada kuyruk daha belirgin; vurgulanan track kalın ve opak, diğerleri soluk.
+    // Çizginin ucunda seviye baklavası (dolgu merdiveni); ayrı nokta yok, sınıf çizginin renginde.
+    case "izler": {
+      const line = ["!=", ["get", "kind"], "bas"] as FilterSpecification
+      const width: unknown = [
+        "case",
+        ["get", "highlighted"],
+        3.5,
+        ["==", ["get", "kind"], "kuyruk"],
+        2.5,
+        1.25,
+      ]
+      const opacity: unknown = [
+        "case",
+        ["get", "highlighted"],
+        1,
+        ["get", "dimmed"],
+        0.12,
+        ["==", ["get", "kind"], "kuyruk"],
+        0.8,
+        0.4,
+      ]
+      return [
+        {
+          id: `${source}-kilif`,
+          type: "line",
+          source,
+          filter: line,
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: {
+            "line-color": css("--harita-kilif"),
+            "line-width": ["+", width, 2],
+            "line-opacity": ["*", opacity, 0.6],
+          },
+        } as LayerSpecification,
+        {
+          id: `${source}-cizgi`,
+          type: "line",
+          source,
+          filter: line,
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: { "line-color": vehicleColor("tone"), "line-width": width, "line-opacity": opacity },
+        } as LayerSpecification,
+        {
+          id: `${source}-seviye`,
+          type: "symbol",
+          source,
+          filter: ["==", ["get", "kind"], "bas"],
+          // Çizginin ucunda (aracın o anki konumunda) seviye baklavası; vurgulanan daha büyük.
+          layout: {
+            "icon-image": ["concat", ICON_PREFIX, ["get", "level"]],
+            "icon-size": ["case", ["get", "highlighted"], 1.35, 1],
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint: { "icon-opacity": ["case", ["get", "dimmed"], 0.35, 1] },
+        } as LayerSpecification,
+      ]
+    }
     case "us-halkalari":
       return [
         casing(3.5, 0.6),
@@ -391,7 +508,36 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
       }
     }
     if (map.getLayer("zemin-arka")) map.setPaintProperty("zemin-arka", "background-color", css("--harita-duz-zemin"))
+    for (const level of ["critical", "high", "medium", "low", "yok"]) {
+      const id = ICON_PREFIX + level
+      if (map.hasImage(id)) map.removeImage(id)
+      map.addImage(id, levelIcon(level), { pixelRatio: 2 })
+    }
   }
+
+  // İz analizi: üzerine gelince ipucu (kimlik, sınıf, seviye, kayıt aralığı), tıklayınca vurgula.
+  const IZ_ETKILESIM = [`${PREFIX}izler-cizgi`, `${PREFIX}izler-seviye`]
+  const tip = new Popup({ closeButton: false, closeOnClick: false, className: "harita-ipucu", offset: 10 })
+  map.on("mousemove", (event) => {
+    const layers = IZ_ETKILESIM.filter((id) => map.getLayer(id))
+    const hit = layers.length ? map.queryRenderedFeatures(event.point, { layers })[0] : undefined
+    map.getCanvas().style.cursor = hit ? "pointer" : ""
+    if (hit) tip.setLngLat(event.lngLat).setText(String(hit.properties.description ?? "")).addTo(map)
+    else tip.remove()
+  })
+  // Fare haritadan çıkınca ipucu asılı kalmasın.
+  map.on("mouseout", () => {
+    map.getCanvas().style.cursor = ""
+    tip.remove()
+  })
+
+  // DOM işaretlerinin tıklaması haritaya yayılmaz; buraya gelen tıklama ya bir ize ya boşluğa.
+  map.on("click", (event) => {
+    const layers = IZ_ETKILESIM.filter((id) => map.getLayer(id))
+    const hit = layers.length ? map.queryRenderedFeatures(event.point, { layers })[0] : undefined
+    if (hit) events.onAreaClick?.("izler", String(hit.properties.id))
+    else events.onMapClick?.()
+  })
   /** Alan katmanını sabit sırayla ekler: listede kendinden sonra gelen ilk katmanın altına. */
   function addArea(layer: AreaLayer, data: FeatureCollection) {
     map.addSource(PREFIX + layer, { type: "geojson", data })
@@ -436,10 +582,19 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
 
     setArea(layer, data: FeatureCollection) {
       areas.set(layer, data)
+      // Kaynak varsa hemen yaz: `setData` sonrası `isStyleLoaded()` kaynak işlenene kadar false döner;
+      // o anda ertelemek, sonraki anlık bir yazmanın üstüne eski verinin binmesine yol açar.
+      const existing = map.getSource(PREFIX + layer) as GeoJSONSource | undefined
+      if (existing) {
+        existing.setData(data)
+        return
+      }
+      // İlk ekleme stil hazır olunca; o ana kadar gelen en son veriyle.
       withStyle(() => {
-        const existing = map.getSource(PREFIX + layer) as GeoJSONSource | undefined
-        if (existing) existing.setData(data)
-        else addArea(layer, data)
+        const latest = areas.get(layer) ?? data
+        const source = map.getSource(PREFIX + layer) as GeoJSONSource | undefined
+        if (source) source.setData(latest)
+        else addArea(layer, latest)
       })
     },
 

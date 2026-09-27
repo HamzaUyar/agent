@@ -8,7 +8,7 @@ import type { FeatureCollection } from "geojson"
 import type { Brief, ContactFinding, RoutePoint } from "@/lib/api/types"
 import { formatDegrees, formatDistance } from "@/lib/format"
 import { boundsOf, circleRing, toLngLat, type Bounds } from "@/lib/geo"
-import { CERTAINTY, CONTACT_KIND, RISK, TREND, vehicleClass, vehicleTone } from "@/lib/labels"
+import { certaintyLabel, CONTACT_KIND, RISK, TREND, vehicleClass, vehicleTone } from "@/lib/labels"
 import { bySeverity, contactName, keyedContacts } from "@/lib/temas"
 
 import type { MapMarker } from "./types"
@@ -26,7 +26,7 @@ function describe(contact: ContactFinding): string {
     `${contactName(contact)} · ${CONTACT_KIND[contact.kind]}`,
     `sınıf ${vehicleClass(contact.effective_label ?? contact.label)}`,
     `seviye ${RISK[contact.final_level].label}`,
-    `kesinlik ${CERTAINTY[contact.certainty]}`,
+    certaintyLabel(contact.certainty).toLocaleLowerCase("tr-TR"),
     `üsse ${formatDistance(contact.distance_to_base_m)}`,
   ]
   const m = contact.motion
@@ -44,7 +44,8 @@ export type ContactLayers = {
   routeTimes: MapMarker[]
 }
 
-export function buildContactLayers(brief: Brief, selectedKey: string | null = null): ContactLayers {
+/** `dimAll`: bütün rotalar soluk (İz analizi açıkken seçili Görüntü'nün katmanı geri planda). */
+export function buildContactLayers(brief: Brief, selectedKey: string | null = null, dimAll = false): ContactLayers {
   const keyed = keyedContacts(brief)
   const routes: FeatureCollection = { type: "FeatureCollection", features: [] }
   const stops: MapMarker[] = []
@@ -62,7 +63,7 @@ export function buildContactLayers(brief: Brief, selectedKey: string | null = nu
           level: contact.final_level,
           vehicle: vehicleTone(contact.effective_label ?? contact.label),
           selected: key === selectedKey,
-          dimmed: selectedKey !== null && key !== selectedKey,
+          dimmed: dimAll || (selectedKey !== null && key !== selectedKey),
         },
         geometry: { type: "LineString", coordinates: route.map(toLngLat) },
       })

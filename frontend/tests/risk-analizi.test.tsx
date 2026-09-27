@@ -62,10 +62,10 @@ describe("Risk analizi akışı", () => {
   })
 
   it("analiz başlayınca kapalı Risk & Temaslar yarım açılır; Brief gelince üst çubukta seviye (baklava + kelime) ve önerilen eylem", async () => {
-    expect(screen.queryByRole("region", { name: "Risk & Temaslar" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("region", { name: "Risk & Araçlar" })).not.toBeInTheDocument()
     await selectAndStart()
 
-    const drawer = screen.getByRole("region", { name: "Risk & Temaslar" })
+    const drawer = screen.getByRole("region", { name: "Risk & Araçlar" })
     expect(drawer).toHaveAttribute("data-state", "half")
 
     const level = await screen.findByLabelText("Görüntü risk seviyesi")
@@ -96,9 +96,14 @@ describe("Risk analizi akışı", () => {
 
     const article = screen.getByRole("article", { name: "Brief" })
     expect(article).toHaveTextContent(brief.text.split("\n")[0])
-    expect(article).toHaveTextContent(`Önerilen eylem: ${brief.recommended_action}`)
-    expect(within(article).getByText("otomatik özet: LLM yapılandırılmadı")).toBeInTheDocument()
-    const sources = within(within(article).getByRole("region", { name: "Kaynaklar" })).getAllByRole("listitem")
+    // Karar önce: seviye ve önerilen eylem özet kartında.
+    const decision = within(article).getByRole("region", { name: "Karar" })
+    expect(decision).toHaveTextContent("Kritik")
+    expect(decision).toHaveTextContent(`Önerilen eylem${brief.recommended_action}`)
+    expect(article.firstElementChild).toBe(decision)
+    // Model bilgisi ve kaynaklar katlanır bölümlerde; bilgi kaybolmaz.
+    expect(within(within(article).getByRole("group", { name: "Model" })).getByText("otomatik özet: LLM yapılandırılmadı")).toBeInTheDocument()
+    const sources = within(within(article).getByRole("group", { name: "Kaynaklar" })).getAllByRole("listitem")
     expect(sources.map((li) => li.textContent)).toEqual(brief.sources)
   })
 

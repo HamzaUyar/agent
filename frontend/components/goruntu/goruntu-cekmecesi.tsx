@@ -53,11 +53,6 @@ export function GoruntuCekmecesi() {
     <div className="flex flex-col gap-3">
       <SeciliKare />
 
-      <p className="text-xs text-metin-soluk">
-        Yalnızca veri setindeki görüntüler değerlendirilebilir: konumu ve çekim anı bilinmeyen bir kare
-        değerlendirilemez.
-      </p>
-
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex flex-col gap-1">
           <span id={zoneLabelId} className="text-xs text-metin-soluk">

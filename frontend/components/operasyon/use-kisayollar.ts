@@ -18,7 +18,7 @@ function isTyping(target: EventTarget | null): boolean {
 function usesArrows(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
-    target.closest('[role="tablist"], select, [role="slider"], [role="combobox"]') !== null
+    target.closest('[role="tablist"], select, [role="slider"], input[type="range"], [role="combobox"]') !== null
   )
 }
 
@@ -28,7 +28,7 @@ function inListbox(target: EventTarget | null): boolean {
 }
 
 /**
- * Kısayollar: R Risk & Temaslar · B Brief · G Görüntü · Esc kapat · ←/→ önceki/sonraki kare.
+ * Kısayollar: R Risk & Araçlar · B Brief · G Görüntü · I İz analizi · Esc kapat · ←/→ önceki/sonraki kare.
  * Aynı kısayol açık çekmeceyi kapatır. Yazı alanındayken yalnızca Esc çalışır.
  */
 export function useKisayollar() {
@@ -38,6 +38,12 @@ export function useKisayollar() {
       const s = useOperasyon.getState()
 
       if (event.key === "Escape") {
+        // Önce İz analizindeki vurgu kalkar, sonra çekmeceler kapanır.
+        if (s.izHighlight) {
+          s.setIzHighlight(null)
+          event.preventDefault()
+          return
+        }
         const side = s.lastSide ?? (s.right.panel ? "right" : s.left.panel ? "left" : null)
         if (side) {
           s.close(side)
@@ -55,14 +61,18 @@ export function useKisayollar() {
       }
 
       switch (event.key.toLocaleLowerCase("tr-TR")) {
-        // Göz atma hâlindeki çekmece önce genişler; açık çekmecede aynı kısayol kapatır.
+        // Açık çekmecede aynı kısayol kapatır; öbür sekmedeyse o sekmeye geçer.
         case "r":
-          if (s.right.panel && s.right.state !== "peek" && s.riskTab === "temaslar") s.close("right")
+          if (s.right.panel && s.riskTab === "temaslar") s.close("right")
           else s.openRight("temaslar")
           break
         case "b":
-          if (s.right.panel && s.right.state !== "peek" && s.riskTab === "brief") s.close("right")
+          if (s.right.panel && s.riskTab === "brief") s.close("right")
           else s.openRight("brief")
+          break
+        case "i":
+        case "ı":
+          s.toggleIz()
           break
         case "g":
           if (s.left.panel === "goruntu") s.close("left")

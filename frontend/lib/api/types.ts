@@ -19,6 +19,7 @@ export type RoutePoint = Schemas["RoutePoint"]
 export type StopFinding = Schemas["StopFinding"]
 export type ReportFinding = Schemas["ReportFinding"]
 export type StepEvent = Schemas["StepEvent"]
+export type TrackOverview = Schemas["TrackOverview"]
 export type RiskLevel = NonNullable<ImageSummary["last_risk_level"]>
 export type ContactKind = ContactFinding["kind"]
 export type Certainty = ContactFinding["certainty"]

@@ -247,6 +247,38 @@ class ImageSummary(BaseModel):
     last_risk_level: RiskLevel | None = None
 
 
+class ContactLevel(BaseModel):
+    """Kayıtlı bir değerlendirmedeki temasın seviye özeti. Brief'in yalnızca bu alanları
+    okunur; eski kod sürümlerinin kayıtları da (sonradan eklenen hareket alanları olmadan)
+    buna uyar."""
+
+    track_id: str | None
+    final_level: RiskLevel
+    kind: ContactKind
+    label: str | None = None
+    effective_label: str | None = None
+
+
+class TrackOverview(BaseModel):
+    """Bir track'in bütün kaydı ve bittiği görüntünün son değerlendirmesindeki yeri.
+
+    Her track bir görüntünün çekim anında o görüntünün karesinde biter (kaydı o görüntünün
+    son iki saatidir). Seviye ve sınıf o görüntünün son tamamlanmış değerlendirmesindeki
+    temastan okunur; yeniden hesaplanmaz. Değerlendirme yoksa `None`.
+    """
+
+    track_id: str
+    start: str
+    end: str
+    points: list[RoutePoint]
+    image_id: str | None = None
+    """Track'in bittiği görüntü: çekim anı track'in son kaydı ve son konum karede."""
+    level: RiskLevel | None = None
+    label: str | None = None
+    """Temasın (riskte sayılan) sınıfı; tespit yoksa (kaçırılmış temas) `None`."""
+    kind: ContactKind | None = None
+
+
 class EvaluationRequest(BaseModel):
     image_id: str
     recompute: bool = False

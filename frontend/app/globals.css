@@ -257,10 +257,7 @@
   --harita-paneli-bosluk: 1.25rem;
   --cekmece-zemin: var(--yuzey);
   --cekmece-cerceve: var(--cizgi);
-  --cekmece-sekme-genislik: 2.25rem;
-  --cekmece-goz-atma: 56px;
-  --cekmece-yarim: 30vw;
-  --cekmece-tam: 55vw;
+  --cekmece-sekme-genislik: 2.75rem;
   --zaman-akisi-zemin: var(--yuzey);
   --zaman-akisi-yukseklik: 6.5rem;
 
@@ -380,6 +377,12 @@
   ::selection {
     background: var(--secim-zemin);
     color: var(--metin);
+  }
+  /* Çekmece tutamacı sürüklenirken: imleç her yerde aynı, metin ve harita seçilmez. */
+  body.cekmece-surukleniyor,
+  body.cekmece-surukleniyor * {
+    cursor: col-resize !important;
+    user-select: none !important;
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -793,4 +796,80 @@
   .sinif--truck { --sinif: var(--sinif-truck); }
   .sinif--bus { --sinif: var(--sinif-bus); }
   .sinif--diger { --sinif: var(--sinif-diger); }
+}
+
+/* İz analizi: açıkken seçili Görüntü'nün temas işaretleri geri planda. */
+@layer components {
+  .harita--iz-acik .harita-isaret--temaslar,
+  .harita--iz-acik .harita-isaret--duraklamalar,
+  .harita--iz-acik .harita-isaret--rota-saatleri {
+    opacity: 0.35;
+  }
+  /* İz ipucu bütün DOM işaretlerinin (seçili temas 20) üstünde ve fareyi engellemez. */
+  .harita-ipucu {
+    z-index: 40;
+    pointer-events: none;
+  }
+  .harita-ipucu .maplibregl-popup-content {
+    padding: 4px 8px;
+    border-radius: var(--radius-md);
+    background: var(--birincil);
+    color: var(--birincil-uzeri);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    box-shadow: var(--golge-yuksek);
+  }
+  .harita-ipucu .maplibregl-popup-tip {
+    display: none;
+  }
+  /* Zaman çizgisi: ince iz, belirgin tutamaç (mürekkep; mavi seçime ayrılmış). */
+  .iz-zaman {
+    appearance: none;
+    height: 16px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .iz-zaman::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 9999px;
+    background: var(--cizgi-guclu);
+  }
+  .iz-zaman::-moz-range-track {
+    height: 3px;
+    border-radius: 9999px;
+    background: var(--cizgi-guclu);
+  }
+  .iz-zaman::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -5.5px;
+    border-radius: 9999px;
+    background: var(--birincil);
+    border: 2px solid var(--yuzey);
+    box-shadow: 0 0 0 1px var(--birincil);
+  }
+  .iz-zaman::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    background: var(--birincil);
+    border: 2px solid var(--yuzey);
+  }
+}
+
+/* Oynatmada riskli iz uyarısı: yavaş nabız; hareket azaltmada sabit. */
+@layer components {
+  @keyframes riskli-iz-nabiz {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+  .riskli-iz-uyarisi {
+    animation: riskli-iz-nabiz 1.4s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .riskli-iz-uyarisi {
+      animation: none;
+    }
+  }
 }

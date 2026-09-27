@@ -56,13 +56,10 @@ describe("Açılış haritası: Üs, halkalar ve yaklaşık bölge alanları", (
     // Komşu dilimler sırayla açık/koyu dolgu alır.
     expect(new Set(areas.map((a) => a.properties!.parity))).toEqual(new Set([0, 1]))
 
-    // Tooltip ve lejant alanın kesin sınır olmadığını söyler.
+    // Bölge tooltip'i alanın kesin sınır olmadığını söyler.
     for (const marker of map.markers.get("bolgeler")!) {
       expect(marker.description).toMatch(/yaklaşık alan .*kesin sınır değil/)
     }
-    const legend = screen.getByRole("group", { name: "Lejant" })
-    expect(within(legend).getByText("Yaklaşık bölge alanı: Üs'ten yön dilimi (kesin sınır değil)")).toBeInTheDocument()
-    expect(within(legend).getByText("Üsse 1 km ve 3 km mesafe halkaları")).toBeInTheDocument()
   })
 
   it("açılışta görünüm Üs'ü ve bütün Bölge merkezlerini yaklaşık alanlarıyla kapsar", async () => {
@@ -136,5 +133,21 @@ describe("Açılış haritası: Üs, halkalar ve yaklaşık bölge alanları", (
 
     await waitFor(() => expect(map.markerLabels("bolgeler")).toHaveLength(8))
     expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+  })
+})
+
+describe("Lejant", () => {
+  it("sol altta her zaman görünür, katlanmaz; yalnızca araç sınıfı renklerini gösterir", async () => {
+    renderEkran()
+    const legend = await screen.findByRole("region", { name: "Lejant" })
+
+    expect(within(legend).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "otomobil",
+      "minibüs",
+      "kamyon",
+      "otobüs",
+      "tip bilinmiyor",
+    ])
+    expect(within(legend).queryByRole("button")).not.toBeInTheDocument()
   })
 })

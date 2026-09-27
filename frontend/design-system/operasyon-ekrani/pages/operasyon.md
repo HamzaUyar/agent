@@ -69,8 +69,18 @@
 - **Token adları:** `--zemin/--yuzey/--kart/--kart-vurgu/--kart-hover`, `--cizgi/--cizgi-guclu`, `--metin/-ikincil/-soluk`, `--birincil*`, `--secim*`, `--odak`, `--hata`, `--seviye-<level>[-zemin]`, `--sinif-<car|van|truck|bus|diger>`, `--bolge-*`, `--harita-*`, `--golge*`, `--veri-bayat`, `--otomatik-ozet`, `--tespit-*`, bileşen token'ları `--ust-cubuk-*`, `--harita-paneli-*`, `--cekmece-*`, `--zaman-akisi-*`.
   - Üç katman: `--ham-*` → anlamlı → bileşen.
   - shadcn değişkenleri anlamlı katmana bağlıdır.
-- **Çekmeceler:** shadcn `Sheet` kullanılmadı. Sheet ekranın üstüne açılan bir katman, haritayı daraltmaz. Çekmeceler sayfa düzeninin parçası olan paneller.
-  - Genişlikler: göz atma 56 px, yarım %30, tam %55.
-  - Solda yalnız Görüntü çekmecesi (Sohbet kaldırıldı). Risk analizi başlayınca Risk & Temaslar kapalıysa yarım açılır.
-  - Kenar başına tek çekmece.
-  - Esc en son açılanı kapatır. Odak başlığa taşınır, kapanınca açan öğeye döner.
+- **Kenar ikon rayı:** Kenar sekmeleri aynı çizgi kalınlığında lucide ikonları (18 px, çizgi 1,75); adı ve kısayolu Radix ipucunda, erişilebilir ad metinle aynı. Etkin ikon ters renk (mürekkep) + çekmeceye bakan kenarda ince çizgi; mavi kullanılmaz. Sol: Görüntü (`Image`, G). Sağ, yukarıdan: İz analizi (`Route`, I), Risk & Araçlar (`ShieldAlert`, R). Brief'in ayrı kenar düğmesi yok (Risk & Araçlar içindeki sekme, B kısayolu). Kapalı Risk ikonunda son Brief'in seviye baklavası görünür.
+- **Çekmeceler:** shadcn `Sheet` kullanılmadı; çekmeceler sayfa düzeninin parçası olan paneller, harita onlar kadar daralır.
+  - Genişlik serbest: tutamaç işaretçiyi yakalar, genişlik imleci anında izler (sürüklerken geçiş yok), bırakıldığı yerde kalır ve taraf başına saklanır. En az 280 px, en fazla ekranın %50'si ve haritaya en az 400 px kalacak kadar. Tutamaç çekmecenin içinde (haritaya taşmaz), klavyede ←/→ 16 px, Home/End sınırlar. Genişlet düğmesi (ya da tutamaca çift tık) geniş görünüm ↔ son genişlik. Dar "göz atma" hâli kaldırıldı (ikon rayı o işi görür).
+  - Kenar başına tek çekmece. Esc önce İz analizi vurgusunu, sonra en son açılan çekmeceyi kapatır. Odak başlığa taşınır, kapanınca açan öğeye döner.
+- **Günün görüntüleri:** başlangıçta katlı: 40 px çubukta başlık, kare sayısı, seçili kare; chevron açar (yükseklik geçişi 200 ms). Kapalı içerik `inert`. ←/→ kapalıyken de kare değiştirir. Durum saklanır.
+- **Lejant:** sol altta her zaman görünen küçük kutu, yalnızca araç sınıfı renkleri. Diğer kodlamalar rozet ve ipuçlarında.
+- **Uydu/Sokak:** sol üstte, yakınlaştırma düğmelerinin yanında; sağ üst İz analizi kartının.
+- **İz analizi:** haritanın sağ üstünde, haritayı daraltmayan opak kart (320 px, en fazla haritanın %45 genişliği / %60 yüksekliği). Sıra: seviye süzgeci (çoklu seçim + Hepsi, sayılı; seçili anahtar rozet dilinde ve işaretli) → track sayısı ("50 / 226 track · şu an 18 araç") → büyük saat → yoğunluk göstergeli zaman çizgisi → Oynat/Duraklat · Sıfırla · hız (0,5×–4×; 1× = saniyede 5 dk) → vurgulanan track ("Görüntüye git").
+  - Hazır hâli: filtreli bütün track'ler tam yolla, hareketsiz; çizgi sınıf renginde, 1,25 px, %40 opak.
+  - Oynatma: yalnızca kaydı o anı kapsayan araçlar; baş noktası sınıf renginde nokta + seviye baklavası (tuvalde, tema token'larından); 15 dk kuyruk. Kayıtlar arası doğrusal ara konum; kaydın dışında araç yok.
+  - Vurgu: kalın ve opak, diğerleri %12. Açıkken seçili Görüntü'nün temasları ve rotaları soluk.
+  - Oynatma döngüsü (`requestAnimationFrame`) katmanı doğrudan haritaya yazar; depoya yalnızca dakika değişince yazılır.
+- **Araçlar listesi:** satır = track · sınıf karesi (dolgu sınıf, çerçeve çizgisi takip durumu) · seviye rozeti · üsse mesafe. Üstte "Tespit güvenilirliği" özeti (Yüksek/Orta/Düşük kesinlik sayıları, süzgeç). Aynı araca verilmiş ikinci sınıf (kutusu IoU ≥ 0,7 örtüşen, düşük güvenli tespit) görüntüde çizilmez, listede soluk ve açıklamalı.
+- **Tespit kutuları:** çerçeve kutunun içinde (kutu hiçbir zaman modelin alanından büyük görünmez); gösterilen kısa kenar 16 px'ten küçükse 1 px çizgi, iç kılıf yok.
+- **Brief:** karar kartı (seviye + önerilen eylem + kare özeti) → paragraflara bölünmüş değerlendirme → katlanır Kaynaklar ve Model.

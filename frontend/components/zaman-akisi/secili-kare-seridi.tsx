@@ -47,7 +47,7 @@ export function SeciliKareSeridi() {
           Seçili kare · son 2 saat ({toHhmm(start)}–{summary.capture_time})
         </h2>
         <span className="text-metin-soluk">
-          {contact ? `${contactName(contact)} için` : brief ? "Ayrıntı için bir temas seçin" : ""}
+          {contact ? `${contactName(contact)} için` : brief ? "Ayrıntı için bir araç seçin" : ""}
         </span>
       </div>
       <div className="relative mx-2 h-12">

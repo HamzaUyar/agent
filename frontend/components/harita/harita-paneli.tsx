@@ -1,7 +1,7 @@
 "use client"
 
 import type { FeatureCollection } from "geojson"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 
 import { CircleAlert, TriangleAlert } from "lucide-react"
 
@@ -9,13 +9,16 @@ import { Button } from "@/components/ui/button"
 import { toLngLat } from "@/lib/geo"
 import { buildFootprint, buildScene } from "@/lib/harita/sahne"
 import { buildContactLayers, contactBounds } from "@/lib/harita/temaslar"
-import type { MarkerGroup } from "@/lib/harita/types"
-import type { Basemap } from "@/lib/harita/types"
+import type { AreaLayer, Basemap, MapAdapter, MarkerGroup } from "@/lib/harita/types"
+import { izSinirlari } from "@/lib/iz"
 import { cn } from "@/lib/utils"
 import { useOperasyon } from "@/store/operasyon"
 
 import { Harita } from "./harita"
+import { IzAnaliziKarti } from "./iz-analizi-karti"
+import { IzKatmani, useIzTracks } from "./iz-katmani"
 import { Lejant } from "./lejant"
+import { RiskliIzUyarisi } from "./riskli-iz-uyarisi"
 
 const BASEMAPS: { id: Exclude<Basemap, "duz">; label: string }[] = [
   { id: "uydu", label: "Uydu" },
@@ -54,16 +57,28 @@ export function HaritaPaneli() {
   const brief = useOperasyon((s) => (s.evaluation?.status === "done" ? s.evaluation.brief : null))
   const selectedContactKey = useOperasyon((s) => s.selectedContactKey)
   const selectContact = useOperasyon((s) => s.selectContact)
+  const izOpen = useOperasyon((s) => s.izOpen)
+  const { all: izTracks } = useIzTracks()
+  // Panel açılınca harita günün bütün track'lerine sığar (süzgeç değişince yeniden sığmaz).
+  const izBounds = useMemo(() => (izOpen ? izSinirlari(izTracks) : null), [izOpen, izTracks])
+  const [adapter, setAdapter] = useState<MapAdapter | null>(null)
+  // İz analizi açıkken seçili Görüntü'nün rotaları geri planda (soluk), kaybolmaz.
   const contactLayers = useMemo(
-    () => (brief ? buildContactLayers(brief, selectedContactKey) : null),
-    [brief, selectedContactKey],
+    () => (brief ? buildContactLayers(brief, selectedContactKey, izOpen) : null),
+    [brief, selectedContactKey, izOpen],
   )
   const selectedBounds = useMemo(
     () => (brief && selectedContactKey ? contactBounds(brief, selectedContactKey) : null),
     [brief, selectedContactKey],
   )
+  // Seçili araca tekrar tıklamak seçimi kaldırır.
   const onMarkerClick = (group: MarkerGroup, id: string) => {
-    if (group === "temaslar") selectContact(id)
+    if (group === "temaslar") selectContact(useOperasyon.getState().selectedContactKey === id ? null : id)
+  }
+  const onAreaClick = (layer: AreaLayer, id: string | null) => {
+    if (layer !== "izler" || id === null) return
+    const { izHighlight, setIzHighlight } = useOperasyon.getState()
+    setIzHighlight(izHighlight === id ? null : id)
   }
 
   // Her katman her zaman verilir: değerlendirme temizlenince eski Temas'lar da silinsin.
@@ -88,22 +103,34 @@ export function HaritaPaneli() {
   return (
     <section
       aria-label="Harita paneli"
-      className="relative flex-1 overflow-hidden rounded-lg border border-[var(--harita-paneli-cerceve)] bg-[var(--harita-paneli-zemin)]"
+      className={cn(
+        "relative flex-1 overflow-hidden rounded-lg border border-[var(--harita-paneli-cerceve)] bg-[var(--harita-paneli-zemin)]",
+        izOpen && "harita--iz-acik",
+      )}
     >
       <Harita
         basemap={basemap}
         theme={theme}
         areas={areas}
         markers={markers}
-        // Seçili Temas varsa rotasına, yoksa kareye; ikisi de yoksa bütün sahneye.
+        // Seçili veri önce: seçili araç varsa rotasına, seçili kare varsa kareye; yoksa İz analizi
+        // açıksa bütün track'lere, değilse bütün sahneye.
         fitTo={
-          selectedBounds ?? (selectedImageId ? (footprint?.bounds ?? null) : (scene?.bounds ?? null))
+          selectedBounds ??
+          (selectedImageId ? (footprint?.bounds ?? null) : (izBounds ?? scene?.bounds ?? null))
         }
         onBasemapError={basemapError}
         onMarkerClick={onMarkerClick}
+        onAreaClick={onAreaClick}
+        onMapClick={() => useOperasyon.getState().clearMapSelection()}
+        onReady={setAdapter}
       />
+      <IzKatmani adapter={adapter} />
+      <IzAnaliziKarti />
+      <RiskliIzUyarisi />
 
-      <div className="absolute top-3 right-3 z-10 flex flex-col items-end gap-2">
+      {/* Zemin anahtarı sol üstte, yakınlaştırma düğmelerinin yanında; sağ üst İz analizi kartının. */}
+      <div className="absolute top-2.5 left-12 z-10 flex flex-col items-start gap-2">
         <div
           role="group"
           aria-label="Harita zemini"
@@ -137,7 +164,7 @@ export function HaritaPaneli() {
         )}
       </div>
 
-      {zones.status === "ready" && <Lejant withContacts={brief !== null} />}
+      {zones.status === "ready" && <Lejant />}
 
       {zones.status === "error" && (
         <div className="absolute inset-0 z-10 flex items-center justify-center">

@@ -6,6 +6,8 @@ Backend'in sanal ortamıyla ve backend klasöründe çalışır; veritabanına b
 
 import json
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 BACKEND = Path(__file__).resolve().parents[2] / "backend"
@@ -14,15 +16,16 @@ sys.path.insert(0, str(BACKEND))
 
 from app.agent.runner import EvaluationRunner  # noqa: E402
 from app.agent.service import EvaluationService  # noqa: E402
-from app.api.data import get_image, get_zones  # noqa: E402
+from app.api.data import get_image, get_zones, list_tracks  # noqa: E402
 from app.data_package import format_hhmm, read_package  # noqa: E402
 from app.db.repositories import InMemoryRepository  # noqa: E402
 from app.main import app  # noqa: E402
 from app.pipelines.geo import nearest_zone  # noqa: E402
-from app.schemas.api import ImageSummary  # noqa: E402
+from app.schemas.api import ContactLevel, ImageSummary  # noqa: E402
 from app.schemas.domain import Detection, ImageMeta, VehicleClass  # noqa: E402
 
 FIXTURES = FRONTEND / "tests" / "fixtures"
+# Veri paketi: depo köküyle yan yana ya da backend ayarındaki `data_dir`.
 STAGE2 = BACKEND.parent / "stage2"
 MOCK_PACKAGE = BACKEND / "tests" / "fixtures" / "mock_package"
 
@@ -39,6 +42,30 @@ LAST_LEVELS = {
     "img_008333": "low",
     "img_004423": "medium",
 }
+
+
+# `/tracks` seviyeleri gerçekte her görüntünün son değerlendirmesinden gelir; testler için bu
+# görüntülerde biten track'lere sabit seviye ve sınıf (kayıtlar gerçek veri).
+TRACK_LEVELS = {
+    "img_000860": ("high", "truck"),
+    "img_008333": ("low", "car"),
+    "img_004423": ("medium", "van"),
+    "img_004530": ("critical", "car"),
+}
+
+
+class FixtureStores:
+    """`list_tracks` için kayıt deposu: `contacts` görüntü → temas özetleri."""
+
+    def __init__(self, contacts: dict[str, list[ContactLevel]]) -> None:
+        self.contacts = contacts
+
+    @contextmanager
+    def open(self) -> Iterator[tuple["FixtureStores", None]]:
+        yield self, None
+
+    def latest_contacts(self) -> dict[str, list[ContactLevel]]:
+        return self.contacts
 
 
 class FakeDetector:
@@ -77,7 +104,11 @@ def main() -> None:
     events = [{"event": kind, "data": payload} for kind, payload in runner.stream("img_000860")]
     write(FIXTURES / "img_000860.events.json", events)
 
-    stage = InMemoryRepository(read_package(STAGE2))
+    from app.core.config import get_settings
+
+    stage = InMemoryRepository(
+        read_package(STAGE2 if STAGE2.exists() else get_settings().resolved_data_dir)
+    )
     zones = stage.zones()
     write(FIXTURES / "zones.json", get_zones(stage).model_dump(mode="json"))
     write(
@@ -96,6 +127,17 @@ def main() -> None:
         FIXTURES / "image_details.json",
         {m.image_id: get_image(m.image_id, stage).model_dump(mode="json") for m in stage.list_images()},
     )
+
+    bare = list_tracks(stage, FixtureStores({}))  # type: ignore[arg-type]
+    contacts: dict[str, list[ContactLevel]] = {}
+    for t in bare:
+        if t.image_id in TRACK_LEVELS:
+            level, label = TRACK_LEVELS[t.image_id]
+            contacts.setdefault(t.image_id, []).append(
+                ContactLevel(track_id=t.track_id, final_level=level, kind="matched", label=label)  # type: ignore[arg-type]
+            )
+    tracks = list_tracks(stage, FixtureStores(contacts))  # type: ignore[arg-type]
+    write(FIXTURES / "tracks.json", [t.model_dump(mode="json") for t in tracks])
 
 
 if __name__ == "__main__":

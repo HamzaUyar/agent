@@ -12,7 +12,7 @@ import type { Tema } from "@/lib/tema"
 export type Basemap = "uydu" | "sokak" | "duz"
 
 /** GeoJSON alan/çizgi katmanları; çizim sırası bu listenin sırasıdır. */
-export const AREA_LAYERS = ["bolge-alanlari", "ayak-izi", "us-halkalari", "rotalar"] as const
+export const AREA_LAYERS = ["bolge-alanlari", "ayak-izi", "us-halkalari", "izler", "rotalar"] as const
 export type AreaLayer = (typeof AREA_LAYERS)[number]
 
 /** Etiketli nokta işaretleri (erişilebilir düğmeler); gruplar üst üste bu sırayla çizilir. */
@@ -45,6 +45,10 @@ export type MapEvents = {
   /** Zemin yüklenemedi (ör. internet yok); harita düz zemine geçti. */
   onBasemapError: () => void
   onMarkerClick?: (group: MarkerGroup, id: string) => void
+  /** Etkileşimli bir alan katmanındaki (şimdilik `izler`) özelliğe tıklandı; boşluğa tıklamada `null`. */
+  onAreaClick?: (layer: AreaLayer, id: string | null) => void
+  /** Haritada hiçbir işarete ya da etkileşimli katmana denk gelmeyen tıklama. */
+  onMapClick?: () => void
 }
 
 export interface MapAdapter {
