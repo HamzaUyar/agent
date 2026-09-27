@@ -480,7 +480,9 @@ export interface components {
         };
         /**
          * ReportFinding
-         * @description Rapor kararı: bir iddianın bu değerlendirmedeki sonucu ve riske etkisi.
+         * @description Rapor kararı: bir iddianın bu değerlendirmedeki sonucu (app/reports_v2).
+         *
+         *     Rapor risk seviyesini değiştirmez; `effect` her zaman "none"dır (ön yüzle uyum için duruyor).
          */
         ReportFinding: {
             /** Claim Id */
@@ -510,13 +512,24 @@ export interface components {
              * @enum {string}
              */
             effect: "raises" | "lowers" | "none";
-            /**
-             * Time Check
-             * @enum {string}
-             */
-            time_check: "ok" | "mismatch" | "unknown";
             /** Reasoning */
             reasoning: string;
+            /** Detail Verdict */
+            detail_verdict?: string | null;
+            /**
+             * Dangerous Reassurance
+             * @default false
+             */
+            dangerous_reassurance: boolean;
+            /** Context Flags */
+            context_flags?: string[];
+            /**
+             * Needs Review
+             * @default false
+             */
+            needs_review: boolean;
+            /** Rule Verdict */
+            rule_verdict?: string | null;
         };
         /** RoutePoint */
         RoutePoint: {

@@ -1319,18 +1319,48 @@
             ],
             "title": "Effect"
           },
-          "time_check": {
-            "type": "string",
-            "enum": [
-              "ok",
-              "mismatch",
-              "unknown"
-            ],
-            "title": "Time Check"
-          },
           "reasoning": {
             "type": "string",
             "title": "Reasoning"
+          },
+          "detail_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Verdict"
+          },
+          "dangerous_reassurance": {
+            "type": "boolean",
+            "title": "Dangerous Reassurance",
+            "default": false
+          },
+          "context_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Context Flags"
+          },
+          "needs_review": {
+            "type": "boolean",
+            "title": "Needs Review",
+            "default": false
+          },
+          "rule_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Verdict"
           }
         },
         "type": "object",
@@ -1344,11 +1374,10 @@
           "verdict",
           "certainty",
           "effect",
-          "time_check",
           "reasoning"
         ],
         "title": "ReportFinding",
-        "description": "Rapor kararı: bir iddianın bu değerlendirmedeki sonucu ve riske etkisi."
+        "description": "Rapor kararı: bir iddianın bu değerlendirmedeki sonucu (app/reports_v2).\n\nRapor risk seviyesini değiştirmez; `effect` her zaman \"none\"dır (ön yüzle uyum için duruyor)."
       },
       "RoutePoint": {
         "properties": {

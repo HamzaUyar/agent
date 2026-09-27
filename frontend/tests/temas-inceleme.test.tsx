@@ -26,7 +26,8 @@ const REPORTS: ReportFinding[] = [
     verdict: "contradicts",
     certainty: "likely",
     effect: "raises",
-    time_check: "mismatch",
+    needs_review: false,
+    dangerous_reassurance: false,
     reasoning: "rapor saatinde noktanın 300 m içinde track yok",
   },
   {
@@ -39,7 +40,8 @@ const REPORTS: ReportFinding[] = [
     verdict: "unverifiable",
     certainty: "unverified",
     effect: "none",
-    time_check: "unknown",
+    needs_review: false,
+    dangerous_reassurance: false,
     reasoning: "zamanı ve konumu belirsiz",
   },
 ]
