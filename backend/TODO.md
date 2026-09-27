@@ -69,6 +69,9 @@ Hemen başlanabilecek iş maddesi yok; 13 gerçek 2. aşama verisini bekliyor.
 - [x] Hareket iddiasını track eğilimiyle, "uzun süredir yerinde" iddiasını duraklama süresiyle, sayı iddiasını tespit sayısıyla karşılaştır (R15)
 - [ ] Yoğunluk iddiaları ("olağan trafik 4 araç, beklenmedik yoğunluk"): `claim_behavior` enum'una `congestion` + olağan sayı, migration 09, parser prompt'u, 137 raporu `parse_reports --force` ile yeniden ayrıştır (2 rapor; düşük öncelik)
 - [ ] Kalan 18 tip çelişkisinin hepsi "kamyon" ↔ modelin otomobil/minibüs dediği araç: model hatası mı tuzak mı, birkaç kırpmayı gözle kontrol et (VLM ile tip doğrulaması?)
+- [x] Tespit modelinin görmediği araca (kaçırılmış temas) bağlanan raporda GLM ile kör bakış; bilgi notu, karara girmez (`reports_v2.agents.look_at_track`, `REPORT_LOOK`)
+- [ ] 132: 4 ondalıklı rapor koordinatı en yakın track'e (T0073, tespitsiz) bağlanıyor; altın cevaptaki kamyon 6 m ötedeki T0081. Bağlamada tip uyan aday tercih edilmeli mi?
+- [ ] GLM şema sarmalı açıldı: genel `vision` zincirine (renk/yük, zayıf tespit) glm_org'u geri almayı değerlendir
 - [ ] Kayıt dışı temasa bağlanan çelişkili raporun etkisini temasa uygula (ADR-0003 TODO)
 - [ ] Brief'te gün boyu geçerli doğrulanamaz iddiaları (tatbikat, söylenti) tek satırda özetle
 

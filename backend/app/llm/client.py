@@ -196,6 +196,17 @@ def strip_code_fence(text: str) -> str:
     return match.group(1) if match else text
 
 
+def parse_schema_json(text: str, schema: type[T]) -> T:
+    """Cevabı şemaya göre okur. glm-5.3-flash görüntülü istekte cevabı şemanın biçimine sarıyor
+    (`{"description": ..., "properties": {...}}`); alanlar `properties` içindeyse oradan okunur."""
+    data = json.loads(strip_code_fence(text))
+    inner = data.get("properties") if isinstance(data, dict) else None
+    fields = schema.model_fields
+    if isinstance(inner, dict) and not fields.keys() & data.keys() and fields.keys() & inner.keys():
+        data = inner
+    return schema.model_validate(data)
+
+
 # Karar ve VLM çağrıları 45 / 30 sn'de bırakılır, ama istek arka planda sürer ve gateway'in
 # 4 eşzamanlı yerinden birini tutar; SDK varsayılanı (600 sn) yerine bu sürede kesilir.
 REQUEST_TIMEOUT_S = 60.0
@@ -289,7 +300,7 @@ class OpenAICompatibleProvider:
         text = self._message(response, model_id).content
         if not text:
             raise ValueError(f"{model_id} boş cevap döndürdü")
-        return schema.model_validate_json(strip_code_fence(text))
+        return parse_schema_json(text, schema)
 
     def chat(
         self,

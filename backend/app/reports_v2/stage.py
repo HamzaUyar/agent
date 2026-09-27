@@ -10,6 +10,11 @@ Politika (ADR-0002'nin sıkılaştırılmış hali):
 - Kimlik iddiası (dost, ikmal, bize bağlı, devriye) "tutarlı" sayılamaz; en fazla doğrulanamaz.
 - Kural kesin bir çelişki bulduğu hâlde LLM çelişki demediyse (ya da tersi) rapor operatöre
   "incelenmeli" diye gösterilir.
+- Rapora bağlanan araç tespit modelince görülmediyse (kaçırılmış temas) operatöre iki bilgi
+  notu düşülür; ikisi de karara ve LLM girdisine girmez: track'in birkaç metre yakınında
+  eşleşmemiş bir tespit varsa o (`evidence.nearby_detection`), yoksa ve iddia tip, renk ya da
+  yük söylüyorsa GLM'in araca raporu görmeden bakışı (`agents.look_at_track`,
+  `REPORT_LOOK`). Gerçek veride görsel bakışı kanıt saymak bir raporu kötüleştirdi.
 """
 
 import logging
@@ -20,6 +25,7 @@ from datetime import time
 from pathlib import Path
 from typing import Any
 
+from app.core.config import get_settings
 from app.data_package import to_minutes
 from app.db.repositories import DataRepository
 from app.llm.client import LLMRouter
@@ -31,6 +37,7 @@ from app.reports_v2.verdict import ReportVerdict
 from app.schemas.api import Certainty, Verdict
 from app.schemas.claims import ClaimRecord
 from app.schemas.domain import DataPackage, GeoPoint, ImageMeta
+from app.storage import SupabaseStorage, resolve_image_file
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +66,10 @@ class VerifiedReport:
     track_id: str | None
     needs_review: bool
     model: str | None = None
+    visual: dict[str, Any] | None = None
+    """Tipi bilinmeyen araca GLM bakışı (bilgi notu; yalnızca bakıldıysa)."""
+    nearby: dict[str, Any] | None = None
+    """Tipi bilinmeyen aracın birkaç metre yakınındaki eşleşmemiş tespit (bilgi notu)."""
 
 
 @dataclass
@@ -72,6 +83,10 @@ class ReportVerifier:
     cache_path: Path | None = None
     store: agents.VerdictCache | None = None
     """Verilirse (Supabase) önbellek ve kayıt burası; yoksa `cache_path` dosyası ya da bellek."""
+    storage: SupabaseStorage | None = None
+    """Görüntü dosyası yerelde yoksa görsel bakış için buradan indirilir."""
+    look: bool = field(default_factory=lambda: get_settings().report_look)
+    """Tipi bilinmeyen araca GLM'le bakılsın mı (`REPORT_LOOK`)."""
     _data: ev.Data | None = field(default=None, init=False, repr=False)
     _cache: agents.VerdictCache | None = field(default=None, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
@@ -173,6 +188,9 @@ class ReportVerifier:
             llm: ReportVerdict | None = None
             model: str | None = None
             key: str | None = None
+            linked = ev.linked_contact(dossier)
+            nearby = linked.get("yakindaki_eslesmemis_tespit") if linked else None
+            visual = None if nearby else self._look(dossier, linked, rec)
             if self.router is not None:
                 try:
                     compact = ev.compact(dossier)
@@ -180,16 +198,48 @@ class ReportVerifier:
                     model = models[0] if models else None
                 except Exception:
                     llm = None
-            return _Judged(rule, llm, _linked_track(dossier), model, key, dossier)
+            return _Judged(rule, llm, _linked_track(dossier), model, key, dossier, visual, nearby)
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             done = list(pool.map(judge, relevant))
         results: list[VerifiedReport] = []
         for rec, j in zip(relevant, done, strict=True):
             final, review = combine(j.rule, j.llm, rec.report.text)
-            results.append(VerifiedReport(rec, final, j.rule, j.llm, j.track, review, j.model))
+            results.append(
+                VerifiedReport(
+                    rec, final, j.rule, j.llm, j.track, review, j.model, j.visual, j.nearby
+                )
+            )
             self._record(rec, image, j, final, review)
         return results
+
+    def _look(
+        self, dossier: dict[str, Any], linked: dict[str, Any] | None, rec: ClaimRecord
+    ) -> dict[str, Any] | None:
+        """Bağlanan araç tespit modelince görülmediyse ve iddia görsel bir özellik söylüyorsa
+        GLM'in araca bakışı (bilgi notu); aksi hâlde ya da bakılamazsa `None`."""
+        c = rec.claim
+        claims_looks = c.vehicle_type not in (None, "unknown") or bool(c.color) or c.cargo
+        if (
+            not self.look
+            or self.router is None
+            or not claims_looks
+            or linked is None
+            or linked["tespit_tipi"] != ev.NOT_DETECTED
+            or not str(linked["iz"]).startswith("T")
+        ):
+            return None
+        data = self.data()
+        img = next(i for i in data.package.images if i.image_id == dossier["gorsel"]["id"])
+        path = resolve_image_file(self.images_dir, img, self.storage)
+        if path is None:
+            return None
+        try:
+            crop = ev.track_crop(data, img, linked["iz"], path)
+        except OSError:
+            logger.warning("görsel bakış atlandı: %s okunamadı", path.name)
+            return None
+        return agents.look_at_track(self.router, self.cache(), crop)
 
     def _record(
         self, rec: ClaimRecord, image: ImageMeta, j: "_Judged", final: ReportVerdict, review: bool
@@ -223,6 +273,8 @@ class _Judged:
     model: str | None
     key: str | None
     dossier: dict[str, Any]
+    visual: dict[str, Any] | None = None
+    nearby: dict[str, Any] | None = None
 
 
 def _linked_track(dossier: dict[str, Any]) -> str | None:

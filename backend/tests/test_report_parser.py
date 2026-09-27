@@ -265,6 +265,8 @@ def test_task_routing_comes_from_the_models_file() -> None:
     # EVREN yedektir. VLM zincirinde GLM yok (görüntülü istekte şemaya uymuyor).
     assert chains.pop("vision")[0] == "qwen3-vl-30b"
     assert "glm-5.3-flash" not in [CONFIG.models[n].model_id for n in CONFIG.tasks["vision"]]
+    # Rapor doğrulamadaki görsel bakış yalnızca organizatör gateway'inden (EVREN yok).
+    assert chains.pop("look") == ["glm-5.3-flash"]
     for task, chain in chains.items():
         assert chain[0] == "glm-5.3-flash", task
         assert CONFIG.models[CONFIG.tasks[task][0]].provider == "glm", task
@@ -316,3 +318,16 @@ def test_affirmative_heavy_vehicle_claim_is_kept() -> None:
     [c] = parser(llm).parse(report("39.9253N 32.8718E cevresinde 1 agir arac bulunuyor.")).claims
 
     assert c.vehicle_type == "heavy"
+
+
+def test_a_json_answer_wrapped_in_the_schema_shape_is_unwrapped() -> None:
+    from app.llm.client import parse_schema_json
+
+    class Look(BaseModel):
+        tip: str
+        emin: str
+
+    wrapped = '{"description": "kamyon gibi", "properties": {"tip": "kamyon", "emin": "orta"}}'
+
+    assert parse_schema_json(wrapped, Look) == Look(tip="kamyon", emin="orta")
+    assert parse_schema_json('```json\n{"tip": "a", "emin": "b"}\n```', Look).tip == "a"

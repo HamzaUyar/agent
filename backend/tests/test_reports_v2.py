@@ -18,7 +18,14 @@ from app.reports_v2 import rules
 from app.reports_v2.stage import combine
 from app.reports_v2.verdict import ReportVerdict
 from app.schemas.claims import ClaimRecord, ReportClaim
-from app.schemas.domain import Detection, FieldReport, ImageMeta, ReportSource, VehicleClass
+from app.schemas.domain import (
+    Detection,
+    FieldReport,
+    GeoPoint,
+    ImageMeta,
+    ReportSource,
+    VehicleClass,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 PACKAGE = read_package(FIXTURE)
@@ -251,7 +258,9 @@ class ReportLLM:
         return schema.model_validate(self.reply)
 
 
-def service(claims: list[ClaimRecord], provider: ReportLLM | None = None) -> EvaluationService:
+def service(
+    claims: list[ClaimRecord], provider: Any = None, images_dir: Path = FIXTURE / "images"
+) -> EvaluationService:
     router = None
     if provider is not None:
         config = load_model_config()
@@ -260,7 +269,7 @@ def service(claims: list[ClaimRecord], provider: ReportLLM | None = None) -> Eva
         }
         router = LLMRouter(config, providers)
     repo = InMemoryRepository(PACKAGE, claims=claims)
-    return EvaluationService(repo, FakeDetector(), router=router, images_dir=FIXTURE / "images")
+    return EvaluationService(repo, FakeDetector(), router=router, images_dir=images_dir)
 
 
 OLAGAN = ClaimRecord(
@@ -328,6 +337,235 @@ def test_a_dangerous_reassurance_is_at_least_a_contradiction() -> None:
     final, _ = combine(rule, verdict("partial", "lowers_risk"), "hareketleri olagan")
 
     assert (final.verdict, final.dangerous_reassurance) == ("contradicts", True)
+
+
+# --- tespit modelinin görmediği araca görsel bakış ------------------------------------------
+
+T0032_AT_1410 = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(14, 10)
+)
+TRUCK_AT_T0032 = ClaimRecord(
+    6,
+    FieldReport(time(13, 30), ReportSource.OFFICIAL, "1 kamyon duruyor"),
+    claim(lat=T0032_AT_1410.lat, lon=T0032_AT_1410.lon, vehicle_type="truck"),
+)
+
+
+class LookingLLM:
+    """VLM bakışına ve rapor kararına şemaya göre cevap verir; gelen mesajları saklar."""
+
+    def __init__(self, look: dict[str, Any], decision: dict[str, Any]) -> None:
+        self.look, self.decision = look, decision
+        self.images: list[bytes] = []
+        self.users: list[str] = []
+
+    def is_available(self) -> bool:
+        return True
+
+    def complete_json(
+        self,
+        model_id: str,
+        system: str,
+        user: str,
+        schema: type[BaseModel],
+        max_tokens: int,
+        extra_body: object = None,
+        image: bytes | None = None,
+    ) -> BaseModel:
+        from app.reports_v2.agents import VehicleLook
+
+        if schema is VehicleLook:
+            assert image is not None
+            self.images.append(image)
+            return schema.model_validate(self.look)
+        if schema is not ReportVerdict:
+            raise RuntimeError("yalnızca rapor doğrulama")
+        self.users.append(user)
+        return schema.model_validate(self.decision)
+
+
+def frame(tmp_path: Path) -> Path:
+    from PIL import Image
+
+    Image.new("RGB", (960, 540), (90, 90, 90)).save(tmp_path / "img_000860.jpg")
+    return tmp_path
+
+
+LOOK = {
+    "arac_var": "evet",
+    "tip": "kamyon",
+    "emin": "orta",
+    "renk": "beyaz",
+    "yuk": "görünmüyor",
+    "goruntu_kalitesi": "net",
+}
+
+
+def test_an_undetected_vehicle_is_looked_at_blind_and_the_look_is_only_a_note(
+    tmp_path: Path,
+) -> None:
+    llm = LookingLLM(
+        LOOK,
+        {
+            "verdict": "consistent",
+            "harm": "none",
+            "dangerous_reassurance": False,
+            "checks": [],
+            "reasoning": "görsel incelemede kamyon",
+        },
+    )
+
+    brief = service([TRUCK_AT_T0032], llm, frame(tmp_path)).run("img_000860")
+
+    [f] = brief.report_findings
+    # Karar ve kesinlik doğrulama LLM'inin; bakış yalnızca not.
+    assert (f.track_id, f.verdict, f.certainty) == ("T0032", "consistent", "certain")
+    assert "görsel incelemede kamyon (eminlik orta, karara girmedi)" in f.reasoning
+    assert len(llm.images) == 1
+    [user] = llm.users
+    assert "gorsel_inceleme" not in user  # doğrulama LLM'inin girdisi değişmez
+
+
+def test_a_detected_vehicle_or_a_claim_without_looks_is_not_looked_at(tmp_path: Path) -> None:
+    decision = {
+        "verdict": "consistent",
+        "harm": "none",
+        "dangerous_reassurance": False,
+        "checks": [],
+        "reasoning": "r",
+    }
+    no_type = ClaimRecord(
+        7,
+        FieldReport(time(13, 30), ReportSource.OFFICIAL, "1 arac duruyor"),
+        claim(lat=T0032_AT_1410.lat, lon=T0032_AT_1410.lon, behavior="stationary"),
+    )
+    detected = ClaimRecord(
+        8,
+        FieldReport(time(13, 30), ReportSource.OFFICIAL, "1 kamyon"),
+        claim(vehicle_type="truck"),
+    )
+    llm = LookingLLM(LOOK, decision)
+
+    service([no_type, detected], llm, frame(tmp_path)).run("img_000860")
+
+    assert llm.images == []
+
+
+def test_a_look_that_sees_no_vehicle_type_leaves_no_note(tmp_path: Path) -> None:
+    decision = {
+        "verdict": "unverifiable",
+        "harm": "none",
+        "dangerous_reassurance": False,
+        "checks": [],
+        "reasoning": "r",
+    }
+    llm = LookingLLM(LOOK | {"arac_var": "belirsiz", "tip": "belirsiz"}, decision)
+
+    brief = service([TRUCK_AT_T0032], llm, frame(tmp_path)).run("img_000860")
+
+    [f] = brief.report_findings
+    assert len(llm.images) == 1
+    assert "görsel incelemede" not in f.reasoning
+
+
+def test_the_look_can_be_turned_off(tmp_path: Path) -> None:
+    from app.reports_v2.stage import ReportVerifier
+
+    llm = LookingLLM(
+        LOOK,
+        {
+            "verdict": "unverifiable",
+            "harm": "none",
+            "dangerous_reassurance": False,
+            "checks": [],
+            "reasoning": "r",
+        },
+    )
+    svc = service([TRUCK_AT_T0032], llm, frame(tmp_path))
+    off = ReportVerifier(svc.repository, FakeDetector(), svc.router, tmp_path, look=False)
+    svc = EvaluationService(svc.repository, FakeDetector(), router=svc.router, report_verifier=off)
+
+    [f] = svc.run("img_000860").report_findings
+
+    assert llm.images == []
+    assert "görsel incelemede" not in f.reasoning
+
+
+def test_a_look_is_shown_only_when_a_vehicle_type_is_seen() -> None:
+    from app.reports_v2.agents import usable
+
+    assert usable(LOOK)
+    assert usable(LOOK | {"emin": "düşük"})  # eminlik notta yazar
+    assert not usable(LOOK | {"tip": "belirsiz"})
+    assert not usable(LOOK | {"arac_var": "belirsiz"})
+
+
+def test_an_unmatched_detection_a_few_metres_from_a_bare_track_is_shown_as_likely_the_same() -> (
+    None
+):
+    from app.reports_v2.evidence import Contact, nearby_detection
+
+    bare = Contact("T0032", None, None, T0032_AT_1410)
+    at = GeoPoint(T0032_AT_1410.lat, T0032_AT_1410.lon + 0.00006)
+    close = Contact(None, "truck", 0.43, at, (950, 383, 30, 31))
+    # Aynı kutuda, bir piksel daha yakın ama düşük güvenli ikinci sınıf.
+    dup_at = GeoPoint(T0032_AT_1410.lat, T0032_AT_1410.lon + 0.000059)
+    dup = Contact(None, "van", 0.12, dup_at, (948, 384, 32, 31))
+    # Birkaç metre ötede, güveni daha yüksek başka bir araç.
+    other_at = GeoPoint(T0032_AT_1410.lat, T0032_AT_1410.lon + 0.00007)
+    other = Contact(None, "car", 0.52, other_at, (948, 371, 25, 21))
+    far = Contact(None, "car", 0.9, GeoPoint(T0032_AT_1410.lat, T0032_AT_1410.lon + 0.0002))
+    matched = Contact("T0122", "truck", 0.9, T0032_AT_1410)
+
+    found = nearby_detection(bare, [bare, dup, other, close, far, matched])
+
+    assert found is not None
+    assert (found["tip"], found["guven"]) == ("truck", 0.43)
+    assert 4 < found["track_noktasina_uzaklik_m"] < 6
+    assert nearby_detection(bare, [bare, far, matched]) is None  # 17 m: başka araç
+    assert nearby_detection(matched, [close]) is None  # tespiti olan track'e bakılmaz
+    # Başka bir track'e eşleşmiş kamyonun yinelenen kutusu aday değildir.
+    other_truck = Contact("T0081", "truck", 0.43, other_at, (950, 383, 30, 31))
+    assert nearby_detection(bare, [bare, other_truck, dup]) is None
+
+
+class NearbyDetector(FakeDetector):
+    """T0032'nin 5,1 m doğusunda, track'le eşleşmeyen bir truck tespiti (T0073 gibi)."""
+
+    def detect(self, image: ImageMeta) -> list[Detection]:
+        from app.reports_v2.evidence import geo_to_pixel
+
+        if image.image_id != "img_000860":
+            return []
+        x, y = geo_to_pixel(image, GeoPoint(T0032_AT_1410.lat, T0032_AT_1410.lon + 0.00006))
+        near = Detection(label=VehicleClass.TRUCK, confidence=0.43, x=x - 15, y=y - 15, w=30, h=30)
+        return [TRUCK, near]
+
+
+def test_a_nearby_detection_is_a_note_on_the_report_and_no_look_is_made(
+    tmp_path: Path,
+) -> None:
+    decision = {
+        "verdict": "consistent",
+        "harm": "none",
+        "dangerous_reassurance": False,
+        "checks": [],
+        "reasoning": "yakındaki tespit kamyon",
+    }
+    llm = LookingLLM(LOOK | {"emin": "düşük"}, decision)
+    svc = service([TRUCK_AT_T0032], llm, frame(tmp_path))
+    svc = EvaluationService(
+        svc.repository, NearbyDetector(), router=svc.router, images_dir=tmp_path
+    )
+
+    brief = svc.run("img_000860")
+
+    [f] = brief.report_findings
+    assert (f.track_id, f.verdict, f.certainty) == ("T0032", "consistent", "certain")
+    assert "5,1 m ötede truck tespiti var (olası aynı araç, karara girmedi)" in f.reasoning
+    assert llm.images == []  # yakında tespit varken görsel bakış yok
+    [user] = llm.users
+    assert "yakindaki_eslesmemis_tespit" not in user
 
 
 # --- Supabase deposu --------------------------------------------------------------------

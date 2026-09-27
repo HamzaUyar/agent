@@ -29,6 +29,13 @@ COUNT_M = 75.0
 """Sayı ve tip iddiaları için noktanın çevresinde sayım yarıçapı."""
 ZONE_WINDOW_MIN = 10
 APPROACH_M = 300.0
+NOT_DETECTED = "tespit edilemedi"
+"""Kanıt dosyasında tespit modelinin görmediği aracın tipi (kaçırılmış temas)."""
+NEARBY_M = 8.0
+"""Kaçırılmış temasın bu kadar yakınındaki eşleşmemiş tespit "olası aynı araç" diye gösterilir.
+Eğik görüntüde doğrusal dönüşüm track noktasını aracın birkaç metre yanına düşürüyor; gerçek
+veride T0073'ün kamyonu 5,1 m ötede kaldı ve 5 m eşleşme eşiğini kıl payı geçti. Eşleşme
+eşiği risk motorunu da etkilediği için gevşetilmedi; yalnızca rapor kanıtında gösteriliyor."""
 
 
 @dataclass
@@ -37,6 +44,8 @@ class Contact:
     label: str | None
     confidence: float | None
     location: GeoPoint
+    box: tuple[float, float, float, float] | None = None
+    """Tespit kutusu (x, y, w, h; piksel); track'ten gelen temasta yok."""
 
 
 @dataclass
@@ -129,6 +138,10 @@ def motion(data: Data, track_id: str, minute: int) -> dict[str, Any]:
     }
 
 
+def _box(d: dict[str, Any]) -> tuple[float, float, float, float]:
+    return (float(d["x"]), float(d["y"]), float(d["w"]), float(d["h"]))
+
+
 def contacts_at_capture(data: Data, img: ImageMeta) -> list[Contact]:
     """Çekim anındaki temaslar: bu anda biten track'ler (tespitle eşleşmişse tipiyle) ve
     track'i olmayan tespitler."""
@@ -161,13 +174,13 @@ def contacts_at_capture(data: Data, img: ImageMeta) -> list[Contact]:
         used_d.add(i)
         used_t.add(tid)
         d = dets[i][0]
-        out.append(Contact(tid, str(d["label"]), float(d["confidence"]), track_pts[tid]))
+        out.append(Contact(tid, str(d["label"]), float(d["confidence"]), track_pts[tid], _box(d)))
     for tid, loc in track_pts.items():
         if tid not in used_t:
             out.append(Contact(tid, None, None, loc))
     for i, (d, loc) in enumerate(dets):
         if i not in used_d:
-            out.append(Contact(None, str(d["label"]), float(d["confidence"]), loc))
+            out.append(Contact(None, str(d["label"]), float(d["confidence"]), loc, _box(d)))
     return out
 
 
@@ -212,6 +225,79 @@ def crop(
     buf = io.BytesIO()
     out.save(buf, format="JPEG", quality=88)
     return buf.getvalue()
+
+
+CROP_HALF_PX = 128
+"""Görsel bakış kırpıntısının yarı kenarı (piksel). Gerçek veride denendi (27 Eylül, GLM, 2 rapor
+× 3 koşu): halkalı 40 m, işaretsiz ±64 px ve artı işaretli ±128 px arasında en tutarlı cevap
+işaretsiz ±128 px'te geldi. Eğik görüntüde track noktası aracın birkaç metre yanına düşebildiği
+için daha dar kare aracı dışarıda bırakıyordu."""
+
+
+def track_crop(data: Data, img: ImageMeta, track_id: str, path: Path, size: int = 512) -> bytes:
+    """Kaçırılmış temasın çekim anındaki konumu kare ortasında (görsel bakış için), işaretsiz."""
+    cap = to_minutes(img.capture_time)
+    p = next(p for p in reversed(data.tracks[track_id]) if to_minutes(p.time) <= cap)
+    x, y = geo_to_pixel(img, p.location)
+    h = CROP_HALF_PX
+    with Image.open(path) as im:
+        # Kenara yakın noktada kare görüntünün dışına taşar; taşan kısım siyah kalır, nokta ortada.
+        out = im.convert("RGB").crop((int(x) - h, int(y) - h, int(x) + h, int(y) + h))
+    out = out.resize((size, size), Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    out.save(buf, format="JPEG", quality=90)
+    return buf.getvalue()
+
+
+DUPLICATE_IOU = 0.5
+"""Bu kadar örtüşen iki tespit kutusu aynı araçtır."""
+
+
+def _iou(
+    a: tuple[float, float, float, float] | None, b: tuple[float, float, float, float] | None
+) -> float:
+    if a is None or b is None:
+        return 0.0
+    w = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
+    h = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
+    inter = max(0.0, w) * max(0.0, h)
+    union = a[2] * a[3] + b[2] * b[3] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def nearby_detection(c: Contact, contacts: list[Contact]) -> dict[str, Any] | None:
+    """Tespiti olmayan bir track'e `NEARBY_M` içindeki en yakın eşleşmemiş tespit. Model aynı
+    araca farklı sınıflarla üst üste kutular verebiliyor (T0073: truck 0,43, car ve van 0,12 aynı
+    kutuda); örtüşen kutulardan güveni en yüksek olanı kalır, sonra en yakını seçilir. Başka bir
+    track'e eşleşmiş tespitle örtüşen kutu o aracın yinelenmesidir, aday değildir: T0073'ün
+    5 m yanındaki car/van 0,12 kutuları T0081'in kamyonuydu."""
+    if c.track_id is None or c.label is not None:
+        return None
+    candidates = sorted(
+        (
+            o
+            for o in contacts
+            if o.track_id is None
+            and o.label is not None
+            and distance_m(o.location, c.location) <= NEARBY_M
+        ),
+        key=lambda o: -(o.confidence or 0.0),
+    )
+    tracked = [o.box for o in contacts if o.track_id is not None and o.box is not None]
+    kept: list[Contact] = []
+    for o in candidates:
+        taken = [k.box for k in kept] + tracked
+        if not any(_iou(o.box, b) > DUPLICATE_IOU for b in taken):
+            kept.append(o)
+    if not kept:
+        return None
+    o = min(kept, key=lambda o: distance_m(o.location, c.location))
+    d = distance_m(o.location, c.location)
+    return {
+        "tip": o.label,
+        "guven": None if o.confidence is None else round(o.confidence, 2),
+        "track_noktasina_uzaklik_m": round(d, 1),
+    }
 
 
 def _image_of(data: Data, p: GeoPoint) -> ImageMeta | None:
@@ -328,8 +414,9 @@ def dossier_for(
             "rapor_cekimden_once_dk": cap - minute,
             "kalite": image_quality(data, img),
         }
+        at_capture = contacts_at_capture(data, img)
         contacts = sorted(
-            ((distance_m(c.location, point), c) for c in contacts_at_capture(data, img)),
+            ((distance_m(c.location, point), c) for c in at_capture),
             key=lambda x: x[0],
         )
         near = [(d, c) for d, c in contacts if d <= POINT_M]
@@ -337,8 +424,13 @@ def dossier_for(
             {
                 "iz": c.track_id or "track yok (park etmiş olabilir)",
                 "noktaya_uzaklik_m": round(d, 1),
-                "tespit_tipi": c.label or "tespit edilemedi",
+                "tespit_tipi": c.label or NOT_DETECTED,
                 "tespit_guveni": None if c.confidence is None else round(c.confidence, 2),
+                **(
+                    {"yakindaki_eslesmemis_tespit": nb}
+                    if (nb := nearby_detection(c, at_capture))
+                    else {}
+                ),
                 **(
                     {
                         "hareket_cekim_aninda": motion(data, c.track_id, cap),
@@ -363,7 +455,7 @@ def dossier_for(
             "yaricap_m": radius,
             "arac_sayisi": len(within),
             "agir_arac_sayisi": sum(1 for c in within if c.label in HEAVY),
-            "tipler": sorted(c.label or "tespit edilemedi" for c in within),
+            "tipler": sorted(c.label or NOT_DETECTED for c in within),
         }
         out["en_yakin_arac_m"] = round(contacts[0][0], 1) if contacts else None
         out["gorselde_toplam_arac"] = len(contacts)
@@ -383,6 +475,19 @@ def point_of(data: Data, report_id: int) -> tuple[ImageMeta, GeoPoint] | None:
     p = GeoPoint(float(m.group(1)), float(m.group(3)))
     img = _image_of(data, p)
     return None if img is None else (img, p)
+
+
+def linked_contact(d: dict[str, Any]) -> dict[str, Any] | None:
+    """Rapor noktasına koordinat hassasiyeti içinde (5 ondalıkta 15 m, 4 ondalıkta 35 m) en yakın
+    temas; koordinatlı ve görüntülü olmayan raporda `None`."""
+    if d.get("konum_turu") != "koordinat" or not d.get("gorsel"):
+        return None
+    near: list[dict[str, Any]] = d["noktadaki_temaslar_cekim_aninda"]
+    return next((c for c in near if c["noktaya_uzaklik_m"] <= bind_radius(d)), None)
+
+
+def bind_radius(d: dict[str, Any]) -> float:
+    return 15.0 if d["koordinat_ondalik"] >= 5 else 35.0
 
 
 def compact(d: dict[str, Any]) -> dict[str, Any]:
@@ -406,9 +511,9 @@ def compact(d: dict[str, Any]) -> dict[str, Any]:
             "gorsel",
         )
     }
-    bind = 15.0 if d["koordinat_ondalik"] >= 5 else 35.0
+    bind = bind_radius(d)
     near = d["noktadaki_temaslar_cekim_aninda"]
-    linked = next((c for c in near if c["noktaya_uzaklik_m"] <= bind), None)
+    linked = linked_contact(d)
     if linked is None:
         out["baglanan_arac"] = None
         out["noktada_arac_yok"] = {

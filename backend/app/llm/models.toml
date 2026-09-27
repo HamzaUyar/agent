@@ -3,7 +3,8 @@
 # Metin görevleri organizatörlerin gateway'indeki glm-5.3-flash ile başlar (görev tanımı s4).
 # GLM_API_KEY yoksa ya da bütçe dolduysa EVREN'e geçilir. VLM zincirinde GLM yok: görüntülü
 # istekte şemaya uyan JSON yerine şemanın kendisini döndürüyor (27 Eylül), her çağrıya
-# 10-15 sn boşa bekleme ekliyordu. EVREN'deki glm-5.3 görüntü almıyor.
+# 10-15 sn boşa bekleme ekliyordu. EVREN'deki glm-5.3 görüntü almıyor. Sonradan görüldü: şemanın
+# kendisi değil, cevap `properties` içine sarılmış; client artık açıyor (`look` görevi kullanıyor).
 
 # --- EVREN (SSB, https://evren-llmapi.ssyz.org.tr/v1) ---------------------------
 [models.glm53]
@@ -53,6 +54,9 @@ model_id = "claude-opus-5-5"
 [tasks]
 report_parse = ["glm_org", "glm53", "deepseek", "haiku"]
 vision = ["qwen_vl", "gemma", "deepseek", "sonnet"]
+# Rapor doğrulamada tespit modelinin görmediği araca görsel bakış (reports_v2.agents): yalnızca
+# organizatör gateway'i. Görüntülü cevabı şema biçimine sarıyor; client `properties`'i açıyor.
+look = ["glm_org"]
 reasoning = ["glm_org", "glm53", "deepseek", "opus"]
 # Rapor doğrulama (app/reports_v2): rapor başına tek çağrı, kanıt dosyasıyla karar.
 report_verify = ["glm_org", "glm53", "deepseek", "opus"]

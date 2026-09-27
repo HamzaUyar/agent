@@ -22,6 +22,7 @@ from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector
 from app.reports_v2.stage import ReportVerifier
 from app.schemas.api import Brief, ChatRequest, EvaluationRecord, EvaluationRequest
+from app.storage import build_storage
 
 router = APIRouter(tags=["evaluations"])
 
@@ -47,7 +48,10 @@ def _report_verifier(request: Request, repo: DataRepository, detector: Detector)
         cache = data_dir / "report_verdicts_cache.json"
         # Supabase'te sonuçlar ekibin ortak tablosunda (report_verifications); pakette dosyada.
         store = ReportVerificationStore(connect) if settings.data_source == "supabase" else None
-        current = ReportVerifier(repo, detector, state.router, data_dir / "images", cache, store)
+        storage = build_storage(settings) if settings.data_source == "supabase" else None
+        current = ReportVerifier(
+            repo, detector, state.router, data_dir / "images", cache, store, storage
+        )
         state.report_verifier = current
     return current
 

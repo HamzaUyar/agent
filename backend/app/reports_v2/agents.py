@@ -13,6 +13,7 @@ Bütün LLM cevapları önbelleğe yazılır; aynı girdiyle tekrar çağrılmaz
 
 import hashlib
 import json
+import logging
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -23,6 +24,8 @@ from pydantic import BaseModel, Field
 from app.llm.client import LLMRouter
 from app.reports_v2 import evidence as ev
 from app.reports_v2.verdict import ReportVerdict, VerdictLabel, normalize_flags
+
+logger = logging.getLogger(__name__)
 
 PROMPTS = Path(__file__).parent / "prompts"
 POLICY = (PROMPTS / "policy.md").read_text(encoding="utf-8")
@@ -87,6 +90,47 @@ class VisualCheck(BaseModel):
     araclar: list[VisualObject]
     goruntu_kalitesi: Literal["net", "bulanık", "karanlık"]
     not_: str = Field(alias="not", default="")
+
+
+class VehicleLook(BaseModel):
+    """Kaçırılmış temasın kırpıntısına kör bakış: VLM raporu görmez."""
+
+    arac_var: Literal["evet", "hayır", "belirsiz"]
+    tip: Literal["otomobil", "panelvan", "kamyon", "otobüs", "belirsiz"]
+    emin: Literal["yüksek", "orta", "düşük"]
+    renk: str | None
+    yuk: Literal["yüklü", "boş", "örtülü", "görünmüyor"] | None
+    goruntu_kalitesi: Literal["net", "bulanık", "karanlık"]
+
+
+LOOK_TASK = "look"
+"""Organizatör gateway'indeki glm-5.3-flash (`models.toml`). Gerçek veride EVREN VLM'leri aynı
+kırpıntıya uydurma tipler verdi (yük yığınına "panelvan, yüksek eminlik"); GLM emin
+olmadığında "belirsiz" diyor (27 Eylül, 2 rapor × 4 koşu)."""
+
+
+def look_at_track(router: LLMRouter, cache: VerdictCache, image: bytes) -> dict[str, Any] | None:
+    """Tipi bilinmeyen temasa GLM ile bakar; sonuç operatöre bilgi notudur, karara girmez
+    (gerçek veride kanıt olarak kullanılınca bir raporu kötüleştirdi). Rapor metni verilmez:
+    model "kamyon" dendiği için kamyon görmesin. Araç ya da tip görülmediyse ya da
+    bakılamazsa `None`."""
+    system = (PROMPTS / "vision_track.md").read_text(encoding="utf-8")
+    user = "Karenin ortasındaki aracı incele."
+    try:
+        r = _complete(router, cache, LOOK_TASK, system, user, VehicleLook, "look", image=image)
+    except Exception as exc:  # görsel inceleme opsiyonel
+        logger.warning("temasa görsel bakış yapılamadı: %s", exc)
+        return None
+    look: dict[str, Any] = r["out"]
+    if not usable(look):
+        logger.info("görsel bakış kullanılmadı: %s", look)
+        return None
+    return {**look, "model": r["model"]}
+
+
+def usable(look: dict[str, Any]) -> bool:
+    """Bakış ancak araç görüldüyse ve tipi seçildiyse gösterilir; eminlik notta yazar."""
+    return bool(look["arac_var"] == "evet") and look["tip"] != "belirsiz"
 
 
 class Revision(BaseModel):

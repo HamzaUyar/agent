@@ -23,6 +23,7 @@ from app.agent.decision import DecisionUnavailableError, decide
 from app.core.rules import DetectionRules, LevelRules, MatchingRules, RiskRules
 from app.data_package import TRACK_STEP_MINUTES, format_hhmm, from_minutes, to_minutes
 from app.db.repositories import DataRepository
+from app.formatting import num
 from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector, ImageFileMissingError
 from app.pipelines.geo import (
@@ -636,6 +637,18 @@ def evaluate_reports(
         verdict: Verdict = "consistent" if detail == "partial" else detail
         certainty: Certainty = "likely" if detail == "partial" or v.needs_review else "certain"
         notes = []
+        # Bilgi notları: karara girmez, operatör aracın ne olabileceğini görür.
+        if v.nearby is not None:
+            notes.append(
+                f"tespit modeli track noktasında araç görmedi; "
+                f"{num(v.nearby['track_noktasina_uzaklik_m'])} m ötede "
+                f"{v.nearby['tip']} tespiti var (olası aynı araç, karara girmedi)"
+            )
+        if v.visual is not None:
+            notes.append(
+                f"tespit modeli görmedi; görsel incelemede {v.visual['tip']} "
+                f"(eminlik {v.visual['emin']}, karara girmedi)"
+            )
         if v.final.dangerous_reassurance:
             notes.append("TEHLİKELİ GÜVENCE")
         notes += v.final.context_flags

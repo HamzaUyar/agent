@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     """EVREN model platformu anahtarı (tespit modeli); LLM anahtarından ayrı."""
     evren_detector_model: str = "u84f118304558/d2-y26l-v2-60ep-mixup01"
     """Ekibin EVREN'deki tespit modeli (`sahip/slug`)."""
+    report_look: bool = True
+    """Rapora bağlanan araç tespit modelince görülmediyse GLM'e kırpıntısı gösterilir; sonuç
+    rapor bulgusuna bilgi notu olarak düşer, karara girmez."""
     detector_imgsz: int | None = None
     """EVREN modelinin çıkarım boyutu; boşsa `EVREN_IMAGE_SIZE`."""
 
