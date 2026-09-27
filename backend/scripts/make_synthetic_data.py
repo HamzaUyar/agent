@@ -48,7 +48,8 @@ from app.data_package import (
 )
 from app.pipelines.detection import MIN_CONFIDENCE, STRONG_CONFIDENCE, dump_detections_json
 from app.pipelines.geo import distance_m, in_footprint, nearest_zone, pixel_to_geo
-from app.pipelines.risk import LEVELS, base_level
+from app.pipelines.risk import LEVELS
+from app.risk_engine import Point, default_config, run_track, to_local, unregistered_level
 from app.schemas.claims import ClaimRecord, ClaimVehicleType, ReportClaim
 from app.schemas.domain import (
     HEAVY_CLASSES,
@@ -290,8 +291,16 @@ def _capture_times(n: int, rng: random.Random) -> list[time]:
 def _distance_km(archetype: Archetype, rng: random.Random, rules: RiskRules) -> float:
     """Görüntünün üsse mesafesi; seviye eşiklerine 60 m'den yakın değerler atlanır."""
     lo, hi = (1.0, 2.8) if archetype == "loiter" else (0.9, 4.5)
-    edges = [rules.levels.critical_m, rules.levels.critical_heavy_m, rules.levels.loiter_m]
-    edges += [rules.levels.high_approach_m, rules.levels.unregistered_alert_m]
+    e = rules.engine
+    edges = [
+        e.critical.perimeter_m,
+        e.critical.approach_m,
+        e.critical.heavy_approach_m,
+        e.high.approach_m,
+        e.high.near_m,
+        e.medium.inner_presence_dmin_m,
+        e.unregistered.medium_m,
+    ]
     while True:
         d = rng.uniform(lo, hi)
         if all(abs(d * 1000 - e) > 60 for e in edges):
@@ -574,21 +583,20 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
 # --- beklenen değerler ------------------------------------------------------------------
 
 
-def contact_level(v: Vehicle, rules: RiskRules) -> RiskLevel:
-    """Aracın, gerçek değerleriyle kural tablosuna göre temel seviyesi."""
-    dist = distance_m(v.position, BASE.location)
-    trend = {"approach": "approaching", "local": "passing", "parked": "stationary", None: None}[
-        v.behavior
+def contact_level(v: Vehicle, scene: Scene) -> RiskLevel:
+    """Aracın, gerçek yolu üzerinde risk motoruyla çekim anındaki temel seviyesi."""
+    cfg = default_config()
+    if v.behavior is None:
+        return LEVELS[unregistered_level(distance_m(v.position, BASE.location), cfg)]
+    capture = to_minutes(scene.meta.capture_time)
+    first = -(-(capture - TRACK_BEFORE_MIN) // TRACK_STEP_MINUTES) * TRACK_STEP_MINUTES
+    points = [
+        Point(minute, *to_local(v.at(minute - capture), BASE.location))
+        for minute in range(first, capture + 1, TRACK_STEP_MINUTES)
     ]
-    loiter = TRACK_BEFORE_MIN if v.behavior == "parked" and dist < rules.levels.loiter_m else 0
-    return base_level(
-        v.box.label if v.detected else None,
-        dist,
-        trend,  # type: ignore[arg-type]  # tablo değerleri Trend
-        registered=v.behavior is not None,
-        loiter_minutes_near_base=loiter,
-        rules=rules.levels,
-    ).level
+    label = v.box.label.value if v.detected else None
+    risk = run_track(v.track_id or "", points, label, v.confidence if v.detected else None, cfg)
+    return LEVELS[risk.current.level]
 
 
 def expected_level(scene: Scene, rules: RiskRules) -> RiskLevel:
@@ -597,7 +605,7 @@ def expected_level(scene: Scene, rules: RiskRules) -> RiskLevel:
         if not v.detected and v.behavior is None:
             continue
         # Raporlar seviyeyi değiştirmez (reports_v2): beklenen seviye kural tablosundan.
-        levels.append(contact_level(v, rules))
+        levels.append(contact_level(v, scene))
     return max(levels, key=LEVELS.index, default="low")
 
 

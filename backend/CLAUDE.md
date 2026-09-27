@@ -30,7 +30,7 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
   → geo: lat/lon, bölge      hız, yön, rota, duraklama,
                              üsse mesafe trendi
         └──────► matching: capture_time'da birebir atama (eşik 5 m)   ◄──┘
-                    → risk: hareket riski × tip katsayısı (raporlar seviyeyi değiştirmez)
+                    → risk: zaman boyutlu risk motoru, izin her adımında (raporlar seviyeyi değiştirmez)
                     → rapor doğrulama: kanıt dosyası (kod) → LLM kararı + kural ikinci görüşü
                     → agent (LLM): gerekçeli brief
 ```
@@ -43,6 +43,7 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
   - tespit var, track yok → kayıt dışı araç
   - track var, tespit yok → tipi bilinmiyor
 - **Rapor kontrolü (`app/reports_v2`):** Kod her ilgili rapor için kanıt dosyası çıkarır (çekim anında noktadaki araç, tip, sayı, hareket; bölge raporunda raporun saatindeki bölge hareketliliği; konvoy/tatbikat/gece ihbarı/telsiz için gün düzeyindeki bağlam sinyalleri). Karar tek LLM çağrısıyla verilir (`report_verify` görevi), kurallar (`reports_v2/rules.py`) ikinci görüştür; ayrışırsa rapor "operatör incelemeli" olur. Rapor seviyeyi değiştirmez, kimlik iddiası hiçbir zaman "tutarlı" sayılmaz, zaman kayması çelişki değildir (ADR-0002 notu). LLM cevapları veri klasörünün yanındaki `report_verdicts_cache.json`'da; demo öncesi bir kez doldurmak yeterli. Ölçüm: `scripts/eval_reports.py`, doğru cevaplar `eval/report_gold.json`.
+- **Risk motoru (`app/risk_engine`, ADR-0004):** her track ilk noktasından çekim anına kadar her 5 dk'lık gözlemde yalnızca o ana kadarki noktalarla değerlendirilir; temasın temel seviyesi çekim anındaki yayınlanan seviyedir. Katmanlar: nedensel özellikler → seviye tablosu (ilk uyan satır; C1–C5 kritik, H1–H6 yüksek, M1–M3 orta) → durum makinesi (anında yükselme, 15/15/20 dk iniş beklemesi, +200 m çıkış bandı) → 0–100 öncelik skoru (seviyeyi değiştirmez). Parametreler `app/core/risk_engine.toml` ("Orta-A"); `RiskRules.engine` ile enjekte edilir. Referans uygulamayla birebir eşleşme `tests/test_risk_engine.py` altın dosyasıyla korunur.
 - **Referans örnek** (organizatörlerin demosu):
   - `img_000860`, 14:10, Doğu Yolu
   - truck, kutu (727, 284, 58, 34), merkez piksel (756, 301) → 39.92531, 32.87183
@@ -71,7 +72,8 @@ Python 3.11+ (ortam: `.venv`, Python 3.14, pip), FastAPI (SSE), Pydantic v2, psy
   - **Zenginleştirilmiş:** `report_claims`, `track_segments`
   - **Model çıktısı:** `model_detections` (USE_INFERENCE=DEMO; yükleme `python -m scripts.load_detections`)
   - **Analiz:** `analysis_runs`, `detections`, `track_matches`, `motion_analyses`, `report_evaluations`, `risk_assessments`, `agent_steps`
-- Migration'lar: `01_extensions_and_enums` … `10_model_detections` (`supabase/migrations/`).
+  - **Risk motoru (gün tablosu):** `risk_engine_runs`, `risk_timeline`, `risk_events`, `risk_notices`, `image_risk`; en son koşu `*_latest` görünümlerinde. Yazma: `python -m scripts.compute_risk` (`--dry-run` yalnızca özet).
+- Migration'lar: `01_extensions_and_enums` … `12_risk_engine` (`supabase/migrations/`).
 - **Storage:** görüntü dosyaları özel `drone-images` bucket'ında; `images.file_path` = `drone-images/<id>.jpg`. Yerelde (`DATA_DIR/images`) olmayan görüntü, tespit ve VLM ilk ihtiyaç duyduğunda `service_role` ile indirilip oraya yazılır (`app/storage.py`). Arayüzün görüntü ucu (`GET /images/{id}/file`) Supabase modunda dosyayı yerel klasöre bakmadan doğrudan bucket'tan sunar; yalnızca ağsız demoda (`DATA_SOURCE=package`) yerelden okur. Yükleme: `upload-images [klasör]`.
 
 ## Dizin yapısı

@@ -13,7 +13,7 @@ import pytest
 
 from app.agent.decision import build_input, compass
 from app.agent.service import EvaluationService
-from app.core.rules import DEFAULT_RULES_PATH, LevelRules, RiskRules, load_rules
+from app.core.rules import LevelRules, RiskRules, load_rules
 from app.data_package import from_minutes, read_package, to_minutes
 from app.db.repositories import InMemoryRepository
 from app.formatting import km, mps
@@ -117,9 +117,11 @@ def scenario(
         pytest.param(VehicleClass.CAR, 3_800, 1_800, "high", id="yaklasan-binek-2km-alti-yuksek"),
         pytest.param(VehicleClass.CAR, 4_800, 2_800, "high", id="yaklasan-3km-alti-yuksek"),
         pytest.param(VehicleClass.TRUCK, 6_000, 4_000, "medium", id="yaklasan-uzak-orta"),
-        pytest.param(VehicleClass.CAR, 2_000, 2_000, "medium", id="uzun-duraklama-3km-alti-orta"),
-        pytest.param(VehicleClass.CAR, 4_000, 4_000, "low", id="uzun-duraklama-uzakta-dusuk"),
-        pytest.param(VehicleClass.TRUCK, 500, 1_500, "low", id="uzaklasan-dusuk"),
+        pytest.param(VehicleClass.CAR, 2_000, 2_000, "medium", id="ic-halkada-bekleme-orta"),
+        pytest.param(VehicleClass.CAR, 4_000, 4_000, "low", id="uzakta-bekleme-dusuk"),
+        # Üssün 500 m yakınından geri çekilen araç: "sokulup geri çekilme" (H3).
+        pytest.param(VehicleClass.TRUCK, 500, 1_500, "high", id="sokulup-geri-cekilen-yuksek"),
+        pytest.param(VehicleClass.TRUCK, 2_600, 3_600, "low", id="uzakta-uzaklasan-dusuk"),
     ],
 )
 def test_rule_table_row(label: VehicleClass, start_m: float, now_m: float, expected: str) -> None:
@@ -131,8 +133,8 @@ def test_rule_table_row(label: VehicleClass, start_m: float, now_m: float, expec
 @pytest.mark.parametrize(
     ("now_m", "expected"),
     [
-        pytest.param(800, "medium", id="kayit-disi-1km-alti-orta"),
-        pytest.param(1_500, "low", id="kayit-disi-1km-ustu-dusuk"),
+        pytest.param(800, "high", id="kayit-disi-1km-alti-yuksek"),
+        pytest.param(1_400, "medium", id="kayit-disi-1-1,5km-orta"),
         pytest.param(2_500, "low", id="kayit-disi-uzak-dusuk"),
     ],
 )
@@ -151,16 +153,16 @@ def test_unregistered_contact_reason_says_it_may_be_parked() -> None:
     assert any("park halinde olabilir" in r for r in contact.level_reasons)
 
 
-def test_unregistered_threshold_comes_from_the_rules_file(tmp_path: Path) -> None:
-    text = DEFAULT_RULES_PATH.read_text(encoding="utf-8").replace(
-        "unregistered_alert_m = 1000", "unregistered_alert_m = 3000"
+def test_unregistered_threshold_comes_from_the_engine_file() -> None:
+    defaults = load_rules()
+    wider = replace(
+        defaults,
+        engine=replace(
+            defaults.engine, unregistered=replace(defaults.engine.unregistered, medium_m=3_000)
+        ),
     )
-    custom = tmp_path / "rules.toml"
-    custom.write_text(text, encoding="utf-8")
 
-    [contact] = scenario(
-        VehicleClass.CAR, 2_500, 2_500, with_track=False, rules=load_rules(custom)
-    ).contacts
+    [contact] = scenario(VehicleClass.CAR, 2_500, 2_500, with_track=False, rules=wider).contacts
 
     assert contact.base_level == "medium"
 
@@ -173,36 +175,41 @@ def test_missed_contact_approaching_close_is_critical_without_a_type() -> None:
 
 
 def test_image_level_is_the_highest_contact_level() -> None:
-    receding = track("T9001", 500, 1_500)
-    approaching = track("T9002", 3_530, 1_530, north_m=25)  # karenin içinde
+    waiting = track("T9001", 1_500, 1_500)  # iç halkada bekliyor: orta
+    approaching = track("T9002", 3_530, 1_530, north_m=25)  # karenin içinde, yaklaşıyor: yüksek
     image = image_on(east_of_base(1_500, north_m=10))
     detections = [
         box_on(image, east_of_base(1_500), VehicleClass.CAR),
         box_on(image, east_of_base(1_530, north_m=25), VehicleClass.CAR),
     ]
-    package = replace(PACKAGE, images=[image], track_points=receding + approaching, reports=[])
+    package = replace(PACKAGE, images=[image], track_points=waiting + approaching, reports=[])
 
     brief = EvaluationService(
         InMemoryRepository(package), FakeDetector({image.image_id: detections})
     ).run(image.image_id)
 
-    assert sorted(c.base_level for c in brief.contacts) == ["high", "low"]
+    assert sorted(c.base_level for c in brief.contacts) == ["high", "medium"]
     assert brief.risk_level == "high"
 
 
 # --- Eşikler ayar dosyasından ------------------------------------------------
 
 
-def test_default_rules_come_from_the_rules_file() -> None:
+def test_default_rules_come_from_the_rules_files() -> None:
     rules = load_rules()
 
-    assert rules.levels.critical_heavy_m == 2_000
     assert rules.levels.loiter_minutes == 30
+    assert rules.engine.critical.heavy_approach_m == 2_000
 
 
 def test_changed_thresholds_change_the_level() -> None:
     defaults = load_rules()
-    stricter = replace(defaults, levels=replace(defaults.levels, critical_heavy_m=1_500))
+    stricter = replace(
+        defaults,
+        engine=replace(
+            defaults.engine, critical=replace(defaults.engine.critical, heavy_approach_m=1_500)
+        ),
+    )
 
     assert scenario(VehicleClass.TRUCK, 3_800, 1_800).contacts[0].base_level == "critical"
     assert scenario(VehicleClass.TRUCK, 3_800, 1_800, stricter).contacts[0].base_level == "high"
@@ -211,9 +218,9 @@ def test_changed_thresholds_change_the_level() -> None:
 def test_rules_file_can_be_loaded_from_a_custom_path(tmp_path: Path) -> None:
     text = (Path(__file__).parents[1] / "app" / "core" / "risk_rules.toml").read_text()
     custom = tmp_path / "rules.toml"
-    custom.write_text(text.replace("critical_heavy_m = 2000", "critical_heavy_m = 1500"))
+    custom.write_text(text.replace("loiter_minutes = 30", "loiter_minutes = 45"))
 
-    assert load_rules(custom).levels == replace(load_rules().levels, critical_heavy_m=1_500)
+    assert load_rules(custom).levels == replace(load_rules().levels, loiter_minutes=45)
     assert isinstance(load_rules(custom).levels, LevelRules)
 
 
@@ -317,28 +324,32 @@ def circling_scenario(radius_m: float, arc_m: float) -> Brief:
     return service.run(image.image_id)
 
 
-def test_vehicle_circling_the_base_at_a_steady_distance_is_medium() -> None:
+def test_vehicle_circling_the_base_at_a_steady_distance_is_high() -> None:
     """Gerçek veride T0035, T0146, T0181: üsse ~1,7 km'de, mesafesi 20 m oynayarak 20 km yol."""
     [contact] = circling_scenario(radius_m=1_800, arc_m=3_000).contacts
 
     assert contact.motion is not None
     assert contact.motion.trend != "approaching"
     assert contact.motion.base_distance_max_m - contact.motion.base_distance_min_m < 50
-    assert contact.base_level == "medium"
-    assert "üs çevresinde sabit mesafede dolaşıyor" in contact.level_reasons[0]
+    assert contact.base_level == "high"
+    assert contact.level_code == "H4_orbit"
+    assert "üs etrafında çember çiziyor" in contact.level_reasons[0]
 
 
 def test_local_back_and_forth_traffic_is_not_circling() -> None:
-    """Yerinde gidip gelen yerel trafik (600 m içinde) üssü dolaşmıyor."""
+    """Yerinde gidip gelen yerel trafik (600 m içinde) üssü dolaşmıyor; iç halkada
+    bulunduğu için yalnızca orta."""
     [contact] = circling_scenario(radius_m=1_800, arc_m=500).contacts
 
-    assert contact.base_level == "low"
+    assert contact.base_level == "medium"
+    assert contact.level_code == "M3_inner_presence"
 
 
-def test_circling_far_from_the_base_is_not_circling_the_base() -> None:
+def test_circling_far_from_the_base_is_only_medium() -> None:
     [contact] = circling_scenario(radius_m=4_000, arc_m=3_000).contacts
 
-    assert contact.base_level == "low"
+    assert contact.base_level == "medium"
+    assert contact.level_code == "M2_orbit"
 
 
 def test_match_and_confidence_thresholds_come_from_the_rules_file() -> None:

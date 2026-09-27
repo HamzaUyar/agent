@@ -231,7 +231,8 @@ def test_frames_after_the_capture_time_are_not_used_for_type_history() -> None:
     contact = only(brief, "matched")
     assert contact.type_conflict is False
     assert contact.effective_label == "car"
-    assert contact.base_level == "high"
+    # Sonraki karedeki "truck" sayılsaydı seviyeyi ağır araç kuralı (C3) verirdi.
+    assert contact.level_code is not None and not contact.level_code.startswith("C3")
 
 
 def test_neighbours_own_track_does_not_make_a_match_ambiguous() -> None:

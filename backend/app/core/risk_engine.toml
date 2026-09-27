@@ -1,0 +1,101 @@
+# Zaman boyutlu risk motoru (app/risk_engine) parametreleri: "Orta-A" paketi.
+# Kaynak: iki turlu Delphi konsensüsü (10 ajan) + ekip ayarı. Her iz, ilk noktasından itibaren
+# her gözlem adımında yalnız o ana kadarki noktalarla değerlendirilir (ADR-0001).
+# Seviye tablosunda ilk uyan satır geçerli; çıkış (kalış) tablosu aynı satırların gevşek hali.
+
+[evaluation]
+history_minutes = 120      # kayan geçmiş penceresi
+move_step_m = 100          # iki gözlem arasında bu kadar yer değiştirme "sürüş" sayılır
+
+[trend]
+# yaklaşıyor = (son 30 dk >= a30 VEYA son 60 dk >= a60 yaklaşma) VE son 15 dk'da g15'ten fazla uzaklaşmamış
+a30_m = 300
+a60_m = 400
+g15_m = -100
+
+[critical]
+perimeter_m = 1000               # C1: üsse bu mesafe içinde...
+perimeter_moving_only = true     # ...yalnız park etmemiş araç (park eden H2 ile yüksek kalır)
+perimeter_recede_guard_m = -100  # ...ve son 15 dk'da bundan fazla uzaklaşmıyorsa
+approach_m = 1500                # C2: yaklaşıyor ve bu mesafe içinde
+heavy_approach_m = 2000          # C3: yaklaşan kamyon/otobüs
+heavy_min_confidence = 0.5
+eta_minutes = 10                 # C4: yaklaşıyor ve tahmini varış süresi
+dash_enabled = true              # C5: hedefli atılım
+dash_max_age_min = 5             #     son sürüş adımı en fazla bu kadar önce
+dash_min_close_m = 800           #     o adımda en az bu kadar yaklaşmış
+dash_max_cpa_m = 1000            #     adımın doğrultusu üsse bu mesafeden geçiyor
+dash_max_distance_m = 2500       #     araç bu mesafe içinde
+
+[high]
+approach_m = 3000            # H1
+near_m = 1400                # H2 (park etmiş araç da)
+probe_dmin_m = 1400          # H3: son 2 saatte bu mesafeye girmiş...
+probe_min_retreat_m = 300    #     ...ve en az bu kadar geri çekilmiş
+orbit_radius_m = 3300        # H4: çember, medyan yarıçap
+patrol_reversal_enabled = true
+patrol_reversal_radius_m = 5500  # H4r: yön değiştiren yay devriyesi
+arrived_close_m = 1000       # H5: son 2 saatte en az bu kadar yaklaşmış...
+arrived_max_distance_m = 3000    # ...ve şimdi bu mesafe içinde
+creep_max_distance_m = 2200  # H6: sürünerek sızma
+creep_min_drop_m = 300
+
+[medium]
+orbit_radius_m = 6000        # M2: çember ya da yay devriyesi
+inner_presence_dmin_m = 2050 # M3: son 2 saatte bu mesafe içinde bulunmuş
+
+[orbit]
+min_path_m = 2000
+min_sweep_deg = 90
+max_radial_frac = 0.25
+max_radius_cv = 0.20
+
+[patrol]
+window_minutes = 90
+min_move_steps = 3
+min_sweep_deg = 60
+max_radial_frac = 0.15
+max_range_frac = 0.10
+reversal_run_deg = 15
+no_reversal_sweep_deg = 150
+
+[exit]
+# Çıkış tablosu: mesafe eşiklerine eklenir, kapanış/geri çekilme büyüklüklerinden düşülür.
+distance_add_m = 200
+closing_sub_m = 100
+a30_m = 200
+a60_m = 300
+g15_m = -150
+eta_minutes = 12
+
+[events]
+hold_critical_min = 15       # koşul kalktıktan sonra inmeden önce bekleme
+hold_high_min = 15
+hold_medium_min = 20
+confirm_steps_medium = 2     # düşükten ortaya çıkmak için ardışık gözlem
+sticky_perimeter_m = 0       # 0 = kalıcı taban kapalı (gerçek veride hiç devreye girmiyordu)
+sticky_minutes = 120
+static_stop_min = 30         # kritik + bu kadar duruyor + static_max_distance_m içinde: "sabit kritik"
+static_max_distance_m = 1200
+deepen_m = 300
+rebreach_out_m = 1200
+rebreach_out_min = 15
+
+[unregistered]
+# İzi olmayan tespit (park halinde olabilir, ADR-0003)
+min_confidence = 0.5
+high_m = 1000
+medium_m = 1500
+
+[priority]
+# Öncelik skoru 0-100 = seviye bandı + bant içi puan; aynı seviyedeki araçları sıralar, seviyeyi değiştirmez.
+# Referanslar gerçek veriden bir kez hesaplanıp donduruldu (göreli ölçek değil).
+closing_ref_mps = 1.2459     # yaklaşma hızı p90
+dwell_ref_min = 90.0         # üs yakınında bekleme p90
+dwell_radius_m = 1400
+new_entry_min = 30
+held_factor = 0.3            # iniş beklemesinde tutulan seviyede bant içi puan çarpanı
+w_closing = 0.3
+w_behavior = 0.3
+w_heavy = 0.1
+w_new = 0.3

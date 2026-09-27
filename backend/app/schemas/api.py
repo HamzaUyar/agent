@@ -89,6 +89,15 @@ AttentionReason = Literal[
 """Karar LLM'inin bir temas için seçebileceği dikkat nedenleri; her biri kodla doğrulanır."""
 
 
+class LevelPoint(BaseModel):
+    """Risk motorunun bir gözlem anındaki kararı."""
+
+    time: str
+    level: RiskLevel
+    code: str
+    score: float
+
+
 class ContactFinding(BaseModel):
     """Temas: bir Tespit ve/veya onu çekim anında karşılayan Track."""
 
@@ -119,6 +128,14 @@ class ContactFinding(BaseModel):
     level_reasons: list[str] = Field(default_factory=list)
     level_basis: list[AttentionReason] = Field(default_factory=list)
     """Kuralların seviyede zaten saydığı dikkat nedenleri; LLM bunlarla yükseltemez."""
+    level_code: str | None = None
+    """Risk motorunun seviyeyi veren kural kodu (ör. "C2_approach_inner", "HOLD<H2_near")."""
+    priority_score: float | None = None
+    """0-100 öncelik skoru: aynı seviyedeki temasları sıralar, seviyeyi değiştirmez."""
+    level_tags: list[str] = Field(default_factory=list)
+    """Seviyeyi değiştirmeyen kalıp etiketleri: LOOP, WAIT_ENTRY, PROBE, PATROL."""
+    level_history: list[LevelPoint] = Field(default_factory=list)
+    """İzin ilk noktasından çekim anına kadar her gözlemdeki yayınlanan seviye."""
     adjustment_reason: str | None = None
     """LLM'in kabul edilen ±1 kademe ayarının gerekçesi."""
     adjustment_rejected: str | None = None

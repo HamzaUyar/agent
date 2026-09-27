@@ -1,13 +1,37 @@
-"""Kod tabanlı temel risk seviyesi (ADR-0002: karar hibrit, temeli kurallar verir)."""
+"""Kod tabanlı temel risk seviyesi (ADR-0002: karar hibrit, temeli kurallar verir).
+
+Seviyeyi zaman boyutlu risk motoru (`app.risk_engine`) verir: iz, ilk noktasından itibaren her
+gözlem adımında değerlendirilir ve çekim anındaki yayınlanan seviye temasın temel seviyesidir.
+"""
 
 from dataclasses import dataclass
 
 from app.core.rules import LevelRules
 from app.formatting import km as fmt_km
+from app.risk_engine import RULE_TEXT, EngineConfig, Step, unregistered_level
 from app.schemas.api import AttentionReason, MotionFinding
-from app.schemas.domain import HEAVY_CLASSES, RiskLevel, Trend, VehicleClass
+from app.schemas.domain import RiskLevel
 
 LEVELS: tuple[RiskLevel, ...] = ("low", "medium", "high", "critical")
+
+# Motorun kural kodu -> karar LLM'inin doğrulayabildiği dikkat nedeni.
+_BASIS: dict[str, AttentionReason] = {
+    "C1_perimeter": "yaklasma",
+    "C2_approach_inner": "yaklasma",
+    "C3_heavy_approach": "yaklasma",
+    "C4_eta": "yaklasma",
+    "C5_aimed_dash": "yaklasma",
+    "H1_approach": "yaklasma",
+    "H5_arrived": "yaklasma",
+    "H6_creep": "yaklasma",
+    "M1_approach": "yaklasma",
+    "H3_probe": "dolasma",
+    "H4_orbit": "dolasma",
+    "H4r_patrol_rev": "dolasma",
+    "M2_orbit": "dolasma",
+    "H2_near": "uzun_duraklama",
+    "M3_inner_presence": "uzun_duraklama",
+}
 
 ACTIONS: dict[RiskLevel, str] = {
     "low": "İzlemeye devam.",
@@ -25,61 +49,39 @@ class LevelDecision:
     """Seviyeyi belirleyen satırın dikkat nedeni; yaklaşma yoksa ve kayıtlıysa yok."""
 
 
-def base_level(
-    label: VehicleClass | None,
-    distance_to_base_m: float,
-    trend: Trend | None,
-    *,
-    registered: bool,
-    loiter_minutes_near_base: int,
-    circling_path_m: float = 0.0,
-    rules: LevelRules,
-) -> LevelDecision:
-    """Temel seviye tablosu; ilk uyan satır geçerli.
+def rule_of(code: str) -> str:
+    """Yayın kodundan kural kodu: "HOLD<H2_near" ve "X_H2_near" -> "H2_near"."""
+    return code.split("<", 1)[-1].removeprefix("X_")
 
-    `label` None ise tip bilinmiyor (kaçırılmış temas); `trend` None ise hareket kaydı yok.
-    `loiter_minutes_near_base`: üsse `rules.loiter_m`'den yakın en uzun duraklamanın süresi.
-    `circling_path_m`: üs çevresinde dar bir mesafe bandında kalarak gidilen yol (dolaşma).
-    """
-    t = rules
+
+def engine_decision(step: Step, distance_to_base_m: float) -> LevelDecision:
+    """Motorun çekim anındaki adımından temel seviye ve gerekçe."""
+    level = LEVELS[step.level]
     km = fmt_km(distance_to_base_m)
-    approaching = trend == "approaching"
-    heavy = label in HEAVY_CLASSES
+    rule = rule_of(step.code)
+    reasons = [f"{RULE_TEXT.get(rule, rule)}, {km}"]
+    if step.held:
+        now = RULE_TEXT.get(step.code_raw, step.code_raw)
+        reasons.append(f"koşul kalktı ({now}); seviye iniş beklemesinde")
+    if step.crit_static:
+        reasons.append(f"üsse yakın park halinde, {step.features.stop_now:.0f} dk duruyor")
+    elif step.dwell_min >= 30:
+        reasons.append(f"son 2 saatte üs yakınında {step.dwell_min:.0f} dk bekledi")
+    if step.tags:
+        reasons.append("kalıp: " + ", ".join(step.tags))
+    return LevelDecision(level, reasons, _BASIS.get(rule))
 
-    if approaching and distance_to_base_m < t.critical_m:
-        return LevelDecision("critical", [f"üsse yaklaşıyor, {km}"], "yaklasma")
-    if approaching and heavy and distance_to_base_m < t.critical_heavy_m:
-        return LevelDecision("critical", [f"ağır araç ({label}) üsse yaklaşıyor, {km}"], "yaklasma")
-    if approaching and distance_to_base_m < t.high_approach_m:
-        return LevelDecision("high", [f"üsse yaklaşıyor, {km}"], "yaklasma")
-    if not registered and distance_to_base_m < t.unregistered_alert_m:
-        return LevelDecision(
-            "medium",
-            [f"kayıt dışı temas üssün hemen yakınında, hareket geçmişi bilinmiyor, {km}"],
-            "kayit_disi",
-        )
-    if approaching:
-        return LevelDecision("medium", [f"üsse yaklaşıyor, {km}"], "yaklasma")
-    if loiter_minutes_near_base >= t.loiter_minutes:
-        return LevelDecision(
-            "medium",
-            [f"üsse yakın {loiter_minutes_near_base} dk duraklama, {km}"],
-            "uzun_duraklama",
-        )
-    if circling_path_m >= t.circle_min_path_m:
-        return LevelDecision(
-            "medium",
-            [f"üs çevresinde sabit mesafede dolaşıyor ({fmt_km(circling_path_m)} yol), {km}"],
-            "dolasma",
-        )
-    if not registered:
+
+def unregistered_decision(distance_to_base_m: float, cfg: EngineConfig) -> LevelDecision:
+    """İzi olmayan tespit: kendi başına risk değildir, yalnız üsse yakınsa (ADR-0003)."""
+    km = fmt_km(distance_to_base_m)
+    level = LEVELS[unregistered_level(distance_to_base_m, cfg)]
+    if level == "low":
         # Görev tanımı: park halindeki araçların hareket kaydı olmayabilir (ADR-0003).
-        return LevelDecision(
-            "low",
-            [f"kayıt dışı temas: hareket kaydı yok, park halinde olabilir, {km}"],
-            "kayit_disi",
-        )
-    return LevelDecision("low", [f"yaklaşma yok, {km}"])
+        reason = f"kayıt dışı temas: hareket kaydı yok, park halinde olabilir, {km}"
+    else:
+        reason = f"kayıt dışı temas üssün yakınında, hareket geçmişi bilinmiyor, {km}"
+    return LevelDecision(level, [reason], "kayit_disi")
 
 
 def highest(levels: list[RiskLevel]) -> RiskLevel:

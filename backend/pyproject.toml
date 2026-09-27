@@ -29,6 +29,7 @@ load-data = "scripts.load_data:main"
 export-claims = "scripts.export_claims:main"
 upload-images = "scripts.upload_images:main"
 run-eval-set = "scripts.run_eval_set:main"
+compute-risk = "scripts.compute_risk:main"
 
 [build-system]
 requires = ["setuptools>=69"]

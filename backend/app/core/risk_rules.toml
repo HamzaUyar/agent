@@ -38,19 +38,19 @@ timeout_s = 45
 max_tokens = 4096
 
 [levels]
-critical_m = 1000
-critical_heavy_m = 2000
-high_approach_m = 3000
-# Track'i olmayan araç kendi başına risk değildir (park halinde olabilir, ADR-0003); yalnızca
-# üsse bu mesafeden yakınsa orta.
+# Temel seviyeyi risk motoru verir (risk_engine.toml). Buradaki eşikler, karar LLM'inin
+# önerdiği dikkat nedenlerini kodla doğrulamak için kullanılır.
+# "kayıt dışı" nedeni: track'i olmayan araç kendi başına risk değildir (park halinde olabilir,
+# ADR-0003); neden yalnızca üsse bu mesafeden yakınsa kabul edilir.
 unregistered_alert_m = 1000
-# Üsse `loiter_m`'den yakın bir yerde en az `loiter_minutes` duraklama: orta.
+# "uzun duraklama" nedeni: üsse `loiter_m`'den yakın bir yerde en az `loiter_minutes` duraklama.
 loiter_minutes = 30
 loiter_m = 3000
 # Üs çevresinde dolaşma (görev tanımı s3): üsse mesafesi kayıt boyunca `circle_band_m` içinde
 # kalan, `loiter_m`'den yakın, en az `circle_min_extent_m` genişliğinde bir yay çizen ve en az
-# `circle_min_path_m` yol yapan araç: orta. Gerçek veride 6 track 1,6-2,6 km'de, mesafesi
-# 20 m'den az oynayarak 16-29 km yol yapıyor (yay 3,2-4,5 km); yerel trafik 600 m içinde kalır.
+# `circle_min_path_m` yol yapan araç ("dolaşma" nedeni). Gerçek veride 6 track 1,6-2,6 km'de,
+# mesafesi 20 m'den az oynayarak 16-29 km yol yapıyor (yay 3,2-4,5 km); yerel trafik 600 m
+# içinde kalır.
 circle_band_m = 300
 circle_min_path_m = 3000
 circle_min_extent_m = 1500

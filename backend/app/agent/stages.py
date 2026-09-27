@@ -15,7 +15,7 @@ import logging
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import time
 
 from app.agent.brief_text import brief_text, sources
@@ -36,14 +36,15 @@ from app.pipelines.matching import LocatedDetection, MatchResult, match_detectio
 from app.pipelines.motion import Position, analyze_motion, positions_at
 from app.pipelines.risk import (
     LEVELS,
-    base_level,
-    circling_path_m,
+    LevelDecision,
+    engine_decision,
     highest,
-    loiter_minutes,
     recommended_action,
+    unregistered_decision,
 )
 from app.pipelines.vision import BBox, VisualVerifier
 from app.reports_v2.stage import ClaimEvaluation, ReportVerifier
+from app.risk_engine import EngineConfig, Point, TrackRisk, run_track, to_local
 from app.schemas.api import (
     AttentionFinding,
     Brief,
@@ -51,6 +52,7 @@ from app.schemas.api import (
     ContactFinding,
     LabelObservation,
     LatLon,
+    LevelPoint,
     MotionFinding,
     ReportFinding,
     RoutePoint,
@@ -67,6 +69,7 @@ from app.schemas.domain import (
     RiskLevel,
     TrackPoint,
     VehicleClass,
+    Zone,
     riskier_type,
 )
 
@@ -123,6 +126,8 @@ class TrackBranch:
     """Adayların çekim anındaki konumları (adım dışı çekim saatinde ileri kestirilmiş)."""
     motions: dict[str, MotionFinding]
     """Her adayın son iki saatlik hareket özeti."""
+    histories: dict[str, list[Point]] = field(default_factory=dict)
+    """Risk motoru için her adayın çekim anına kadarki gözlemleri (üs merkezli düzlemde)."""
 
 
 @dataclass(frozen=True)
@@ -239,14 +244,78 @@ def locate(image: ImageMeta, detections: tuple[Detection, ...]) -> tuple[Located
 
 
 def track_branch(repo: DataRepository, image: ImageMeta, rules: RiskRules) -> TrackBranch:
-    """Depo: aday track'lerin çekim anı konumu ve hareket analizi, tespitten bağımsız."""
+    """Depo: aday track'lerin çekim anı konumu, hareket analizi ve risk motoru girdisi.
+
+    Tespitten bağımsızdır; her track'in geçmişi bir kez okunur.
+    """
     base = repo.base().location
+    now = image.capture_time
+    minutes = max(rules.motion.history_minutes, int(rules.engine.evaluation.history_minutes))
+    since = from_minutes(max(to_minutes(now) - minutes, 0))
     positions = candidate_positions(repo, image, rules.matching)
-    motions = {
-        p.track_id: motion_finding(repo, p.track_id, base, image.capture_time, rules)
-        for p in positions
-    }
-    return TrackBranch(positions, motions)
+    motions: dict[str, MotionFinding] = {}
+    histories: dict[str, list[Point]] = {}
+    for p in positions:
+        history = repo.track_history(p.track_id, until=now, since=since)
+        motions[p.track_id] = motion_finding(history, base, now, repo.zones(), rules)
+        histories[p.track_id] = engine_points(history, base, now, rules.engine)
+    return TrackBranch(positions, motions, histories)
+
+
+def engine_points(
+    history: list[TrackPoint], base: GeoPoint, now: time, cfg: EngineConfig
+) -> list[Point]:
+    """Saf: risk motorunun geçmiş penceresindeki gözlemler (üs merkezli düzlemde)."""
+    start = to_minutes(now) - cfg.evaluation.history_minutes
+    return [
+        Point(to_minutes(p.time), *to_local(p.location, base))
+        for p in history
+        if to_minutes(p.time) >= start
+    ]
+
+
+def track_risk(
+    branch: TrackBranch,
+    track_id: str,
+    label: str | None,
+    confidence: float | None,
+    cfg: EngineConfig,
+) -> TrackRisk | None:
+    """Saf: track'in ilk gözleminden çekim anına kadar her adımda risk motoru."""
+    points = branch.histories.get(track_id)
+    if not points:
+        return None
+    return run_track(track_id, points, label, confidence, cfg)
+
+
+@dataclass(frozen=True)
+class EngineView:
+    """Temasa eklenen motor alanları: kural kodu, öncelik skoru, etiketler, seviye geçmişi."""
+
+    code: str | None = None
+    score: float | None = None
+    tags: list[str] = field(default_factory=list)
+    history: list[LevelPoint] = field(default_factory=list)
+
+
+def engine_view(risk: TrackRisk | None) -> EngineView:
+    if risk is None:
+        return EngineView()
+    cur = risk.current
+    return EngineView(
+        code=cur.code,
+        score=round(cur.score, 2),
+        tags=cur.tags,
+        history=[
+            LevelPoint(
+                time=format_hhmm(from_minutes(int(s.t))),
+                level=LEVELS[s.level],
+                code=s.code,
+                score=round(s.score, 2),
+            )
+            for s in risk.steps
+        ],
+    )
 
 
 def candidate_positions(
@@ -264,12 +333,12 @@ def candidate_positions(
 
 
 def motion_finding(
-    repo: DataRepository, track_id: str, base: GeoPoint, now: time, rules: RiskRules
+    history: list[TrackPoint], base: GeoPoint, now: time, zones: list[Zone], rules: RiskRules
 ) -> MotionFinding:
-    """Depo: track'in çekim anına kadarki geçmişinden hareket özeti."""
-    since = from_minutes(to_minutes(now) - rules.motion.history_minutes)
-    history = repo.track_history(track_id, until=now, since=since)
-    m = analyze_motion(history, base, now, repo.zones(), rules.trend, rules.motion)
+    """Saf: track'in çekim anına kadarki geçmişinden hareket özeti."""
+    start = to_minutes(now) - rules.motion.history_minutes
+    history = [p for p in history if to_minutes(p.time) >= start]
+    m = analyze_motion(history, base, now, zones, rules.trend, rules.motion)
     ongoing = m.stops[-1] if m.stops and m.stops[-1].end == history[-1].time else None
     return MotionFinding(
         distance_to_base_m=m.distance_to_base_m,
@@ -435,15 +504,17 @@ def _detection_contact(
     observed = history.get(track_id, []) if track_id else []
     labels = {VehicleClass(o.label) for o in observed} | {det.label}
     effective = riskier_type(sorted(labels, key=str))
-    decision = base_level(
-        effective,
-        dist_base,
-        motion.trend if motion else None,
-        registered=track_id is not None,
-        loiter_minutes_near_base=loiter_minutes(motion, rules.levels),
-        circling_path_m=circling_path_m(motion, rules.levels),
-        rules=rules.levels,
+    risk = (
+        track_risk(branch, track_id, effective.value, det.confidence, rules.engine)
+        if track_id
+        else None
     )
+    decision: LevelDecision = (
+        engine_decision(risk.current, dist_base)
+        if risk is not None
+        else unregistered_decision(dist_base, rules.engine)
+    )
+    view = engine_view(risk)
     position_estimated = track_id in estimated
     return ContactFinding(
         kind="matched" if track_id else "unregistered",
@@ -471,6 +542,10 @@ def _detection_contact(
         final_level=decision.level,
         level_reasons=decision.reasons,
         level_basis=[decision.basis] if decision.basis else [],
+        level_code=view.code,
+        priority_score=view.score,
+        level_tags=view.tags,
+        level_history=view.history,
         certainty=_certainty(
             weak=weak,
             uncertain=match.ambiguous or position_estimated or track_id is None,
@@ -480,20 +555,18 @@ def _detection_contact(
 
 
 def _missed_contact(
-    position: Position, ctx: ImageContext, branch: TrackBranch, rules: LevelRules
+    position: Position, ctx: ImageContext, branch: TrackBranch, rules: RiskRules
 ) -> ContactFinding:
     """Karede olduğu halde tespit edilmemiş track: tipi bilinmez, risk yalnızca hareketten."""
     motion = branch.motions[position.track_id]
     dist_base = distance_m(position.location, ctx.base)
-    decision = base_level(
-        None,
-        dist_base,
-        motion.trend,
-        registered=True,
-        loiter_minutes_near_base=loiter_minutes(motion, rules),
-        circling_path_m=circling_path_m(motion, rules),
-        rules=rules,
+    risk = track_risk(branch, position.track_id, None, None, rules.engine)
+    decision = (
+        engine_decision(risk.current, dist_base)
+        if risk is not None
+        else unregistered_decision(dist_base, rules.engine)
     )
+    view = engine_view(risk)
     return ContactFinding(
         kind="missed",
         label=None,
@@ -509,6 +582,10 @@ def _missed_contact(
         final_level=decision.level,
         level_reasons=["kaçırılmış temas: karede ama tespit edilmedi", *decision.reasons],
         level_basis=[decision.basis] if decision.basis else [],
+        level_code=view.code,
+        priority_score=view.score,
+        level_tags=view.tags,
+        level_history=view.history,
         certainty="likely",
     )
 
@@ -534,7 +611,7 @@ def build_contacts(
         )
         for m in matches.matches
     ]
-    missed = [_missed_contact(p, ctx, branch, rules.levels) for p in matches.missed]
+    missed = [_missed_contact(p, ctx, branch, rules) for p in matches.missed]
     return Contacts(tuple(detected + missed))
 
 

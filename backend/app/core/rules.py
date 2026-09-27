@@ -1,9 +1,15 @@
-"""Risk ve hareket eşikleri; `risk_rules.toml` dosyasından okunur."""
+"""Risk ve hareket eşikleri; `risk_rules.toml` dosyasından okunur.
+
+Temel seviyeyi veren risk motorunun parametreleri ayrı dosyadadır (`risk_engine.toml`,
+`app.risk_engine.config`); `RiskRules.engine` ikisini tek nesnede taşır.
+"""
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+
+from app.risk_engine.config import EngineConfig, default_config
 
 DEFAULT_RULES_PATH = Path(__file__).with_name("risk_rules.toml")
 
@@ -43,9 +49,8 @@ class BriefRules:
 
 @dataclass(frozen=True)
 class LevelRules:
-    critical_m: float
-    critical_heavy_m: float
-    high_approach_m: float
+    """Karar LLM'inin dikkat nedenlerini doğrularken kullandığı kanıt eşikleri."""
+
     unregistered_alert_m: float
     loiter_minutes: int
     loiter_m: float
@@ -62,6 +67,8 @@ class RiskRules:
     motion: MotionRules
     brief: BriefRules
     levels: LevelRules
+    engine: EngineConfig = field(default_factory=default_config)
+    """Temel seviyeyi veren risk motorunun parametreleri."""
 
 
 def load_rules(path: Path | None = None) -> RiskRules:
