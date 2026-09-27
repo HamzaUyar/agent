@@ -1,6 +1,7 @@
 """Supabase tablolarına okuma/yazma: kaynak verinin okunması ve değerlendirme kayıtları."""
 
 import logging
+import threading
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 from uuid import UUID
@@ -356,25 +357,49 @@ class ReportVerificationStore:
     """Rapor doğrulamanın Supabase önbelleği ve kaydı: `report_verifications` tablosu.
 
     `agents.VerdictCache` sözleşmesini uygular: aynı LLM girdisi (anahtar) tabloda varsa LLM'e
-    sorulmaz. Doğrulama bitince `annotate` kural kararını ve nihai sonucu aynı satıra yazar.
-    Her çağrı kendi bağlantısını açar; doğrulayıcı paralel işçilerden çağırır.
+    sorulmaz. Tablo ilk kullanımda bir kez belleğe okunur (sunucu uzak; satır başına bağlantı
+    görüntü başına ~10 sn ediyordu). Doğrulama bitince kural kararı ve nihai sonuç yalnızca
+    değiştiyse aynı satıra yazılır.
     """
+
+    FINAL = (
+        "verdict",
+        "harm",
+        "dangerous_reassurance",
+        "context_flags",
+        "needs_review",
+        "rule_verdict",
+        "reasoning",
+    )
 
     def __init__(self, connect: Callable[[], psycopg.Connection]) -> None:
         self._connect = connect
+        # Yeniden girilebilir: güncelleme kilidin içinden `_loaded`'ı çağırıyor.
+        self._lock = threading.RLock()
+        self._rows: dict[str, dict[str, Any]] | None = None
         self.calls = 0
+
+    def _loaded(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            if self._rows is None:
+                with self._connect() as conn:
+                    rows = conn.execute(
+                        f"""select cache_key, llm_output, model, {", ".join(self.FINAL)}
+                            from public.report_verifications"""
+                    ).fetchall()
+                self._rows = {
+                    r[0]: {"out": r[1], "model": r[2], **dict(zip(self.FINAL, r[3:], strict=True))}
+                    for r in rows
+                }
+            return self._rows
 
     def get_or(self, key_parts: list[str], fn: Callable[[], Any]) -> Any:
         from app.reports_v2.agents import cache_key
 
         key = cache_key(key_parts)
-        with self._connect() as conn:
-            row = conn.execute(
-                "select llm_output, model from public.report_verifications where cache_key = %s",
-                (key,),
-            ).fetchone()
+        row = self._loaded().get(key)
         if row is not None:
-            return {"model": row[1], "out": row[0]}
+            return {"model": row["model"], "out": row["out"]}
         value = fn()
         with self._connect() as conn:
             conn.execute(
@@ -382,6 +407,8 @@ class ReportVerificationStore:
                    values (%s, %s, %s) on conflict (cache_key) do nothing""",
                 (key, Jsonb(value["out"]), value["model"]),
             )
+        with self._lock:
+            self._loaded()[key] = {"out": value["out"], "model": value["model"]}
         self.calls += 1
         return value
 
@@ -396,6 +423,18 @@ class ReportVerificationStore:
         needs_review: bool,
         dossier: Mapping[str, Any],
     ) -> None:
+        new = {
+            "verdict": final["verdict"],
+            "harm": final["harm"],
+            "dangerous_reassurance": final["dangerous_reassurance"],
+            "context_flags": list(final["context_flags"]),
+            "needs_review": needs_review,
+            "rule_verdict": rule_verdict,
+            "reasoning": final["reasoning"],
+        }
+        row = self._loaded().get(key, {})
+        if all(row.get(k) == v for k, v in new.items()):
+            return
         with self._connect() as conn:
             conn.execute(
                 """update public.report_verifications set
@@ -407,23 +446,23 @@ class ReportVerificationStore:
                 (
                     claim_id,
                     image_id,
-                    final["verdict"],
-                    final["harm"],
-                    final["dangerous_reassurance"],
-                    list(final["context_flags"]),
+                    new["verdict"],
+                    new["harm"],
+                    new["dangerous_reassurance"],
+                    new["context_flags"],
                     needs_review,
                     rule_verdict,
-                    final["reasoning"],
+                    new["reasoning"],
                     Jsonb(final["checks"]),
                     Jsonb(dict(dossier)),
                     key,
                 ),
             )
+        with self._lock:
+            self._loaded().setdefault(key, {}).update(new)
 
     def size(self) -> int:
-        with self._connect() as conn:
-            row = conn.execute("select count(*) from public.report_verifications").fetchone()
-        return int(row[0]) if row else 0
+        return len(self._loaded())
 
     def where(self) -> str:
         return "Supabase public.report_verifications"

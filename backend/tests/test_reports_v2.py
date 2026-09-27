@@ -285,7 +285,7 @@ def test_reports_do_not_change_the_level_and_are_marked_dangerous_without_an_llm
     assert "rapor tespitle çelişiyor; tespit esas alındı" in t0122.level_reasons
 
 
-def test_the_llm_verdict_is_used_and_disagreement_is_sent_to_the_operator() -> None:
+def test_disagreement_goes_to_the_operator_and_a_dangerous_reassurance_stays_flagged() -> None:
     llm = ReportLLM(
         {
             "verdict": "consistent",
@@ -299,7 +299,14 @@ def test_the_llm_verdict_is_used_and_disagreement_is_sent_to_the_operator() -> N
     brief = service([OLAGAN], llm).run("img_000860")
 
     [f] = brief.report_findings
-    assert (f.detail_verdict, f.rule_verdict, f.needs_review) == ("consistent", "contradicts", True)
+    # LLM "tutarlı" dedi; kurallar "olağan"ın yaklaşan kamyon için tehlikeli güvence olduğunu
+    # buldu: tehlikeli güvence kazanır, ayrışma operatöre gider.
+    assert (f.detail_verdict, f.rule_verdict, f.needs_review, f.dangerous_reassurance) == (
+        "contradicts",
+        "contradicts",
+        True,
+        True,
+    )
     assert "operatör incelemeli" in f.reasoning
     assert llm.calls >= 1
 
@@ -312,3 +319,70 @@ def test_a_claim_whose_point_is_outside_the_frame_is_not_evaluated() -> None:
     )
 
     assert service([elsewhere]).run("img_000860").report_findings == []
+
+
+def test_a_dangerous_reassurance_is_at_least_a_contradiction() -> None:
+    """Kurallar tehlikeli güvence buldu, LLM "kısmen" dedi: nihai karar çelişkili."""
+    rule = verdict("contradicts", "lowers_risk", dangerous_reassurance=True)
+
+    final, _ = combine(rule, verdict("partial", "lowers_risk"), "hareketleri olagan")
+
+    assert (final.verdict, final.dangerous_reassurance) == ("contradicts", True)
+
+
+# --- Supabase deposu --------------------------------------------------------------------
+
+
+class FakeConn:
+    """`report_verifications` için yeterli kadar psycopg bağlantısı."""
+
+    def __init__(self, table: dict[str, dict[str, Any]], log: list[str]) -> None:
+        self.table, self.log = table, log
+
+    def __enter__(self) -> "FakeConn":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()) -> "FakeConn":
+        self.log.append(sql.split()[0])
+        if sql.lstrip().startswith("insert"):
+            key, out, model = params
+            self.table.setdefault(key, {"out": out.obj, "model": model})
+        elif sql.lstrip().startswith("update"):
+            self.table[params[-1]]["verdict"] = params[2]
+        self._rows = [
+            (k, r["out"], r["model"], r.get("verdict"), None, None, [], None, None, None)
+            for k, r in self.table.items()
+        ]
+        return self
+
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        return self._rows
+
+
+def test_supabase_store_reads_once_asks_the_llm_only_on_a_miss_and_writes_changes() -> None:
+    from app.db.models import ReportVerificationStore
+
+    table: dict[str, dict[str, Any]] = {}
+    log: list[str] = []
+    store = ReportVerificationStore(lambda: FakeConn(table, log))  # type: ignore[arg-type,return-value]
+    asked: list[int] = []
+
+    def ask() -> dict[str, Any]:
+        asked.append(1)
+        return {"model": "glm/test", "out": {"verdict": "contradicts"}}
+
+    first = store.get_or(["a"], ask)
+    again = store.get_or(["a"], ask)
+    key = next(iter(table))
+    final = verdict("contradicts").model_dump()
+    kwargs: dict[str, Any] = {"claim_id": 1, "image_id": "img", "final": final, "dossier": {}}
+    store.annotate(key, rule_verdict="contradicts", needs_review=False, **kwargs)
+    store.annotate(key, rule_verdict="contradicts", needs_review=False, **kwargs)
+
+    assert first == again == {"model": "glm/test", "out": {"verdict": "contradicts"}}
+    assert len(asked) == 1  # ikinci istek önbellekten
+    assert log == ["select", "insert", "update"]  # değişmeyen sonuç yeniden yazılmaz
+    assert store.size() == 1

@@ -260,4 +260,8 @@ def combine(
         )
     if final.harm == "lowers_risk" and final.verdict == "contradicts":
         final = final.model_copy(update={"dangerous_reassurance": True})
+    if final.dangerous_reassurance and final.verdict in ("consistent", "partial"):
+        # Kanıtla çelişen güvence tanım gereği çelişkidir; "kısmen" genel kararda "tutarlı"
+        # görünür ve kritik bir aracı olağan gösterir.
+        final = final.model_copy(update={"verdict": "contradicts"})
     return final, review
