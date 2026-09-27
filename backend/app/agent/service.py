@@ -69,6 +69,14 @@ class EvaluationService:
         return self._repo
 
     @property
+    def rules(self) -> RiskRules:
+        return self._rules
+
+    @property
+    def detector_version(self) -> str:
+        return self._detector.version
+
+    @property
     def report_verifier(self) -> ReportVerifier:
         return self._report_verifier
 

@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, Response
 
 from app.api.stores import Stores
 from app.core.config import get_settings
+from app.core.rules import default_rules, rules_version
 from app.data_package import IMAGES_DIR, find_image_file, format_hhmm
 from app.db.repositories import DataRepository
 from app.pipelines.geo import nearest_zone
@@ -56,8 +57,9 @@ def get_stores(request: Request) -> Stores:
 
 
 def _latest_levels(stores: Stores) -> dict[str, RiskLevel]:
+    """Güncel kural sürümüyle yapılmış son değerlendirmelerin seviyesi."""
     with stores.open() as (runs, _):
-        return runs.latest_levels()
+        return runs.latest_levels(rules_version(default_rules()))
 
 
 def _pair(p: GeoPoint) -> Pair:

@@ -4,8 +4,10 @@ Temel seviyeyi veren risk motorunun parametreleri ayrı dosyadadır (`risk_engin
 `app.risk_engine.config`); `RiskRules.engine` ikisini tek nesnede taşır.
 """
 
+import hashlib
+import json
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -88,3 +90,13 @@ def load_rules(path: Path | None = None) -> RiskRules:
 @lru_cache
 def default_rules() -> RiskRules:
     return load_rules()
+
+
+def rules_version(rules: RiskRules) -> str:
+    """Eşiklerin ve risk motoru parametrelerinin özeti; biri değişirse değişir.
+
+    Kayıtlı değerlendirmeler bu sürümle etiketlenir; önbellek ve harita yalnızca güncel
+    sürümle yapılmış kayıtları kullanır (eski kurallarla yazılmış brief tekrar oynatılmaz).
+    """
+    blob = json.dumps(asdict(rules), sort_keys=True, ensure_ascii=False)
+    return "r-" + hashlib.sha256(blob.encode()).hexdigest()[:12]

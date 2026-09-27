@@ -30,6 +30,7 @@ export-claims = "scripts.export_claims:main"
 upload-images = "scripts.upload_images:main"
 run-eval-set = "scripts.run_eval_set:main"
 compute-risk = "scripts.compute_risk:main"
+evaluate-all = "scripts.evaluate_all:main"
 
 [build-system]
 requires = ["setuptools>=69"]

@@ -203,15 +203,17 @@ class RunRecorder:
             logger.info("Kayıt atlandı, şema eski: %s", run_id)
             return None
 
-    def latest_cached(self, image_id: str, detector_version: str) -> StoredRun | None:
-        """Aynı tespit bileşeniyle yapılmış son başarılı değerlendirme; LLM'in yazdığı brief
-        otomatik özete tercih edilir."""
+    def latest_cached(
+        self, image_id: str, detector_version: str, rules_version: str
+    ) -> StoredRun | None:
+        """Aynı tespit bileşeni ve kural sürümüyle yapılmış son başarılı değerlendirme; LLM'in
+        yazdığı brief otomatik özete tercih edilir."""
         rows = self._conn.execute(
             """select id from public.analysis_runs
                where image_id = %s and detector_version = %s and status = 'done'
-                 and brief_json is not null
+                 and brief_json is not null and models->>'rules_version' = %s
                order by is_fallback asc, finished_at desc""",
-            (image_id, detector_version),
+            (image_id, detector_version, rules_version),
         ).fetchall()
         for (run_id,) in rows:
             # Güncel şemaya uymayan eski kayıtlar `get`'te None döner, önbellek sayılmaz.
@@ -219,12 +221,14 @@ class RunRecorder:
                 return run
         return None
 
-    def latest_levels(self) -> dict[str, RiskLevel]:
-        """Her görüntünün tamamlanmış son değerlendirmesinin seviyesi."""
+    def latest_levels(self, rules_version: str) -> dict[str, RiskLevel]:
+        """Her görüntünün bu kural sürümüyle tamamlanmış son değerlendirmesinin seviyesi."""
         rows = self._conn.execute(
             """select distinct on (image_id) image_id, overall_risk_level::text
-               from public.analysis_runs where status = 'done'
-               order by image_id, finished_at desc"""
+               from public.analysis_runs
+               where status = 'done' and models->>'rules_version' = %s
+               order by image_id, finished_at desc""",
+            (rules_version,),
         ).fetchall()
         return {image_id: cast(RiskLevel, level) for image_id, level in rows}
 

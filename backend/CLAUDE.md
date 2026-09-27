@@ -60,6 +60,7 @@ detect() → piksel          track_risk(track_id, at_time)  LLM parse → report
 - **Tespit modeli arayüz arkasında.** `detect(image) → [Detection]` şeklinde tanımlı. `USE_INFERENCE=DEMO` modelin kayıtlı çıktısı (Supabase `model_detections`; paket modunda `DETECTIONS_CSV_PATH`), `REAL` EVREN'deki model (`EVREN_MODEL_API_KEY`). Başka tespit kaynağı yok.
 - **Veritabanına sadece backend yazar** (`service_role` anahtarıyla). Pipeline'lar SQL bilmez; sorgular `app/db/repositories.py` içindedir.
 - **İzlenebilirlik.** Her agent adımı `agent_steps` tablosuna yazılır; brief kaynaklarını belirtir.
+- **Önbellek kural sürümüne bağlı.** Her değerlendirme `analysis_runs.models.rules_version` ile etiketlenir (`rules_version()`: `risk_rules.toml` + `risk_engine.toml` özeti). Aynı görüntü tekrar istendiğinde yalnızca aynı tespit bileşeni ve aynı kural sürümüyle yapılmış kayıt oynatılır; harita seviyeleri de yalnızca güncel sürümün kayıtlarından gelir. Eşik ya da motor değişince `python -m scripts.evaluate_all` bütün görüntüleri yeniden değerlendirip kaydeder (`--missing`: yalnızca güncel sürümde kaydı olmayanlar).
 
 ## Tech stack
 Python 3.11+ (ortam: `.venv`, Python 3.14, pip), FastAPI (SSE), Pydantic v2, psycopg 3 (PostGIS sorguları SQL ile), anthropic SDK, openai SDK (yalnızca GLM için), pytest, ruff, mypy strict. Planlanan ama henüz kullanılmayan: LangGraph. Frontend: Next.js + Tailwind + shadcn/ui + MapLibre/deck.gl.

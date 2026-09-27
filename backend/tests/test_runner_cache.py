@@ -3,6 +3,7 @@
 Test noktası, değerlendirme servisini saran koşucu; kayıt deposu bellekte çalışır.
 """
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 
 from app.agent.runner import EvaluationRunner, InMemoryRunStore
 from app.agent.service import EvaluationService
+from app.core.rules import load_rules, rules_version
 from app.data_package import read_package
 from app.db.repositories import InMemoryRepository
 from app.llm.client import LLMRouter, load_model_config
@@ -190,3 +192,30 @@ def test_runs_from_another_detector_are_not_replayed() -> None:
     assert first[0][1]["cached"] is False
     assert replay[0][1]["cached"] is True
     assert replay[0][1]["run_id"] == first[0][1]["run_id"]
+
+
+def test_changed_rules_do_not_replay_a_run_recorded_with_the_old_rules() -> None:
+    """Eşik ya da risk motoru değişince eski kurallarla yazılmış brief tekrar oynatılmaz ve
+    haritanın seviyesi olarak da kullanılmaz."""
+    detector = CountingDetector()
+    store = InMemoryRunStore()
+    old = EvaluationService(InMemoryRepository(PACKAGE), detector)
+    rules = old.rules
+    changed = replace(
+        rules, engine=replace(rules.engine, critical=replace(rules.engine.critical, approach_m=900))
+    )
+    new = EvaluationService(InMemoryRepository(PACKAGE), detector, rules=changed)
+    old_runner = EvaluationRunner(old, store, detector_version=detector.version)
+    new_runner = EvaluationRunner(new, store, detector_version=detector.version)
+    events(old_runner)
+
+    again = events(new_runner)
+
+    assert again[0][1]["cached"] is False
+    assert rules_version(changed) != rules_version(rules)
+    assert set(store.latest_levels(rules_version(changed))) == {"img_000860"}
+    assert events(old_runner)[0][1]["cached"] is True
+
+
+def test_rules_version_is_stable_for_the_same_rules() -> None:
+    assert rules_version(load_rules()) == rules_version(load_rules())

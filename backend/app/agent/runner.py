@@ -1,7 +1,9 @@
 """Değerlendirme koşucusu: kayıt, önbellekten tekrar oynatma ve yeniden hesaplama.
 
-Aynı görüntü tekrar istendiğinde son başarılı değerlendirme, adımlarıyla birlikte
-tekrar oynatılır; LLM ve tespit yeniden çalışmaz. LLM'in yazdığı bir brief, daha yeni
+Aynı görüntü tekrar istendiğinde, aynı tespit bileşeni ve aynı kural sürümüyle
+(`rules_version`) yapılmış son başarılı değerlendirme adımlarıyla birlikte tekrar
+oynatılır; LLM ve tespit yeniden çalışmaz. Eşikler ya da risk motoru değişince eski
+kayıtlar önbellek sayılmaz. LLM'in yazdığı bir brief, daha yeni
 bir otomatik özete tercih edilir (ör. demo sırasında 503 yüzünden düşmüş bir özet).
 """
 
@@ -13,6 +15,7 @@ from typing import Any, Literal, Protocol
 from uuid import uuid4
 
 from app.agent.service import BRIEF_STEP, EvaluationService
+from app.core.rules import rules_version
 from app.schemas.api import Brief, StepEvent
 from app.schemas.domain import RiskLevel
 from app.schemas.runs import StoredRun
@@ -34,13 +37,15 @@ class RunStore(Protocol):
 
     def get(self, run_id: str) -> StoredRun | None: ...
 
-    def latest_cached(self, image_id: str, detector_version: str) -> StoredRun | None:
-        """Aynı tespit bileşeniyle yapılmış son başarılı değerlendirme; LLM'in yazdığı brief
-        otomatik özete tercih edilir."""
+    def latest_cached(
+        self, image_id: str, detector_version: str, rules_version: str
+    ) -> StoredRun | None:
+        """Aynı tespit bileşeni ve kural sürümüyle yapılmış son başarılı değerlendirme; LLM'in
+        yazdığı brief otomatik özete tercih edilir."""
         ...
 
-    def latest_levels(self) -> dict[str, RiskLevel]:
-        """Her görüntünün tamamlanmış son değerlendirmesinin seviyesi."""
+    def latest_levels(self, rules_version: str) -> dict[str, RiskLevel]:
+        """Her görüntünün bu kural sürümüyle tamamlanmış son değerlendirmesinin seviyesi."""
         ...
 
 
@@ -51,6 +56,7 @@ class InMemoryRunStore:
         self._runs: dict[str, StoredRun] = {}
         self._order: dict[str, int] = {}
         self._versions: dict[str, str] = {}
+        self._rules: dict[str, str | None] = {}
         self._counter = itertools.count()
         self._lock = threading.Lock()
 
@@ -60,6 +66,7 @@ class InMemoryRunStore:
             self._runs[run_id] = StoredRun(run_id, image_id, "running")
             self._order[run_id] = next(self._counter)
             self._versions[run_id] = detector_version
+            self._rules[run_id] = models.get("rules_version")
         return run_id
 
     def add_step(self, run_id: str, event: StepEvent) -> None:
@@ -76,12 +83,15 @@ class InMemoryRunStore:
     def get(self, run_id: str) -> StoredRun | None:
         return self._runs.get(run_id)
 
-    def latest_cached(self, image_id: str, detector_version: str) -> StoredRun | None:
+    def latest_cached(
+        self, image_id: str, detector_version: str, rules_version: str
+    ) -> StoredRun | None:
         done = [
             r
             for r in self._runs.values()
             if r.image_id == image_id
             and self._versions[r.run_id] == detector_version
+            and self._rules[r.run_id] == rules_version
             and r.status == "done"
             and r.brief is not None
         ]
@@ -90,10 +100,16 @@ class InMemoryRunStore:
         candidates = written or done
         return candidates[0] if candidates else None
 
-    def latest_levels(self) -> dict[str, RiskLevel]:
+    def latest_levels(self, rules_version: str) -> dict[str, RiskLevel]:
         with self._lock:
             done = sorted(
-                (r for r in self._runs.values() if r.status == "done" and r.brief is not None),
+                (
+                    r
+                    for r in self._runs.values()
+                    if r.status == "done"
+                    and r.brief is not None
+                    and self._rules[r.run_id] == rules_version
+                ),
                 key=lambda r: self._order[r.run_id],
             )
         return {r.image_id: r.brief.risk_level for r in done if r.brief is not None}
@@ -112,20 +128,28 @@ class EvaluationRunner:
         self._service = service
         self._store = store
         self._detector_version = detector_version
+        self._rules_version = rules_version(service.rules)
 
     def stream(self, image_id: str, *, recompute: bool = False) -> Generator[RunEvent, None, None]:
         """`run`, ardından `step` olayları ve son `brief` olayı; hata olursa `error`."""
         self._service.require_image(image_id)
         if (
             not recompute
-            and (cached := self._store.latest_cached(image_id, self._detector_version)) is not None
+            and (
+                cached := self._store.latest_cached(
+                    image_id, self._detector_version, self._rules_version
+                )
+            )
+            is not None
         ):
             yield "run", {"run_id": cached.run_id, "image_id": image_id, "cached": True}
             for step in cached.steps:
                 yield _payload(step)
             return
 
-        run_id = self._store.start(image_id, self._detector_version, {})
+        run_id = self._store.start(
+            image_id, self._detector_version, {"rules_version": self._rules_version}
+        )
         finished = False
         try:
             yield "run", {"run_id": run_id, "image_id": image_id, "cached": False}
