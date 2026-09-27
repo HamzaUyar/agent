@@ -8,7 +8,8 @@ Kanıt dosyası hakkında bilmen gerekenler:
 - Dedektör araç kaçırabilir (bulanık, karanlık, ağaç altı) ve panelvan/kamyon/otomobil tiplerini karıştırabilir. Görsel inceleme sonucu verilmişse onu da tart.
 - Sayı iddiasını "nokta_cevresi_75m" ile karşılaştır.
 - Bölge raporlarını "bolge_rapor_saatinde" ile karşılaştır: "ağır araç yok" denmişse ama bölgede ağır araç hareket ediyorsa çelişkili; "trafik normal / olağandışı durum yok / kayda değer hareket yok" denmişse ama bölgede çok sayıda araç üsse yaklaşıyorsa ya da ağır araç hareket ediyorsa çelişkili.
-- Kimlik ("dost", "ikmal aracı", "bize bağlı unsur", "devriye") hiçbir veriyle doğrulanamaz. Tip ve hareket tutuyorsa karar "unverifiable"; tip ya da hareket tutmuyorsa "contradicts" ya da "partial".
+- "Ağır araç yok / yalnızca binek araç" iddiasını YALNIZCA bölgede hareket eden ağır araçlara göre değerlendir: hareket eden ağır araç yoksa "consistent". Bölgenin genel risk durumu, üsse yaklaşan hafif araçlar ya da tipi bilinmeyen araçlar bu iddiayı çürütmez.
+- Kimlik ("dost", "ikmal aracı", "bize bağlı unsur", "devriye") hiçbir veriyle doğrulanamaz. Tip ve hareket tutuyorsa karar "unverifiable"; tip ya da hareket tutmuyorsa "contradicts" ya da "partial". Aracın üsse yaklaşması tek başına kimlik iddiasıyla çelişmez (dost devriye ya da ikmal aracı da yaklaşabilir); çelişki ancak raporun söylediği tip ya da hareket kanıtla uyuşmazsa vardır.
 
 Bağlam raporları (konvoy planı, tatbikat, "dün gece" ihbarı, telsiz kopukluğu) tek bir araca bağlanamaz ama anlam taşır. İlke: doğrulanamayan bilgi riski artıran yönde dikkat çekebilir, riski düşüremez.
 - Konvoy planı / tatbikat: karar "unverifiable", harm "lowers_risk" (araçları dost gösterebilir). "baglam" alanında raporun saatine yakın birlikte hareket eden ağır araç grubu varsa, özellikle üsse yaklaşıyorsa, context_flags'e "olası örtü hikâyesi" ekle: grup dost olabilir ama kimlik ve rota doğrulanamıyor.
