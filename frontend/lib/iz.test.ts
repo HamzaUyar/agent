@@ -14,6 +14,7 @@ const A: TrackOverview = {
   level: "critical",
   label: "car",
   kind: "matched",
+  unframed: false,
   points: [
     { time: "10:00", lat: 39.0, lon: 32.0 },
     { time: "10:15", lat: 39.0, lon: 32.1 },

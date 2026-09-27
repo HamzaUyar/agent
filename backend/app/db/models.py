@@ -10,7 +10,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
-from app.schemas.api import Brief, ContactLevel, StepEvent
+from app.schemas.api import Brief, ContactLevel, StepEvent, TrackAssessmentView
 from app.schemas.chat import ChatMessage, Role
 from app.schemas.claims import ClaimRecord, ReportClaim
 from app.schemas.domain import (
@@ -250,6 +250,23 @@ class RunRecorder:
             except ValidationError:
                 logger.info("Temaslar okunamadı, şema eski: %s", image_id)
         return contacts
+
+    def latest_track_assessments(self) -> dict[str, TrackAssessmentView]:
+        """Görüntüsüz track'lerin en son risk koşusundaki değerlendirmesi."""
+        return _track_assessments(self._conn)
+
+
+def _track_assessments(conn: psycopg.Connection) -> dict[str, TrackAssessmentView]:
+    rows = conn.execute(
+        """select track_id, level::text, code, assessment, is_fallback
+           from public.unframed_tracks_latest where assessment is not null"""
+    ).fetchall()
+    return {
+        r[0]: TrackAssessmentView(
+            track_id=r[0], level=cast(RiskLevel, r[1]), code=r[2], assessment=r[3], is_fallback=r[4]
+        )
+        for r in rows
+    }
 
 
 def reports_to_parse(conn: psycopg.Connection, *, force: bool) -> list[tuple[int, FieldReport]]:

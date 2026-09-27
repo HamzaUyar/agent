@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from app.agent.service import BRIEF_STEP, EvaluationService
 from app.core.rules import rules_version
-from app.schemas.api import Brief, ContactLevel, StepEvent
+from app.schemas.api import Brief, ContactLevel, StepEvent, TrackAssessmentView
 from app.schemas.domain import RiskLevel
 from app.schemas.runs import StoredRun
 
@@ -51,6 +51,10 @@ class RunStore(Protocol):
     def latest_contacts(self, rules_version: str) -> dict[str, list[ContactLevel]]:
         """Her görüntünün bu kural sürümüyle tamamlanmış son değerlendirmesindeki temasların
         seviye özeti."""
+        ...
+
+    def latest_track_assessments(self) -> dict[str, TrackAssessmentView]:
+        """Görüntüsüz track'lerin en son risk koşusundaki değerlendirmesi."""
         ...
 
 
@@ -136,6 +140,10 @@ class InMemoryRunStore:
             for r in done
             if r.brief is not None
         }
+
+    def latest_track_assessments(self) -> dict[str, TrackAssessmentView]:
+        """Bellek içi depoda görüntüsüz track değerlendirmesi tutulmaz (Supabase'te yazılır)."""
+        return {}
 
 
 def _payload(event: StepEvent) -> RunEvent:

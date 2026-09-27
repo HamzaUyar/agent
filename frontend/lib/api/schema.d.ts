@@ -54,8 +54,10 @@ export interface paths {
         /**
          * List Tracks
          * @description Bütün track'ler, kayıtları olduğu gibi. Her track'in bittiği görüntü, o görüntünün son
-         *     tamamlanmış değerlendirmesindeki temasın seviyesi ve sınıfıyla. Hesap yapılmaz, LLM ya da
-         *     tespit çağrılmaz; değerlendirmesi olmayan track'in seviyesi `None` kalır.
+         *     tamamlanmış değerlendirmesindeki temasın seviyesi ve sınıfıyla. Hiçbir görüntünün teması
+         *     olmayan (görüntüsüz) track'in seviyesi ve kısa değerlendirmesi `scripts.assess_tracks`'in
+         *     kaydından okunur. Hesap yapılmaz, LLM ya da tespit çağrılmaz; değerlendirmesi olmayan
+         *     track'in seviyesi `None` kalır.
          */
         get: operations["list_tracks_tracks_get"];
         put?: never;
@@ -329,6 +331,14 @@ export interface components {
             level_reasons?: string[];
             /** Level Basis */
             level_basis?: ("yaklasma" | "dolasma" | "uzun_duraklama" | "tehdit_uyarisi" | "rapor_celiskisi" | "kacirilmis_temas" | "kayit_disi" | "dikkat_gerekmiyor")[];
+            /** Level Code */
+            level_code?: string | null;
+            /** Priority Score */
+            priority_score?: number | null;
+            /** Level Tags */
+            level_tags?: string[];
+            /** Level History */
+            level_history?: components["schemas"]["LevelPoint"][];
             /** Adjustment Reason */
             adjustment_reason?: string | null;
             /** Adjustment Rejected */
@@ -443,6 +453,23 @@ export interface components {
             lat: number;
             /** Lon */
             lon: number;
+        };
+        /**
+         * LevelPoint
+         * @description Risk motorunun bir gözlem anındaki kararı.
+         */
+        LevelPoint: {
+            /** Time */
+            time: string;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "low" | "medium" | "high" | "critical";
+            /** Code */
+            code: string;
+            /** Score */
+            score: number;
         };
         /** MotionFinding */
         MotionFinding: {
@@ -609,6 +636,13 @@ export interface components {
             label?: string | null;
             /** Kind */
             kind?: ("matched" | "unregistered" | "missed") | null;
+            /**
+             * Unframed
+             * @default false
+             */
+            unframed: boolean;
+            /** Assessment */
+            assessment?: string | null;
         };
         /** ValidationError */
         ValidationError: {

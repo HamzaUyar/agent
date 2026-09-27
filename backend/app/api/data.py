@@ -113,13 +113,16 @@ def list_images(repo: RepoDep, request: Request) -> list[ImageSummary]:
 @router.get("/tracks", response_model=list[TrackOverview])
 def list_tracks(repo: RepoDep, stores: StoresDep) -> list[TrackOverview]:
     """Bütün track'ler, kayıtları olduğu gibi. Her track'in bittiği görüntü, o görüntünün son
-    tamamlanmış değerlendirmesindeki temasın seviyesi ve sınıfıyla. Hesap yapılmaz, LLM ya da
-    tespit çağrılmaz; değerlendirmesi olmayan track'in seviyesi `None` kalır."""
+    tamamlanmış değerlendirmesindeki temasın seviyesi ve sınıfıyla. Hiçbir görüntünün teması
+    olmayan (görüntüsüz) track'in seviyesi ve kısa değerlendirmesi `scripts.assess_tracks`'in
+    kaydından okunur. Hesap yapılmaz, LLM ya da tespit çağrılmaz; değerlendirmesi olmayan
+    track'in seviyesi `None` kalır."""
     by_track: dict[str, list[TrackPoint]] = defaultdict(list)
     for point in repo.track_points_between(time(0, 0), time(23, 59)):
         by_track[point.track_id].append(point)
     with stores.open() as (runs, _):
         contacts_of = runs.latest_contacts(rules_version(default_rules()))
+        unframed_of = runs.latest_track_assessments()
     images_at: dict[time, list[ImageMeta]] = defaultdict(list)
     for meta in repo.list_images():
         images_at[meta.capture_time].append(meta)
@@ -138,6 +141,7 @@ def list_tracks(repo: RepoDep, stores: StoresDep) -> list[TrackOverview]:
             ending = None
         contacts = contacts_of.get(ending.image_id, []) if ending is not None else []
         contact = next((c for c in contacts if c.track_id == track_id), None)
+        assessed = unframed_of.get(track_id) if contact is None else None
         overviews.append(
             TrackOverview(
                 track_id=track_id,
@@ -148,9 +152,11 @@ def list_tracks(repo: RepoDep, stores: StoresDep) -> list[TrackOverview]:
                     for p in points
                 ],
                 image_id=ending.image_id if ending is not None else None,
-                level=contact.final_level if contact else None,
+                level=contact.final_level if contact else (assessed.level if assessed else None),
                 label=(contact.effective_label or contact.label) if contact else None,
                 kind=contact.kind if contact else None,
+                unframed=assessed is not None,
+                assessment=assessed.assessment if assessed else None,
             )
         )
     return overviews

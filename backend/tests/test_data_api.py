@@ -20,7 +20,7 @@ from app.core.rules import default_rules, rules_version
 from app.data_package import DataPackage, read_package
 from app.db.repositories import InMemoryRepository
 from app.main import app
-from app.schemas.api import Brief
+from app.schemas.api import Brief, TrackAssessmentView
 from app.schemas.domain import Detection, ImageMeta, VehicleClass
 from app.storage import SupabaseStorage
 
@@ -256,3 +256,25 @@ def test_newer_evaluation_of_the_same_image_replaces_the_older_one() -> None:
 
     second = {t["track_id"]: t["level"] for t in client.get("/tracks").json()}
     assert second[target] == "low"
+
+
+def test_unframed_track_takes_level_and_text_from_its_track_assessment() -> None:
+    """Hiçbir görüntünün teması olmayan track "değerlendirilmedi" görünmez: seviye ve kısa
+    değerlendirme görüntüsüz track kaydından (scripts.assess_tracks) gelir."""
+    client, _ = tracks_client([])
+    stores = app.dependency_overrides[get_stores]()
+    first = client.get("/tracks").json()[0]["track_id"]
+    view = TrackAssessmentView(
+        track_id=first,
+        level="high",
+        code="H1_approach",
+        assessment="Araç üsse yaklaşıyor; kadraj dışında olduğu için izlenmeli.",
+        is_fallback=False,
+    )
+    with stores.open() as (runs, _):
+        runs.latest_track_assessments = lambda: {first: view}  # type: ignore[method-assign]
+
+    track = next(t for t in client.get("/tracks").json() if t["track_id"] == first)
+
+    assert (track["level"], track["unframed"], track["kind"]) == ("high", True, None)
+    assert track["assessment"] == view.assessment

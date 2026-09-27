@@ -308,6 +308,20 @@ class TrackOverview(BaseModel):
     label: str | None = None
     """Temasın (riskte sayılan) sınıfı; tespit yoksa (kaçırılmış temas) `None`."""
     kind: ContactKind | None = None
+    unframed: bool = False
+    """Hiçbir görüntünün adayı değil (kaydı var, çekim anında kadraj dışında): seviyeyi risk
+    motoru hareketinden verir, `assessment` LLM'in kısa değerlendirmesidir."""
+    assessment: str | None = None
+
+
+class TrackAssessmentView(BaseModel):
+    """Görüntüsüz bir track'in son değerlendirmesi (`unframed_tracks_latest`)."""
+
+    track_id: str
+    level: RiskLevel
+    code: str
+    assessment: str
+    is_fallback: bool
 
 
 class EvaluationRequest(BaseModel):

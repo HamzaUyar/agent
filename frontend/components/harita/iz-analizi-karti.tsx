@@ -284,7 +284,8 @@ function Zaman({ start, end }: { start: number; end: number }) {
   )
 }
 
-/** Vurgulanan track: kimlik, sınıf, seviye, kayıt aralığı ve bittiği görüntüye geçiş. */
+/** Vurgulanan track: kimlik, sınıf, seviye, kayıt aralığı ve bittiği görüntüye geçiş;
+ * görüntüsüz track'te (kadraj dışında) görüntü yerine kısa değerlendirme. */
 function Vurgu() {
   const highlight = useOperasyon((s) => s.izHighlight)
   const setHighlight = useOperasyon((s) => s.setIzHighlight)
@@ -308,7 +309,9 @@ function Vurgu() {
       </div>
       <span className="font-mono text-metin-soluk">
         kayıt {s.start}–{s.end}
+        {s.unframed && " · görüntüsüz (kadraj dışında)"}
       </span>
+      {s.unframed && s.assessment && <p className="text-metin">{s.assessment}</p>}
       {track.imageId && (
         <Button variant="outline" size="xs" className="self-start" onClick={gotoImage}>
           <ArrowUpRight />
