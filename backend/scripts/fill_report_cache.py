@@ -1,4 +1,6 @@
-"""Rapor doğrulamanın LLM önbelleğini bütün görüntüler için doldurur (demo öncesi bir kez).
+"""Rapor doğrulama sonuçlarını bütün görüntüler için doldurur (demo öncesi bir kez).
+
+Supabase modunda sonuçlar `report_verifications` tablosuna, yerel pakette dosyaya yazılır.
 
 Değerlendirme akışıyla aynı veri, tespit ve iddialar kullanılır; böylece demoda rapor adımı
 önbellekten anında gelir. Karar/brief LLM'i çağrılmaz. Görüntüler paralel işlenir; gateway'in
@@ -28,7 +30,7 @@ def main() -> None:
     repo = service.repository
     verifier = service.report_verifier
     images = repo.list_images()
-    before = len(verifier.cache().data)
+    before = verifier.cache().size()
     started = time.monotonic()
 
     def fill(image_id: str) -> tuple[str, int, int]:
@@ -42,9 +44,10 @@ def main() -> None:
             print(f"{image_id}: {n} rapor, {review} operatör incelemeli")
 
     cache = verifier.cache()
+    after = cache.size()
     print(
         f"{len(images)} görüntü, {time.monotonic() - started:.0f} sn; önbellekte "
-        f"{len(cache.data)} cevap ({len(cache.data) - before} yeni) → {cache.path}"
+        f"{after} cevap ({after - before} yeni) → {cache.where()}"
     )
 
 

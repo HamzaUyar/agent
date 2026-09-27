@@ -20,6 +20,7 @@ from app.db.repositories import DataRepository
 from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector
 from app.pipelines.vision import VisualVerifier
+from app.reports_v2.agents import VerdictCache
 from app.reports_v2.stage import ReportVerifier
 from app.schemas.api import Brief, StepEvent
 from app.schemas.domain import ImageMeta
@@ -46,6 +47,7 @@ class EvaluationService:
         report_verifier: ReportVerifier | None = None,
         images_dir: Path | None = None,
         report_cache: Path | None = None,
+        report_store: VerdictCache | None = None,
     ) -> None:
         self._repo = repo
         self._detector = detector
@@ -56,6 +58,7 @@ class EvaluationService:
             router,
             images_dir or get_settings().resolved_data_dir / "images",
             report_cache,
+            report_store,
         )
         self._rules = rules or default_rules()
         self._router = router

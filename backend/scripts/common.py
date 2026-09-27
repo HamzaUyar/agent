@@ -6,7 +6,7 @@ from pathlib import Path
 from app.agent.service import EvaluationService
 from app.core.config import get_settings
 from app.data_package import load_claims, read_package
-from app.db.models import fetch_claims, fetch_package
+from app.db.models import ReportVerificationStore, fetch_claims, fetch_package
 from app.db.repositories import InMemoryRepository
 from app.db.session import connect
 from app.llm.client import build_router
@@ -63,6 +63,8 @@ def build_service(args: argparse.Namespace) -> EvaluationService:
         else build_detector(settings)
     )
     images = images_dir(args)
+    # Supabase'te rapor doğrulama sonuçları ekibin ortak tablosunda; yerel pakette dosyada.
+    store = None if args.package else ReportVerificationStore(connect)
     return EvaluationService(
         repo,
         detector,
@@ -70,4 +72,5 @@ def build_service(args: argparse.Namespace) -> EvaluationService:
         verifier=verifier,
         images_dir=images,
         report_cache=images.parent / REPORT_CACHE,
+        report_store=store,
     )

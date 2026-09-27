@@ -47,7 +47,7 @@ def run_llm(args: argparse.Namespace, data: ev.Data, approach: str) -> dict[int,
             d = ev.compact(d)
         try:
             if approach == "C":
-                v, _ = agents.single_llm(router, cache, d)
+                v, _, _ = agents.single_llm(router, cache, d)
                 return i, v.model_dump()
             v, trace = agents.team(router, cache, data, d)
             return i, {**v.model_dump(), "trace": trace}

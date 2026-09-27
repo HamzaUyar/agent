@@ -12,6 +12,7 @@ Politika (ADR-0002'nin sıkılaştırılmış hali):
   "incelenmeli" diye gösterilir.
 """
 
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -30,6 +31,8 @@ from app.reports_v2.verdict import ReportVerdict
 from app.schemas.api import Certainty, Verdict
 from app.schemas.claims import ClaimRecord
 from app.schemas.domain import DataPackage, GeoPoint, ImageMeta
+
+logger = logging.getLogger(__name__)
 
 WINDOW_MIN = 120
 IDENTITY = ("dost", "ikmal", "bize bagli", "devriye", "tatbikat")
@@ -67,8 +70,10 @@ class ReportVerifier:
     router: LLMRouter | None
     images_dir: Path
     cache_path: Path | None = None
+    store: agents.VerdictCache | None = None
+    """Verilirse (Supabase) önbellek ve kayıt burası; yoksa `cache_path` dosyası ya da bellek."""
     _data: ev.Data | None = field(default=None, init=False, repr=False)
-    _cache: agents.Cache | None = field(default=None, init=False, repr=False)
+    _cache: agents.VerdictCache | None = field(default=None, init=False, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def data(self) -> ev.Data:
@@ -104,9 +109,9 @@ class ReportVerifier:
             for d in found
         ]
 
-    def cache(self) -> agents.Cache:
+    def cache(self) -> agents.VerdictCache:
         if self._cache is None:
-            self._cache = agents.Cache(self.cache_path)
+            self._cache = self.store or agents.Cache(self.cache_path)
         return self._cache
 
     def _dossier(self, rid: int, rec: ClaimRecord) -> dict[str, Any]:
@@ -162,28 +167,62 @@ class ReportVerifier:
         """İlgili iddiaları doğrular; LLM çağrıları paralel gider (gateway sınırı 4)."""
         relevant = self.relevant(image, zone, now, claims)
 
-        def judge(
-            rec: ClaimRecord,
-        ) -> tuple[ReportVerdict, ReportVerdict | None, str | None, str | None]:
+        def judge(rec: ClaimRecord) -> _Judged:
             dossier = self._dossier(rec.claim_id, rec)
             rule = rules.judge(dossier, rec.claim)
             llm: ReportVerdict | None = None
             model: str | None = None
+            key: str | None = None
             if self.router is not None:
                 try:
-                    llm, models = agents.single_llm(self.router, self.cache(), ev.compact(dossier))
+                    compact = ev.compact(dossier)
+                    llm, models, key = agents.single_llm(self.router, self.cache(), compact)
                     model = models[0] if models else None
                 except Exception:
                     llm = None
-            return rule, llm, _linked_track(dossier), model
+            return _Judged(rule, llm, _linked_track(dossier), model, key, dossier)
 
         with ThreadPoolExecutor(max_workers=4) as pool:
             done = list(pool.map(judge, relevant))
         results: list[VerifiedReport] = []
-        for rec, (rule, llm, track, model) in zip(relevant, done, strict=True):
-            final, review = combine(rule, llm, rec.report.text)
-            results.append(VerifiedReport(rec, final, rule, llm, track, review, model))
+        for rec, j in zip(relevant, done, strict=True):
+            final, review = combine(j.rule, j.llm, rec.report.text)
+            results.append(VerifiedReport(rec, final, j.rule, j.llm, j.track, review, j.model))
+            self._record(rec, image, j, final, review)
         return results
+
+    def _record(
+        self, rec: ClaimRecord, image: ImageMeta, j: "_Judged", final: ReportVerdict, review: bool
+    ) -> None:
+        """Depo kayıt destekliyorsa (Supabase) kural kararını ve nihai sonucu yazar."""
+        annotate = getattr(self.cache(), "annotate", None)
+        if annotate is None or j.key is None:
+            return
+        located = rec.claim.location_type == "coordinate"
+        try:
+            annotate(
+                j.key,
+                claim_id=rec.claim_id,
+                image_id=image.image_id if located else None,
+                final=final.model_dump(),
+                rule_verdict=j.rule.verdict,
+                needs_review=review,
+                dossier=j.dossier,
+            )
+        except Exception:
+            logger.warning(
+                "rapor doğrulama kaydı yazılamadı (iddia %s)", rec.claim_id, exc_info=True
+            )
+
+
+@dataclass(frozen=True)
+class _Judged:
+    rule: ReportVerdict
+    llm: ReportVerdict | None
+    track: str | None
+    model: str | None
+    key: str | None
+    dossier: dict[str, Any]
 
 
 def _linked_track(dossier: dict[str, Any]) -> str | None:

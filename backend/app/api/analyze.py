@@ -15,7 +15,9 @@ from app.agent.tools import ChatTools
 from app.api.data import RepoDep, get_stores
 from app.api.stores import Stores
 from app.core.config import get_settings
+from app.db.models import ReportVerificationStore
 from app.db.repositories import DataRepository
+from app.db.session import connect
 from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector
 from app.reports_v2.stage import ReportVerifier
@@ -40,9 +42,12 @@ def _report_verifier(request: Request, repo: DataRepository, detector: Detector)
     state = request.app.state
     current: ReportVerifier | None = getattr(state, "report_verifier", None)
     if current is None or current.repo is not repo:
-        data_dir = get_settings().resolved_data_dir
+        settings = get_settings()
+        data_dir = settings.resolved_data_dir
         cache = data_dir / "report_verdicts_cache.json"
-        current = ReportVerifier(repo, detector, state.router, data_dir / "images", cache)
+        # Supabase'te sonuçlar ekibin ortak tablosunda (report_verifications); pakette dosyada.
+        store = ReportVerificationStore(connect) if settings.data_source == "supabase" else None
+        current = ReportVerifier(repo, detector, state.router, data_dir / "images", cache, store)
         state.report_verifier = current
     return current
 

@@ -16,7 +16,7 @@ import json
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,21 @@ from app.reports_v2.verdict import ReportVerdict, VerdictLabel
 PROMPTS = Path(__file__).parent / "prompts"
 POLICY = (PROMPTS / "policy.md").read_text(encoding="utf-8")
 MAX_TOKENS = 4096
+
+
+def cache_key(key_parts: list[str]) -> str:
+    """LLM girdisinin özeti: aynı girdi aynı anahtar."""
+    return hashlib.sha256("\x1f".join(key_parts).encode()).hexdigest()
+
+
+class VerdictCache(Protocol):
+    """LLM cevap önbelleği: dosya/bellek (`Cache`) ya da Supabase (`ReportVerificationStore`)."""
+
+    def get_or(self, key_parts: list[str], fn: Callable[[], Any]) -> Any: ...
+
+    def size(self) -> int: ...
+
+    def where(self) -> str: ...
 
 
 class Cache:
@@ -42,7 +57,7 @@ class Cache:
         self.calls = 0
 
     def get_or(self, key_parts: list[str], fn: Callable[[], Any]) -> Any:
-        key = hashlib.sha256("\x1f".join(key_parts).encode()).hexdigest()
+        key = cache_key(key_parts)
         with self._lock:
             if key in self.data:
                 return self.data[key]
@@ -53,6 +68,12 @@ class Cache:
             if self.path is not None:
                 self.path.write_text(json.dumps(self.data, ensure_ascii=False), encoding="utf-8")
         return value
+
+    def size(self) -> int:
+        return len(self.data)
+
+    def where(self) -> str:
+        return str(self.path) if self.path else "bellek"
 
 
 class VisualObject(BaseModel):
@@ -85,7 +106,7 @@ def _json(obj: Any) -> str:
 
 def _complete(
     router: LLMRouter,
-    cache: Cache,
+    cache: VerdictCache,
     task: str,
     system: str,
     user: str,
@@ -98,17 +119,19 @@ def _complete(
         return {"model": model, "out": obj.model_dump(by_alias=True)}
 
     img_key = hashlib.sha256(image).hexdigest() if image else ""
-    result: dict[str, Any] = cache.get_or([tag, task, system, user, img_key], call)
+    parts = [tag, task, system, user, img_key]
+    result: dict[str, Any] = dict(cache.get_or(parts, call))
+    result["key"] = cache_key(parts)
     return result
 
 
 def single_llm(
-    router: LLMRouter, cache: Cache, dossier: dict[str, Any]
-) -> tuple[ReportVerdict, list[str]]:
-    """Yaklaşım C: tek çağrı."""
+    router: LLMRouter, cache: VerdictCache, dossier: dict[str, Any]
+) -> tuple[ReportVerdict, list[str], str]:
+    """Yaklaşım C: tek çağrı. Dönen üçüncü değer önbellek anahtarıdır."""
     user = "KANIT DOSYASI:\n" + _json(dossier) + "\n\nBu raporu doğrula."
     r = _complete(router, cache, "report_verify", POLICY, user, ReportVerdict, "C")
-    return ReportVerdict.model_validate(r["out"]), [r["model"]]
+    return ReportVerdict.model_validate(r["out"]), [r["model"]], r["key"]
 
 
 def visual_check(

@@ -1,7 +1,7 @@
 """Supabase tablolarına okuma/yazma: kaynak verinin okunması ve değerlendirme kayıtları."""
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, cast
 from uuid import UUID
 
@@ -350,3 +350,80 @@ class ChatRecorder:
                     Jsonb(message.tool_calls) if message.tool_calls is not None else None,
                 ),
             )
+
+
+class ReportVerificationStore:
+    """Rapor doğrulamanın Supabase önbelleği ve kaydı: `report_verifications` tablosu.
+
+    `agents.VerdictCache` sözleşmesini uygular: aynı LLM girdisi (anahtar) tabloda varsa LLM'e
+    sorulmaz. Doğrulama bitince `annotate` kural kararını ve nihai sonucu aynı satıra yazar.
+    Her çağrı kendi bağlantısını açar; doğrulayıcı paralel işçilerden çağırır.
+    """
+
+    def __init__(self, connect: Callable[[], psycopg.Connection]) -> None:
+        self._connect = connect
+        self.calls = 0
+
+    def get_or(self, key_parts: list[str], fn: Callable[[], Any]) -> Any:
+        from app.reports_v2.agents import cache_key
+
+        key = cache_key(key_parts)
+        with self._connect() as conn:
+            row = conn.execute(
+                "select llm_output, model from public.report_verifications where cache_key = %s",
+                (key,),
+            ).fetchone()
+        if row is not None:
+            return {"model": row[1], "out": row[0]}
+        value = fn()
+        with self._connect() as conn:
+            conn.execute(
+                """insert into public.report_verifications (cache_key, llm_output, model)
+                   values (%s, %s, %s) on conflict (cache_key) do nothing""",
+                (key, Jsonb(value["out"]), value["model"]),
+            )
+        self.calls += 1
+        return value
+
+    def annotate(
+        self,
+        key: str,
+        *,
+        claim_id: int,
+        image_id: str | None,
+        final: Mapping[str, Any],
+        rule_verdict: str,
+        needs_review: bool,
+        dossier: Mapping[str, Any],
+    ) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """update public.report_verifications set
+                       claim_id = %s, image_id = %s, verdict = %s, harm = %s,
+                       dangerous_reassurance = %s, context_flags = %s, needs_review = %s,
+                       rule_verdict = %s, reasoning = %s, checks = %s, dossier = %s,
+                       updated_at = now()
+                   where cache_key = %s""",
+                (
+                    claim_id,
+                    image_id,
+                    final["verdict"],
+                    final["harm"],
+                    final["dangerous_reassurance"],
+                    list(final["context_flags"]),
+                    needs_review,
+                    rule_verdict,
+                    final["reasoning"],
+                    Jsonb(final["checks"]),
+                    Jsonb(dict(dossier)),
+                    key,
+                ),
+            )
+
+    def size(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("select count(*) from public.report_verifications").fetchone()
+        return int(row[0]) if row else 0
+
+    def where(self) -> str:
+        return "Supabase public.report_verifications"
