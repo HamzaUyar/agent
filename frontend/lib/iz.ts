@@ -135,12 +135,14 @@ const tanim = (t: IzTrack) =>
 
 /**
  * Harita katmanı. `time` yoksa hazır hâli (tam yollar); varsa o anın baş noktaları ve kuyrukları.
- * Vurgulanan track'in yolu t'ye kadar tam çizilir, diğerleri soluklaşır.
+ * Vurgulanan track'in yolu t'ye kadar tam çizilir, diğerleri soluklaşır. `geriPlan`: bütün izler
+ * soluk (bir kare seçiliyken ön planda o karenin araçları durur).
  */
 export function izKatmani(
   tracks: IzTrack[],
   time: number | null,
   highlight: string | null = null,
+  geriPlan = false,
   kuyrukDk = KUYRUK_DK,
 ): FeatureCollection {
   const features: Feature[] = []
@@ -150,7 +152,7 @@ export function izKatmani(
     tone: t.tone,
     level: t.level,
     highlighted: t.id === highlight,
-    dimmed: highlight !== null && t.id !== highlight,
+    dimmed: geriPlan || (highlight !== null && t.id !== highlight),
     description: tanim(t),
   })
   for (const t of tracks) {

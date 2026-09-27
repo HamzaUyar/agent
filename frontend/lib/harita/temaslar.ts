@@ -44,8 +44,7 @@ export type ContactLayers = {
   routeTimes: MapMarker[]
 }
 
-/** `dimAll`: bütün rotalar soluk (İz analizi açıkken seçili Görüntü'nün katmanı geri planda). */
-export function buildContactLayers(brief: Brief, selectedKey: string | null = null, dimAll = false): ContactLayers {
+export function buildContactLayers(brief: Brief, selectedKey: string | null = null): ContactLayers {
   const keyed = keyedContacts(brief)
   const routes: FeatureCollection = { type: "FeatureCollection", features: [] }
   const stops: MapMarker[] = []
@@ -63,7 +62,7 @@ export function buildContactLayers(brief: Brief, selectedKey: string | null = nu
           level: contact.final_level,
           vehicle: vehicleTone(contact.effective_label ?? contact.label),
           selected: key === selectedKey,
-          dimmed: dimAll || (selectedKey !== null && key !== selectedKey),
+          dimmed: selectedKey !== null && key !== selectedKey,
         },
         geometry: { type: "LineString", coordinates: route.map(toLngLat) },
       })

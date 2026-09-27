@@ -62,10 +62,10 @@ export function HaritaPaneli() {
   // Panel açılınca harita günün bütün track'lerine sığar (süzgeç değişince yeniden sığmaz).
   const izBounds = useMemo(() => (izOpen ? izSinirlari(izTracks) : null), [izOpen, izTracks])
   const [adapter, setAdapter] = useState<MapAdapter | null>(null)
-  // İz analizi açıkken seçili Görüntü'nün rotaları geri planda (soluk), kaybolmaz.
+  // Seçili kare ön planda: rotaları ve araçları tam renkli, İz analizinin izleri soluk (IzKatmani).
   const contactLayers = useMemo(
-    () => (brief ? buildContactLayers(brief, selectedContactKey, izOpen) : null),
-    [brief, selectedContactKey, izOpen],
+    () => (brief ? buildContactLayers(brief, selectedContactKey) : null),
+    [brief, selectedContactKey],
   )
   const selectedBounds = useMemo(
     () => (brief && selectedContactKey ? contactBounds(brief, selectedContactKey) : null),
@@ -105,7 +105,6 @@ export function HaritaPaneli() {
       aria-label="Harita paneli"
       className={cn(
         "relative flex-1 overflow-hidden rounded-lg border border-[var(--harita-paneli-cerceve)] bg-[var(--harita-paneli-zemin)]",
-        izOpen && "harita--iz-acik",
       )}
     >
       <Harita
@@ -119,6 +118,8 @@ export function HaritaPaneli() {
           selectedBounds ??
           (selectedImageId ? (footprint?.bounds ?? null) : (izBounds ?? scene?.bounds ?? null))
         }
+        // İz analizi kartı sağ üstte haritanın üstünde (w-80 + kenar payı).
+        fitInsetRight={izOpen ? 344 : 0}
         onBasemapError={basemapError}
         onMarkerClick={onMarkerClick}
         onAreaClick={onAreaClick}

@@ -142,6 +142,24 @@ describe("İz analizi: zaman", () => {
   })
 })
 
+describe("İz analizi ve seçili kare", () => {
+  it("kare seçilince izler soluklaşır, seçili karenin araçları ve rotaları tam renkli kalır; kare bırakılınca izler geri gelir", async () => {
+    const { map, user } = await opened()
+    await waitFor(() => expect(features(map).length).toBeGreaterThan(0))
+    expect(features(map).every((f) => !f.properties!.dimmed)).toBe(true)
+
+    await user.click(screen.getByRole("button", { name: /^img_000860/ }))
+    await user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
+    await screen.findByLabelText("Görüntü risk seviyesi")
+
+    expect(features(map).every((f) => f.properties!.dimmed)).toBe(true)
+    expect(map.areas.get("rotalar")!.features.every((f) => !f.properties!.dimmed)).toBe(true)
+
+    act(() => useOperasyon.getState().close("left"))
+    expect(features(map).every((f) => !f.properties!.dimmed)).toBe(true)
+  })
+})
+
 describe("İz analizi: oynatma yarışları", () => {
   it("Duraklat ve Sıfırla art arda gelince bekleyen animasyon karesi hazır hâlinin üstüne yazmaz", async () => {
     const { card, map } = await opened()

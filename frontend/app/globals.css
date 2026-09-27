@@ -798,13 +798,8 @@
   .sinif--diger { --sinif: var(--sinif-diger); }
 }
 
-/* İz analizi: açıkken seçili Görüntü'nün temas işaretleri geri planda. */
+/* İz analizi: ipucu, zaman çizgisi. */
 @layer components {
-  .harita--iz-acik .harita-isaret--temaslar,
-  .harita--iz-acik .harita-isaret--duraklamalar,
-  .harita--iz-acik .harita-isaret--rota-saatleri {
-    opacity: 0.35;
-  }
   /* İz ipucu bütün DOM işaretlerinin (seçili temas 20) üstünde ve fareyi engellemez. */
   .harita-ipucu {
     z-index: 40;

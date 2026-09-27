@@ -57,7 +57,8 @@ export interface MapAdapter {
   setTheme(theme: Tema): void
   setArea(layer: AreaLayer, data: FeatureCollection): void
   setMarkers(group: MarkerGroup, markers: MapMarker[]): void
-  fitBounds(bounds: Bounds, paddingPx: number): void
+  /** `insetRight`: sağda haritanın üstünde duran bir kartın payı (px); dar haritada küçültülür. */
+  fitBounds(bounds: Bounds, paddingPx: number, insetRight?: number): void
   destroy(): void
 }
 

@@ -21,6 +21,8 @@ export type HaritaProps = {
   markers: Partial<Record<MarkerGroup, MapMarker[]>>
   /** Görünümün sığdırılacağı kutu; kutu değişince yeniden sığdırılır. */
   fitTo: Bounds | null
+  /** Sağda haritanın üstünde duran kartın payı (px); sığdırılan kutu onun altında kalmaz. */
+  fitInsetRight?: number
   onBasemapError: () => void
   onMarkerClick?: (group: MarkerGroup, id: string) => void
   onAreaClick?: (layer: AreaLayer, id: string | null) => void
@@ -42,6 +44,7 @@ export function Harita({
   areas,
   markers,
   fitTo,
+  fitInsetRight = 0,
   onBasemapError,
   onMarkerClick,
   onAreaClick,
@@ -98,8 +101,8 @@ export function Harita({
   }, [adapter, markers])
 
   useEffect(() => {
-    if (adapter && fitTo) adapter.fitBounds(fitTo, 48)
-  }, [adapter, fitTo])
+    if (adapter && fitTo) adapter.fitBounds(fitTo, 48, fitInsetRight)
+  }, [adapter, fitTo, fitInsetRight])
 
   return <div ref={containerRef} className="absolute inset-0" data-testid="harita" />
 }

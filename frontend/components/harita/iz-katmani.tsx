@@ -32,13 +32,16 @@ export function IzKatmani({ adapter }: { adapter: MapAdapter | null }) {
   const time = useOperasyon((s) => s.izTime)
   const speed = useOperasyon((s) => s.izSpeed)
   const highlight = useOperasyon((s) => s.izHighlight)
+  // Bir kare seçiliyken izler geri planda (soluk); ön planda o karenin araçları.
+  const background = useOperasyon((s) => s.selectedImageId !== null)
   const { filtered, range } = useIzTracks()
 
   useEffect(() => {
     if (!adapter) return
     if (!izOpen) adapter.setArea("izler", EMPTY)
-    else if (status !== "oynuyor") adapter.setArea("izler", izKatmani(filtered, status === "hazir" ? null : time, highlight))
-  }, [adapter, izOpen, status, time, filtered, highlight])
+    else if (status !== "oynuyor")
+      adapter.setArea("izler", izKatmani(filtered, status === "hazir" ? null : time, highlight, background))
+  }, [adapter, izOpen, status, time, filtered, highlight, background])
 
   useEffect(() => {
     if (!adapter || !izOpen || status !== "oynuyor" || !range) return
@@ -58,7 +61,7 @@ export function IzKatmani({ adapter }: { adapter: MapAdapter | null }) {
       if (external !== null && external !== written) t = external
       t = Math.min(range.end, t + ((now - last) / 1000) * DAKIKA_PER_SANIYE * speed)
       last = now
-      adapter.setArea("izler", izKatmani(filtered, t, highlight))
+      adapter.setArea("izler", izKatmani(filtered, t, highlight, background))
       if (Math.floor(t) !== Math.floor(written) || t >= range.end) {
         written = t
         useOperasyon.setState({ izTime: t })
@@ -76,7 +79,7 @@ export function IzKatmani({ adapter }: { adapter: MapAdapter | null }) {
       const s = useOperasyon.getState()
       if (s.izOpen && s.izStatus === "duraklatildi") useOperasyon.setState({ izTime: t })
     }
-  }, [adapter, izOpen, status, speed, filtered, highlight, range])
+  }, [adapter, izOpen, status, speed, filtered, highlight, background, range])
 
   return null
 }

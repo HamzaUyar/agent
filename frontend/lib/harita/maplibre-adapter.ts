@@ -458,12 +458,19 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
 
   // Son sığdırma isteği: panel boyutu değişince (ilk yerleşim, çekmece açılıp kapanınca) yeniden
   // sığdırılır; kullanıcı haritayı kendisi kaydırdı ya da yakınlaştırdıysa onun görünümü korunur.
-  let lastFit: { bounds: Bounds; padding: number } | null = null
+  let lastFit: { bounds: Bounds; padding: number; insetRight: number } | null = null
+  /** Sağdaki kartın payı, kutuya en az haritanın yarısı kalacak kadar. */
+  const paddingFor = (padding: number, insetRight: number) => {
+    const room = map.getContainer().clientWidth
+    const right = Math.max(padding, Math.min(insetRight, room / 2 - padding))
+    return { top: padding, bottom: padding, left: padding, right }
+  }
   map.on("movestart", (event) => {
     if ((event as { originalEvent?: Event }).originalEvent) lastFit = null
   })
   map.on("resize", () => {
-    if (lastFit) map.fitBounds(lastFit.bounds, { padding: lastFit.padding, duration: 0 })
+    if (lastFit)
+      map.fitBounds(lastFit.bounds, { padding: paddingFor(lastFit.padding, lastFit.insetRight), duration: 0 })
   })
   map.addControl(new NavigationControl({ showCompass: false }), "top-left")
   map.addControl(new ScaleControl({ unit: "metric" }), "bottom-right")
@@ -610,9 +617,9 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
       if (DECLUTTERED.includes(group)) declutter(map, created)
     },
 
-    fitBounds(bounds: Bounds, paddingPx) {
-      lastFit = { bounds, padding: paddingPx }
-      map.fitBounds(bounds, { padding: paddingPx, duration: 0 })
+    fitBounds(bounds: Bounds, paddingPx, insetRight = 0) {
+      lastFit = { bounds, padding: paddingPx, insetRight }
+      map.fitBounds(bounds, { padding: paddingFor(paddingPx, insetRight), duration: 0 })
     },
 
     destroy() {
