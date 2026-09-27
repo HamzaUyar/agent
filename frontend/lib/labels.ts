@@ -4,6 +4,7 @@
  * birlikte kelimesiyle de yazılır.
  */
 import type {
+  AttentionReason,
   Certainty,
   ContactKind,
   Effect,
@@ -91,3 +92,15 @@ export const reportSource = (source: string) => REPORT_SOURCE[source] ?? source
 
 /** Görsel doğrulamanın yük durumu. */
 export const CARGO: Record<string, string> = { loaded: "yüklü", empty: "boş" }
+
+/** Karar LLM'inin dikkat nedeni; backend'in `AttentionReason` kodları. */
+export const ATTENTION_REASON: Record<AttentionReason, string> = {
+  yaklasma: "yaklaşma",
+  dolasma: "dolaşma",
+  uzun_duraklama: "uzun duraklama",
+  tehdit_uyarisi: "tehdit uyarısı",
+  rapor_celiskisi: "rapor çelişkisi",
+  kacirilmis_temas: "kaçırılmış temas",
+  kayit_disi: "kayıt dışı",
+  dikkat_gerekmiyor: "dikkat gerekmiyor",
+}

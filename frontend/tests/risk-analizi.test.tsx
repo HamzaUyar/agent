@@ -88,23 +88,75 @@ describe("Risk analizi akışı", () => {
     )
   })
 
-  it("Brief sekmesi metni, önerilen eylemi ve kaynakları gösterir", async () => {
+  it("Brief sekmesi kararı üstte, araçları kutu kutu, önerilen eylemi ve kaynakları gösterir", async () => {
     const { user } = await selectAndStart()
     await screen.findByLabelText("Görüntü risk seviyesi")
 
     await user.keyboard("b")
 
     const article = screen.getByRole("article", { name: "Brief" })
-    expect(article).toHaveTextContent(brief.text.split("\n")[0])
     // Karar önce: seviye ve önerilen eylem özet kartında.
     const decision = within(article).getByRole("region", { name: "Karar" })
     expect(decision).toHaveTextContent("Kritik")
+    expect(decision).toHaveTextContent(`${brief.image_id} · ${brief.zone} · ${brief.capture_time}`)
     expect(decision).toHaveTextContent(`Önerilen eylem${brief.recommended_action}`)
     expect(article.firstElementChild).toBe(decision)
+    expect(article).toHaveTextContent("LLM değerlendirmesi yok; seviyeler kurallarla verildi.")
+    // Otomatik özette LLM maddesi yok: kuralların orta ve üstü verdiği araçlar kutu olur.
+    const attention = within(article).getByRole("region", { name: /^Dikkat gerektiren araçlar/ })
+    expect(within(attention).getByText("T0122")).toBeInTheDocument()
+    expect(within(attention).getByText("T0032")).toBeInTheDocument()
+    expect(within(attention).getByText(brief.contacts[0].level_reasons![0])).toBeInTheDocument()
     // Model bilgisi ve kaynaklar katlanır bölümlerde; bilgi kaybolmaz.
     expect(within(within(article).getByRole("group", { name: "Model" })).getByText("otomatik özet: LLM yapılandırılmadı")).toBeInTheDocument()
     const sources = within(within(article).getByRole("group", { name: "Kaynaklar" })).getAllByRole("listitem")
     expect(sources.map((li) => li.textContent)).toEqual(brief.sources)
+  })
+
+  it("LLM Brief'i rapor yapısında: durum değerlendirmesi, araç kutusunda neden, yorum ve veri", async () => {
+    const llmBrief: Brief = {
+      ...brief,
+      is_fallback: false,
+      fallback_reason: null,
+      model: "glm/glm-5.3-flash",
+      summary: "Üsse yaklaşan ağır araç bu karenin önceliği.",
+      attention: [
+        {
+          contact: "T0122",
+          track_id: "T0122",
+          reason: "yaklasma",
+          basis: ["hareket"],
+          accepted: true,
+          text: "üsse yaklaşıyor, 30 dk önce 4,9 km, şimdi 1,6 km",
+          comment: "Ağır araç olması bu teması karenin önceliği yapıyor.",
+        },
+        {
+          contact: "kayit_disi_1",
+          track_id: null,
+          reason: "dolasma",
+          basis: ["hareket"],
+          accepted: false,
+          rejection: "dolaşma: temas üs çevresinde dolaşmıyor",
+        },
+      ],
+    }
+    useEvaluationStream([...events.slice(0, -1), { event: "brief", data: llmBrief }])
+    const { user } = await selectAndStart()
+    await screen.findByLabelText("Görüntü risk seviyesi")
+
+    await user.keyboard("b")
+
+    const article = screen.getByRole("article", { name: "Brief" })
+    const situation = within(article).getByRole("region", { name: "Durum değerlendirmesi" })
+    expect(situation).toHaveTextContent(llmBrief.summary!)
+    const attention = within(article).getByRole("region", { name: /^Dikkat gerektiren araçlar/ })
+    expect(within(attention).getByText("yaklaşma")).toBeInTheDocument()
+    expect(within(attention).getByText(llmBrief.attention![0].comment!)).toBeInTheDocument()
+    expect(within(attention).getByText(llmBrief.attention![0].text!)).toBeInTheDocument()
+    expect(within(article).getByRole("group", { name: "Reddedilen LLM önerileri" })).toHaveTextContent("dolaşmıyor")
+
+    await user.click(within(attention).getByRole("button", { name: "T0122 ayrıntısı" }))
+    expect(screen.getByRole("article", { name: "Araç: T0122" })).toBeInTheDocument()
   })
 
   it("önbellekten gelen sonuçta rozet ve Yeniden değerlendir (recompute: true); LLM Brief'inde model adı", async () => {

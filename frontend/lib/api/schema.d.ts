@@ -200,6 +200,10 @@ export interface components {
             rejection?: string | null;
             /** Text */
             text?: string | null;
+            /** Comment */
+            comment?: string | null;
+            /** Comment Rejected */
+            comment_rejected?: string | null;
         };
         /** BaseInfo */
         BaseInfo: {
