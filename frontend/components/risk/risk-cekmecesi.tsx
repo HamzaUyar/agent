@@ -1,12 +1,13 @@
 "use client"
 
-import { CircleAlert, Loader2 } from "lucide-react"
+import { ArrowUpRight, CircleAlert, Loader2 } from "lucide-react"
 import { useEffect, useRef } from "react"
 
 import { SeviyeRozeti } from "@/components/operasyon/seviye-rozeti"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Brief } from "@/lib/api/types"
+import { vehicleClass, vehicleTone } from "@/lib/labels"
 import { keyedContacts } from "@/lib/temas"
 import { useOperasyon, type Evaluation, type RiskTab } from "@/store/operasyon"
 
@@ -19,6 +20,7 @@ export function RiskCekmecesi() {
   const riskTab = useOperasyon((s) => s.riskTab)
   const setRiskTab = useOperasyon((s) => s.setRiskTab)
   const evaluation = useOperasyon((s) => s.evaluation)
+  const trackCard = useOperasyon((s) => s.izHighlight !== null && s.izHighlight !== s.selectedContactKey)
 
   return (
     <Tabs value={riskTab} onValueChange={(v) => setRiskTab(v as RiskTab)}>
@@ -27,7 +29,8 @@ export function RiskCekmecesi() {
         <TabsTrigger value="brief">Brief</TabsTrigger>
       </TabsList>
       <TabsContent value="temaslar" className="flex flex-col gap-3">
-        {evaluation ? <DegerlendirmeDurumu evaluation={evaluation} /> : <BosDurum />}
+        {trackCard && <SeciliTrack />}
+        {evaluation ? <DegerlendirmeDurumu evaluation={evaluation} /> : !trackCard && <BosDurum />}
       </TabsContent>
       <TabsContent value="brief">
         {evaluation?.brief ? (
@@ -128,5 +131,63 @@ function SeciliTemas({ brief }: { brief: Brief }) {
     <div ref={ref}>
       <TemasKarti brief={brief} contact={selected.contact} />
     </div>
+  )
+}
+
+/**
+ * Haritada seçilen track (araç kartı henüz yoksa): kimlik, sınıf, seviye, kayıt aralığı ve durum.
+ * Bittiği görüntünün kayıtlı değerlendirmesi yüklenirken bekleme, hiç yoksa görüntüye geçiş;
+ * görüntüsüz track'te kısa değerlendirme.
+ */
+function SeciliTrack() {
+  const trackId = useOperasyon((s) => s.izHighlight)
+  const tracks = useOperasyon((s) => s.tracks)
+  const loading = useOperasyon(
+    (s) => s.evaluation?.status === "streaming" && s.pendingContactKey !== null && s.pendingContactKey === s.izHighlight,
+  )
+  const busy = useOperasyon((s) => s.evaluation?.status === "streaming")
+  const track = tracks.status === "ready" ? tracks.data.find((t) => t.track_id === trackId) : undefined
+  if (!track) return null
+
+  const gotoImage = () => track.image_id && useOperasyon.getState().gotoTrackImage(track.image_id, track.track_id)
+  const tone = track.kind === "missed" ? "diger" : vehicleTone(track.label)
+
+  return (
+    <section aria-label="Seçili track" className="flex flex-col gap-1.5 rounded-md border border-secim bg-secim-zemin p-2 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-sm font-bold text-metin">{track.track_id}</span>
+        <span className={`sinif-renk sinif--${tone}`} aria-hidden />
+        <span>{vehicleClass(track.label)}</span>
+        {track.level ? (
+          <SeviyeRozeti level={track.level} className="ml-auto" />
+        ) : (
+          <span className="ml-auto text-metin-soluk">değerlendirilmedi</span>
+        )}
+      </div>
+      <span className="font-mono text-metin-soluk">
+        kayıt {track.start}–{track.end}
+        {track.unframed && " · görüntüsüz (kadraj dışında)"}
+        {track.image_id && ` · bittiği görüntü ${track.image_id}`}
+      </span>
+      {track.unframed && track.assessment && <p className="text-metin">{track.assessment}</p>}
+      {loading && (
+        <span className="flex items-center gap-2 text-metin-soluk">
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          Kayıtlı değerlendirme yükleniyor…
+        </span>
+      )}
+      {!loading && track.image_id && !track.kind && (
+        <>
+          <p className="text-metin-ikincil">Bittiği görüntü henüz değerlendirilmedi.</p>
+          <Button variant="outline" size="xs" className="self-start" onClick={gotoImage}>
+            <ArrowUpRight />
+            Görüntüye git: {track.image_id}
+          </Button>
+        </>
+      )}
+      {!loading && busy && track.kind && (
+        <p className="text-metin-ikincil">Başka bir analiz sürüyor; bitince track&apos;e tekrar tıklayın.</p>
+      )}
+    </section>
   )
 }

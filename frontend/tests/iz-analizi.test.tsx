@@ -244,13 +244,13 @@ describe("İz analizi: vurgu", () => {
   })
 
   it("Görüntüye git zaten değerlendirilmiş seçili karede aracı hemen seçer", async () => {
-    const { card, map, user } = await opened()
+    const { card, user } = await opened()
     await user.click(screen.getByRole("button", { name: /^img_000860/ }))
     await user.click(screen.getByRole("button", { name: "Risk analizini başlat" }))
     await screen.findByLabelText("Görüntü risk seviyesi")
     act(() => useOperasyon.getState().selectContact(null))
 
-    act(() => map.events!.onAreaClick?.("izler", "T0122"))
+    act(() => useOperasyon.getState().setIzHighlight("T0122"))
     await user.click(within(card).getByRole("button", { name: "Görüntüye git: img_000860" }))
 
     expect(useOperasyon.getState().selectedContactKey).toBe("T0122")
@@ -272,8 +272,8 @@ describe("İz analizi: vurgu", () => {
     server.events.on("request:start", ({ request }) => {
       if (request.method === "POST") posts(request.url)
     })
-    const { card, map, user } = await opened()
-    act(() => map.events!.onAreaClick?.("izler", "T0122"))
+    const { card, user } = await opened()
+    act(() => useOperasyon.getState().setIzHighlight("T0122"))
 
     await user.click(within(card).getByRole("button", { name: "Görüntüye git: img_000860" }))
 
@@ -289,6 +289,46 @@ describe("İz analizi: vurgu", () => {
     await screen.findByLabelText("Görüntü risk seviyesi")
     expect(posts).toHaveBeenCalledTimes(1)
     expect(useOperasyon.getState().selectedContactKey).toBe("T0122")
+    server.events.removeAllListeners()
+  })
+})
+
+describe("İz analizi: track seçimi Risk & Araçlar'a yansır", () => {
+  it("değerlendirilmiş track'e tıklamak bittiği karenin kaydını oynatır; panel o aracın kartını gösterir", async () => {
+    const posts = vi.fn()
+    server.events.on("request:start", ({ request }) => {
+      if (request.method === "POST") posts(request.url)
+    })
+    const { map } = await opened()
+
+    act(() => map.events!.onAreaClick?.("izler", "T0122"))
+
+    const drawer = screen.getByRole("region", { name: "Risk & Araçlar" })
+    expect(useOperasyon.getState().selectedImageId).toBe("img_000860")
+    expect(await within(drawer).findByRole("article", { name: /^Araç: T0122/ })).toBeInTheDocument()
+    expect(useOperasyon.getState().selectedContactKey).toBe("T0122")
+    expect(within(drawer).queryByRole("region", { name: "Seçili track" })).not.toBeInTheDocument()
+    expect(posts).toHaveBeenCalledTimes(1)
+    server.events.removeAllListeners()
+  })
+
+  it("değerlendirilmemiş track'e tıklamak paneli track kartıyla açar, analiz başlatmaz", async () => {
+    const posts = vi.fn()
+    server.events.on("request:start", ({ request }) => {
+      if (request.method === "POST") posts(request.url)
+    })
+    const { map } = await opened()
+    const target = tracks.find((t) => t.image_id && !t.kind && !t.unframed)!
+
+    act(() => map.events!.onAreaClick?.("izler", target.track_id))
+
+    const drawer = screen.getByRole("region", { name: "Risk & Araçlar" })
+    const panel = within(drawer).getByRole("region", { name: "Seçili track" })
+    expect(panel).toHaveTextContent(target.track_id)
+    expect(panel).toHaveTextContent(`kayıt ${target.start}–${target.end}`)
+    expect(within(panel).getByRole("button", { name: `Görüntüye git: ${target.image_id}` })).toBeInTheDocument()
+    expect(posts).not.toHaveBeenCalled()
+    expect(useOperasyon.getState().evaluation).toBeNull()
     server.events.removeAllListeners()
   })
 })

@@ -142,6 +142,12 @@ type OperasyonState = {
   izHighlight: string | null
   setIzHighlight: (trackId: string | null) => void
   /**
+   * Haritada track seçer: vurgular ve Risk & Araçlar'ı açar (track kartı). Bittiği görüntünün
+   * kayıtlı değerlendirmesi varsa (`kind` dolu) o kare seçilir, kayıt oynatılır (LLM çağrılmaz) ve
+   * track'in aracı seçili gelir. Başka bir analiz sürerken kesilmez; yalnızca kart gösterilir.
+   */
+  selectTrack: (trackId: string | null) => void
+  /**
    * Bir track'in bittiği kareye geçer: kareyi seçer ve Görüntü çekmecesini açar; analizi başlatmaz
    * (operatör "Risk analizini başlat"a basar). Analiz bitince o track'in aracı seçili gelir.
    */
@@ -444,6 +450,28 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
     resetIz: () => set({ izStatus: "hazir", izTime: null }),
     izHighlight: null,
     setIzHighlight: (izHighlight) => set({ izHighlight }),
+    selectTrack: (trackId) => {
+      set({ izHighlight: trackId })
+      if (trackId === null) return
+      const { tracks, evaluation, selectedImageId, openRight, selectContact, selectImage, startEvaluation } = get()
+      openRight("temaslar", get().right.state === "full" ? "full" : "half")
+      const track = tracks.status === "ready" ? tracks.data.find((t) => t.track_id === trackId) : undefined
+      if (!track?.image_id || !track.kind) {
+        set({ selectedContactKey: null })
+        return
+      }
+      if (selectedImageId === track.image_id && evaluation?.imageId === track.image_id) {
+        if (evaluation.status === "done") {
+          if (evaluation.brief?.contacts.some((c) => c.track_id === trackId)) selectContact(trackId)
+          else set({ selectedContactKey: null })
+        } else if (evaluation.status === "streaming") set({ pendingContactKey: trackId })
+        return
+      }
+      if (evaluation?.status === "streaming") return
+      selectImage(track.image_id)
+      set({ pendingContactKey: trackId })
+      void startEvaluation()
+    },
     pendingContactKey: null,
     gotoTrackImage: (imageId, trackId) => {
       get().selectImage(imageId)

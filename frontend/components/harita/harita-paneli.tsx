@@ -77,8 +77,8 @@ export function HaritaPaneli() {
   }
   const onAreaClick = (layer: AreaLayer, id: string | null) => {
     if (layer !== "izler" || id === null) return
-    const { izHighlight, setIzHighlight } = useOperasyon.getState()
-    setIzHighlight(izHighlight === id ? null : id)
+    const { izHighlight, selectTrack } = useOperasyon.getState()
+    selectTrack(izHighlight === id ? null : id)
   }
 
   // Her katman her zaman verilir: değerlendirme temizlenince eski Temas'lar da silinsin.
