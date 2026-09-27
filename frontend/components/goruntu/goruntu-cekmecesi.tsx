@@ -1,10 +1,11 @@
 "use client"
 
-import { ArrowDownUp, Play, RotateCcw } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { ArrowDownUp, Check, CircleAlert, Play, RotateCcw } from "lucide-react"
+import { useEffect, useId, useMemo, useState } from "react"
 
-import { SeviyeRozeti } from "@/components/operasyon/seviye-rozeti"
+import { DegerlendirilmediRozeti, SeviyeRozeti } from "@/components/operasyon/seviye-rozeti"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ImageSummary, RiskLevel } from "@/lib/api/types"
 import { RISK, RISK_LEVELS } from "@/lib/labels"
 import { cn } from "@/lib/utils"
@@ -14,6 +15,8 @@ import { Onizleme } from "./onizleme"
 import { TespitKatmani, TespitOzeti } from "./tespit-katmani"
 
 const NOT_EVALUATED = "degerlendirilmedi"
+/** Radix Select boş değer kabul etmez; "Tümü" bu değerle temsil edilir. */
+const ALL = "tumu"
 type LevelFilter = RiskLevel | typeof NOT_EVALUATED | ""
 
 /**
@@ -28,6 +31,8 @@ export function GoruntuCekmecesi() {
   const [zone, setZone] = useState("")
   const [level, setLevel] = useState<LevelFilter>("")
   const [newestFirst, setNewestFirst] = useState(false)
+  const zoneLabelId = useId()
+  const levelLabelId = useId()
 
   useEffect(() => {
     if (useOperasyon.getState().images.status === "idle") void loadImages()
@@ -48,44 +53,51 @@ export function GoruntuCekmecesi() {
     <div className="flex flex-col gap-3">
       <SeciliKare />
 
-      <p className="text-xs text-metin-soluk">
-        Yalnızca veri setindeki görüntüler değerlendirilebilir: konumu ve çekim anı bilinmeyen bir kare
-        değerlendirilemez.
-      </p>
-
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-xs text-metin-soluk">
-          Bölge
-          <select
-            value={zone}
-            onChange={(e) => setZone(e.target.value)}
-            className="rounded-md border border-cizgi bg-kart px-2 py-1 text-sm text-metin"
-          >
-            <option value="">Tümü</option>
-            {zones.map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-metin-soluk">
-          Son seviye
-          <select
-            value={level}
-            onChange={(e) => setLevel(e.target.value as LevelFilter)}
-            className="rounded-md border border-cizgi bg-kart px-2 py-1 text-sm text-metin"
-          >
-            <option value="">Tümü</option>
-            {[...RISK_LEVELS].reverse().map((l) => (
-              <option key={l} value={l}>
-                {RISK[l].shape} {RISK[l].label}
-              </option>
-            ))}
-            <option value={NOT_EVALUATED}>Değerlendirilmedi</option>
-          </select>
-        </label>
-        <Button variant="outline" size="sm" onClick={() => setNewestFirst((v) => !v)}>
+        <div className="flex flex-col gap-1">
+          <span id={zoneLabelId} className="text-xs text-metin-soluk">
+            Bölge
+          </span>
+          <Select value={zone || ALL} onValueChange={(v) => setZone(v === ALL ? "" : v)}>
+            <SelectTrigger aria-labelledby={zoneLabelId}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Tümü</SelectItem>
+              <SelectSeparator />
+              {zones.map((z) => (
+                <SelectItem key={z} value={z}>
+                  {z}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span id={levelLabelId} className="text-xs text-metin-soluk">
+            Son seviye
+          </span>
+          {/* Her seçenek seviye rozetinin kendisi: açık listede de kapalı kutuda da renk + dolgu + kelime. */}
+          <Select value={level || ALL} onValueChange={(v) => setLevel(v === ALL ? "" : (v as LevelFilter))}>
+            <SelectTrigger aria-labelledby={levelLabelId}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>Tümü</SelectItem>
+              <SelectSeparator />
+              {[...RISK_LEVELS].reverse().map((l) => (
+                <SelectItem key={l} value={l}>
+                  <SeviyeRozeti level={l} />
+                </SelectItem>
+              ))}
+              <SelectSeparator />
+              <SelectItem value={NOT_EVALUATED}>
+                <DegerlendirilmediRozeti />
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="outline" onClick={() => setNewestFirst((v) => !v)}>
           <ArrowDownUp />
           {newestFirst ? "Çekim anı: yeniden eskiye" : "Çekim anı: eskiden yeniye"}
         </Button>
@@ -93,7 +105,8 @@ export function GoruntuCekmecesi() {
 
       {images.status === "loading" && <p className="text-metin-soluk">Görüntüler yükleniyor…</p>}
       {images.status === "error" && (
-        <div role="alert" className="text-sm">
+        <div role="alert" className="flex flex-wrap items-center gap-1.5 rounded-md border border-cizgi bg-kart p-2 text-sm">
+          <CircleAlert aria-hidden className="size-4 text-hata" />
           Görüntü listesi alınamadı. <span className="text-metin-soluk">{images.message}</span>
           <Button className="ml-2" size="xs" variant="outline" onClick={() => void loadImages()}>
             Tekrar dene
@@ -132,20 +145,29 @@ function GoruntuKarti({ image, selected, onSelect }: { image: ImageSummary; sele
         image.last_risk_level ? ` · son seviye ${RISK[image.last_risk_level].label}` : " · değerlendirilmedi"
       }`}
       className={cn(
-        "flex w-full flex-col overflow-hidden rounded-md border bg-kart text-left",
-        selected ? "border-secim ring-2 ring-secim" : "border-cizgi hover:border-metin-soluk",
+        "relative flex w-full flex-col overflow-hidden rounded-md border bg-kart text-left transition-[border-color,box-shadow]",
+        selected
+          ? "border-secim ring-2 ring-secim"
+          : "border-cizgi hover:border-cizgi-guclu hover:shadow-golge",
       )}
     >
-      <Onizleme imageId={image.image_id} alt="" lazy className="aspect-video w-full bg-yuzey object-cover" />
-      <span className="flex flex-col gap-0.5 p-1.5 text-xs">
-        <span className="font-mono text-metin">{image.image_id}</span>
+      <Onizleme imageId={image.image_id} alt="" lazy className="aspect-video w-full bg-kart-vurgu object-cover" />
+      {/* Seçim yalnızca renkle değil: önizlemenin köşesinde onay işareti ve "seçili" yazısı. */}
+      {selected && (
+        <span className="absolute top-1 left-1 inline-flex items-center gap-0.5 rounded-sm bg-secim px-1 py-0.5 text-[11px] leading-none font-bold text-secim-uzeri">
+          <Check aria-hidden className="size-3" />
+          seçili
+        </span>
+      )}
+      <span className={cn("flex flex-col gap-0.5 p-1.5 text-xs", selected && "bg-secim-zemin")}>
+        <span className="font-mono font-bold text-metin">{image.image_id}</span>
         <span className="truncate text-metin-ikincil">{image.zone}</span>
-        <span className="flex items-center justify-between gap-1">
+        <span className="mt-0.5 flex items-center justify-between gap-1">
           <span className="font-mono text-metin-soluk">{image.capture_time}</span>
           {image.last_risk_level ? (
             <SeviyeRozeti level={image.last_risk_level} />
           ) : (
-            <span className="text-metin-soluk">değerlendirilmedi</span>
+            <DegerlendirilmediRozeti />
           )}
         </span>
       </span>
@@ -162,7 +184,11 @@ function SeciliKare() {
   const startEvaluation = useOperasyon((s) => s.startEvaluation)
 
   if (!selectedImageId) {
-    return <p className="text-metin-soluk">Kare seçilmedi. Aşağıdan ya da zaman akışından bir kare seçin.</p>
+    return (
+      <p className="rounded-md border border-dashed border-cizgi-guclu p-3 text-center text-metin-soluk">
+        Kare seçilmedi. Aşağıdan ya da zaman akışından bir kare seçin.
+      </p>
+    )
   }
   const summary = images.status === "ready" ? images.data.find((i) => i.image_id === selectedImageId) : undefined
   const streaming = evaluation?.status === "streaming"
@@ -172,7 +198,7 @@ function SeciliKare() {
 
   return (
     <section aria-label="Seçili karenin önizlemesi" className="flex flex-col gap-2">
-      <div className="relative overflow-hidden rounded-md border border-cizgi bg-yuzey" style={{ aspectRatio: aspect }}>
+      <div className="relative overflow-hidden rounded-md border border-cizgi bg-kart-vurgu" style={{ aspectRatio: aspect }}>
         <Onizleme
           imageId={selectedImageId}
           alt={`${selectedImageId} drone karesi`}
@@ -181,12 +207,12 @@ function SeciliKare() {
         {brief && detail.status === "ready" && <TespitKatmani brief={brief} image={detail.data} />}
       </div>
       {brief && <TespitOzeti brief={brief} />}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="font-mono font-bold">{selectedImageId}</span>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+        <span className="font-mono text-sm font-bold text-metin">{selectedImageId}</span>
         {summary && (
           <>
             <span className="text-metin-ikincil">{summary.zone}</span>
-            <span className="font-mono text-metin-ikincil">{summary.capture_time}</span>
+            <span className="font-mono text-metin-soluk">{summary.capture_time}</span>
           </>
         )}
       </div>

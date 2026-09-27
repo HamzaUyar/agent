@@ -4,6 +4,7 @@
  * birlikte kelimesiyle de yazılır.
  */
 import type {
+  AttentionReason,
   Certainty,
   ContactKind,
   Effect,
@@ -21,6 +22,7 @@ export const RISK: Record<RiskLevel, { label: string; shape: string; order: numb
   critical: { label: "Kritik", shape: "◆", order: 3 },
 }
 
+/** Temas arayüzde "araç" olarak adlandırılır (CONTEXT.md); tür adları alan dilinde kalır. */
 export const CONTACT_KIND: Record<ContactKind, string> = {
   matched: "Eşleşmiş temas",
   unregistered: "Kayıt dışı temas",
@@ -38,12 +40,26 @@ export const VEHICLE_CLASS: Record<string, string> = {
 export const vehicleClass = (label: string | null | undefined) =>
   label ? (VEHICLE_CLASS[label] ?? label) : "tip bilinmiyor"
 
+/**
+ * Araç sınıfının renk tonu (`--sinif-<ton>` token'ı). Renk yalnızca sınıfı anlatır; seviye ve takip
+ * durumu başka kanallardadır. Bilinmeyen sınıf ve tipi bilinmeyen temas nötr `diger`.
+ */
+export type VehicleTone = "car" | "van" | "truck" | "bus" | "diger"
+export const vehicleTone = (label: string | null | undefined): VehicleTone =>
+  label && label in VEHICLE_CLASS ? (label as VehicleTone) : "diger"
+
+/** Tespit güvenilirliği; arayüzde "Yüksek kesinlik" gibi okunur (CERTAINTY_LABEL). */
 export const CERTAINTY: Record<Certainty, string> = {
-  certain: "kesin",
-  likely: "olası",
-  weak: "zayıf",
+  certain: "yüksek",
+  likely: "orta",
+  weak: "düşük",
   unverified: "doğrulanamadı",
 }
+
+export const CERTAINTIES: readonly Certainty[] = ["certain", "likely", "weak", "unverified"]
+
+export const certaintyLabel = (c: Certainty) =>
+  c === "unverified" ? "Doğrulanamadı" : `${CERTAINTY[c][0].toLocaleUpperCase("tr-TR")}${CERTAINTY[c].slice(1)} kesinlik`
 
 export const TREND: Record<Trend, string> = {
   approaching: "yaklaşıyor",
@@ -76,3 +92,15 @@ export const reportSource = (source: string) => REPORT_SOURCE[source] ?? source
 
 /** Görsel doğrulamanın yük durumu. */
 export const CARGO: Record<string, string> = { loaded: "yüklü", empty: "boş" }
+
+/** Karar LLM'inin dikkat nedeni; backend'in `AttentionReason` kodları. */
+export const ATTENTION_REASON: Record<AttentionReason, string> = {
+  yaklasma: "yaklaşma",
+  dolasma: "dolaşma",
+  uzun_duraklama: "uzun duraklama",
+  tehdit_uyarisi: "tehdit uyarısı",
+  rapor_celiskisi: "rapor çelişkisi",
+  kacirilmis_temas: "kaçırılmış temas",
+  kayit_disi: "kayıt dışı",
+  dikkat_gerekmiyor: "dikkat gerekmiyor",
+}

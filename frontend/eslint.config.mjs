@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // Next, depo kökündeki lockfile yüzünden kökü yanlış çıkarınca frontend/frontend/.next yazabiliyor.
+    "**/.next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

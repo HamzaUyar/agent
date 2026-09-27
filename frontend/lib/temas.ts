@@ -19,6 +19,19 @@ export function keyedContacts(brief: Brief): KeyedContact[] {
   return brief.contacts.map((contact, index) => ({ key: contactKey(contact, index), index, contact }))
 }
 
+/**
+ * Karar LLM'inin temas etiketi (backend `contact_labels`): track kimliği; track'i olmayan temas
+ * için Brief'teki sırasıyla `kayit_disi_1`, `kayit_disi_2`…
+ */
+export function attentionLabels(brief: Brief): Map<string, KeyedContact> {
+  const labels = new Map<string, KeyedContact>()
+  let unregistered = 0
+  for (const k of keyedContacts(brief)) {
+    labels.set(k.contact.track_id ?? `kayit_disi_${++unregistered}`, k)
+  }
+  return labels
+}
+
 /** Seviyeye göre (yüksekten düşüğe), eşitse Üs'e yakın olan önce. */
 export function bySeverity(a: KeyedContact, b: KeyedContact): number {
   return (
@@ -67,4 +80,32 @@ export function distanceSeries(
   return route
     .filter((p) => !p.time || p.time <= captureTime)
     .map((p) => ({ time: p.time ?? null, meters: haversineM(toLngLat(p), b) }))
+}
+
+const iou = ([ax, ay, aw, ah]: number[], [bx, by, bw, bh]: number[]) => {
+  const w = Math.max(0, Math.min(ax + aw, bx + bw) - Math.max(ax, bx))
+  const h = Math.max(0, Math.min(ay + ah, by + bh) - Math.max(ay, by))
+  const inter = w * h
+  return inter / (aw * ah + bw * bh - inter)
+}
+
+/** Kutuları bu kadar örtüşen iki tespit aynı araçtır (model sınıflar arası bastırma yapmamış). */
+export const SAME_VEHICLE_IOU = 0.7
+
+/**
+ * Aynı araca ikinci (daha düşük güvenli) sınıf olarak verilmiş tespitler: anahtar → aynı aracın
+ * en yüksek güvenli tespitinin anahtarı. Görüntüde yalnızca en yüksek güvenli sınıf çizilir;
+ * backend'in temas ve seviye hesabı değişmez.
+ */
+export function secondaryDetections(brief: Brief): Map<string, string> {
+  const boxed = keyedContacts(brief).filter((k) => k.contact.bbox && k.contact.confidence != null)
+  const byConfidence = [...boxed].sort((a, b) => b.contact.confidence! - a.contact.confidence!)
+  const secondary = new Map<string, string>()
+  byConfidence.forEach((k, i) => {
+    const primary = byConfidence
+      .slice(0, i)
+      .find((p) => !secondary.has(p.key) && iou(p.contact.bbox!, k.contact.bbox!) >= SAME_VEHICLE_IOU)
+    if (primary) secondary.set(k.key, primary.key)
+  })
+  return secondary
 }

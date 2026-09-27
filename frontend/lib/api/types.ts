@@ -19,12 +19,15 @@ export type RoutePoint = Schemas["RoutePoint"]
 export type StopFinding = Schemas["StopFinding"]
 export type ReportFinding = Schemas["ReportFinding"]
 export type StepEvent = Schemas["StepEvent"]
+export type TrackOverview = Schemas["TrackOverview"]
+export type AttentionFinding = Schemas["AttentionFinding"]
 export type RiskLevel = NonNullable<ImageSummary["last_risk_level"]>
 export type ContactKind = ContactFinding["kind"]
 export type Certainty = ContactFinding["certainty"]
 export type Trend = MotionFinding["trend"]
 export type Verdict = ReportFinding["verdict"]
 export type Effect = ReportFinding["effect"]
+export type AttentionReason = AttentionFinding["reason"]
 
 /** `POST /evaluations` akışının olayları (`runner.py`). */
 export type EvaluationEvent =

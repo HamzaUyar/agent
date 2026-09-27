@@ -123,6 +123,7 @@ REASON_TR: dict[AttentionReason, str] = {
 # döndürüyor; şemaya uymayan cevap zincirde sıradaki modele geçer.
 MIN_SUMMARY_WORDS = 3
 MAX_SUMMARY_SENTENCES = 2
+MAX_COMMENT_SENTENCES = 1
 # Özette sayı ve kimlik (T0020, K1, kayit_disi_1) yok: sayıları kod yazar, LLM uydurabilir.
 _DIGIT_OR_ID = re.compile(r"\d|kayit_disi", re.IGNORECASE)
 # Kodun alan değerleri Türkçe metne sızmasın (canlı denemede "low seviyede").
@@ -152,6 +153,13 @@ class AttentionDraft(BaseModel):
     )
     seviye_onerisi: RiskLevel | None = Field(
         default=None, description="Seviyeyi en fazla bir kademe değiştirmek istersen yeni seviye"
+    )
+    yorum: str = Field(
+        default="",
+        description=(
+            "Operatör için tek cümlelik analiz: bu davranışın ne anlama geldiği; "
+            "sayı, kimlik, mesafe, bölge adı ve yön yok"
+        ),
     )
 
 
@@ -605,24 +613,41 @@ def reason_text(
     return text
 
 
-def summary_problem(text: str, zone_names: Sequence[str]) -> str | None:
-    """Özet kodun denetleyemeyeceği bir olgu içeriyorsa atılma sebebini döndürür."""
+def summary_problem(
+    text: str,
+    zone_names: Sequence[str],
+    *,
+    name: str = "özet",
+    where: str = "özette",
+    max_sentences: int = MAX_SUMMARY_SENTENCES,
+) -> str | None:
+    """Özet (ya da madde yorumu) kodun denetleyemeyeceği bir olgu içeriyorsa atılma sebebi."""
     folded = text.translate(_ASCII).casefold()
     if _DIGIT_OR_ID.search(text) or _NUMBER_WORDS.search(folded):
-        return "özette sayı ya da temas kimliği var"
+        return f"{where} sayı ya da temas kimliği var"
     zones = [z for z in zone_names if z.translate(_ASCII).casefold() in folded]
     if zones:
-        return f"özette bölge adı var ({', '.join(zones)})"
+        return f"{where} bölge adı var ({', '.join(zones)})"
     direction = _DIRECTIONS.search(folded)
     if direction:
-        return f"özette yön var ({direction.group(0)}); konumu kod yazar"
+        return f"{where} yön var ({direction.group(0)}); konumu kod yazar"
     english = _ENGLISH.search(text)
     if english:
-        return f"özette İngilizce terim var ({english.group(0)})"
+        return f"{where} İngilizce terim var ({english.group(0)})"
     sentences = [s for s in re.split(r"[.!?…]+", text) if s.strip()]
-    if len(sentences) > MAX_SUMMARY_SENTENCES:
-        return f"özet {MAX_SUMMARY_SENTENCES} cümleden uzun"
+    if len(sentences) > max_sentences:
+        return f"{name} {max_sentences} cümleden uzun"
     return None
+
+
+def comment_problem(text: str, zone_names: Sequence[str]) -> str | None:
+    """Madde yorumu: özetle aynı sınırlar, tek cümle ve gerçek bir cümle."""
+    words = [w for w in text.split() if any(ch.isalpha() for ch in w)]
+    if len(words) < MIN_SUMMARY_WORDS:
+        return "yorum boş ya da yer tutucu"
+    return summary_problem(
+        text, zone_names, name="yorum", where="yorumda", max_sentences=MAX_COMMENT_SENTENCES
+    )
 
 
 def _who(label: str) -> str:
@@ -668,11 +693,13 @@ def apply_attention(
     draft: DecisionDraft,
     findings: list[ReportFinding],
     levels: LevelRules,
+    zone_names: Sequence[str] = (),
 ) -> tuple[list[ContactFinding], list[AttentionFinding], int, int]:
     """Maddeleri veriyle doğrular; doğrulanmış nedenle önerilen seviye ayarını uygular.
 
     Bir temasın seviyesi en fazla bir kez değişir (±1 kademe); reddedilen bir öneri aynı temas
-    için sonraki doğrulanmış öneriyi engellemez.
+    için sonraki doğrulanmış öneriyi engellemez. LLM'in madde yorumu yalnızca doğrulanmış
+    maddede ve özetle aynı sınırlar içindeyse (tek cümle) kalır.
     """
     index = {label: i for i, label in enumerate(contact_labels(contacts))}
     by_id = {f.claim_id: f for f in findings}
@@ -699,6 +726,12 @@ def apply_attention(
             else None
         )
         rejection = f"{REASON_TR[proposal.neden]}: {problem}" if problem else None
+        comment: str | None = proposal.yorum.strip() or None
+        comment_rejected = None
+        if comment and verified:
+            comment_rejected = comment_problem(comment, zone_names)
+        if comment_rejected or not verified:
+            comment = None
         if level_ok:
             accepted += 1
             adjusted.add(i)
@@ -723,6 +756,8 @@ def apply_attention(
                 level_accepted=level_ok,
                 rejection=rejection,
                 text=text,
+                comment=comment,
+                comment_rejected=comment_rejected,
             )
         )
     return updated, results, accepted, rejected
@@ -770,7 +805,9 @@ def decide(
     finally:
         # Süresi dolan çağrı arka planda bitebilir; beklemeden devam ediyoruz.
         executor.shutdown(wait=False, cancel_futures=True)
-    updated, attention, accepted, rejected = apply_attention(contacts, draft, findings, levels)
+    updated, attention, accepted, rejected = apply_attention(
+        contacts, draft, findings, levels, [zone, *zone_names]
+    )
     summary: str | None = draft.ozet.strip()
     summary_rejected = summary_problem(summary, [zone, *zone_names]) if summary else None
     if summary_rejected:

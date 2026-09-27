@@ -4,7 +4,7 @@ import { useEffect } from "react"
 
 import { GoruntuCekmecesi } from "@/components/goruntu/goruntu-cekmecesi"
 import { HaritaPaneli } from "@/components/harita/harita-paneli"
-import { RiskCekmecesi, RiskOzeti } from "@/components/risk/risk-cekmecesi"
+import { RiskCekmecesi } from "@/components/risk/risk-cekmecesi"
 import { ZamanAkisi } from "@/components/zaman-akisi/zaman-akisi"
 import { okuTema } from "@/lib/tema"
 import { useOperasyon } from "@/store/operasyon"
@@ -27,8 +27,11 @@ export function OperasyonEkrani() {
     const s = useOperasyon.getState()
     // Tema sayfa boyanmadan önce <html>'e uygulandı (TEMA_BETIGI); depo ona eşitlenir.
     useOperasyon.setState({ theme: okuTema() })
+    // Saklanan tercihler (çekmece genişliği, alt panel) sunucu çıktısıyla eşleşen ilk çizimden sonra.
+    s.loadPreferences()
     if (s.zones.status === "idle") void s.loadZones()
     if (s.images.status === "idle") void s.loadImages()
+    if (s.izOpen && s.tracks.status === "idle") void s.loadTracks()
   }, [])
 
   return (
@@ -52,10 +55,9 @@ export function OperasyonEkrani() {
 
         <Cekmece
           side="right"
-          title="Risk & Temaslar"
+          title="Risk & Araçlar"
           panelKey={right.panel}
           state={right.state}
-          peek={<RiskOzeti />}
         >
           <RiskCekmecesi />
         </Cekmece>

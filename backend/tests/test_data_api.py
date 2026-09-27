@@ -6,20 +6,28 @@ bağımlılık olarak değiştirilir.
 
 from collections.abc import Iterator
 from dataclasses import replace
+from datetime import time
 from pathlib import Path
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.data import get_image_storage, get_images_dir, get_repository
-from app.data_package import read_package
+from app.agent.service import EvaluationService
+from app.api.data import get_image_storage, get_images_dir, get_repository, get_stores
+from app.api.stores import MemoryStores
+from app.core.rules import default_rules, rules_version
+from app.data_package import DataPackage, read_package
 from app.db.repositories import InMemoryRepository
 from app.main import app
+from app.schemas.api import Brief
+from app.schemas.domain import Detection, ImageMeta, VehicleClass
 from app.storage import SupabaseStorage
 
 FIXTURE = Path(__file__).parent / "fixtures" / "mock_package"
 JPEG = b"\xff\xd8\xff\xe0 sahte jpeg"
+CURRENT_RULES = {"rules_version": rules_version(default_rules())}
+"""Kayıtlar güncel kural sürümüyle yazılır; API yalnızca bu sürümün kayıtlarını okur."""
 
 
 @pytest.fixture
@@ -151,3 +159,100 @@ def test_with_storage_an_unreachable_bucket_is_502(tmp_path: Path) -> None:
     response = storage_client(tmp_path, httpx.MockTransport(handle)).get("/images/img_000860/file")
 
     assert response.status_code == 502
+
+
+# --- /tracks ---------------------------------------------------------------------------
+
+
+class _Detector:
+    version = "test"
+
+    def detect(self, image: ImageMeta) -> list[Detection]:
+        return [TRUCK] if image.image_id == "img_000860" else []
+
+
+TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58, h=34)
+
+
+def ending_at_capture() -> DataPackage:
+    """Gerçek verideki gibi: her track bir görüntünün çekim anında biter. Mock paketin
+    track'leri 14:30'a uzanır; img_000860'ın çekim anında (14:10) kesilir."""
+    package = read_package(FIXTURE)
+    until = time(14, 10)
+    return replace(package, track_points=[p for p in package.track_points if p.time <= until])
+
+
+def tracks_client(evaluated: list[str]) -> tuple[TestClient, dict[str, Brief]]:
+    """Bellek içi depo ve kayıt deposu; `evaluated` görüntüleri LLM'siz değerlendirilmiş."""
+    repo = InMemoryRepository(ending_at_capture())
+    stores = MemoryStores()
+    service = EvaluationService(repo, _Detector())
+    briefs: dict[str, Brief] = {}
+    with stores.open() as (runs, _):
+        for image_id in evaluated:
+            run_id = runs.start(image_id, "test", CURRENT_RULES)
+            briefs[image_id] = service.run(image_id)
+            runs.finish(run_id, briefs[image_id])
+    app.dependency_overrides[get_repository] = lambda: repo
+    app.dependency_overrides[get_stores] = lambda: stores
+    return TestClient(app), briefs
+
+
+def test_tracks_are_returned_with_all_their_recorded_points_in_order() -> None:
+    client, _ = tracks_client([])
+    package = ending_at_capture()
+    recorded: dict[str, list[str]] = {}
+    for p in sorted(package.track_points, key=lambda p: p.time):
+        recorded.setdefault(p.track_id, []).append(p.time.strftime("%H:%M"))
+
+    tracks = client.get("/tracks").json()
+
+    assert [t["track_id"] for t in tracks] == sorted(recorded)
+    for t in tracks:
+        times = recorded[t["track_id"]]
+        assert [p["time"] for p in t["points"]] == times
+        assert (t["start"], t["end"]) == (times[0], times[-1])
+
+
+def test_track_takes_level_and_class_from_the_latest_evaluation_of_the_image_it_ends_in() -> None:
+    """Karede biten track'ler o görüntünün temaslarının seviyesini ve sınıfını alır (T0122
+    kamyon); bittiği görüntünün değerlendirmesi olmayan track'in seviyesi yok."""
+    client, briefs = tracks_client(["img_000860"])
+    tracks = {t["track_id"]: t for t in client.get("/tracks").json()}
+    brief = briefs["img_000860"]
+    capture = brief.capture_time
+
+    ending_here = [t for t in tracks.values() if t["image_id"] == "img_000860"]
+    assert "T0122" in {t["track_id"] for t in ending_here}
+    assert tracks["T0122"]["label"] == "truck"
+    for t in ending_here:
+        assert t["end"] == capture
+        contact = next(c for c in brief.contacts if c.track_id == t["track_id"])
+        assert t["level"] == contact.final_level
+        assert t["label"] == (contact.effective_label or contact.label)
+        assert t["kind"] == contact.kind
+
+    for t in tracks.values():
+        if t["image_id"] != "img_000860":
+            assert (t["level"], t["label"], t["kind"]) == (None, None, None)
+
+
+def test_newer_evaluation_of_the_same_image_replaces_the_older_one() -> None:
+    client, briefs = tracks_client(["img_000860"])
+    stores = app.dependency_overrides[get_stores]()
+    first = {t["track_id"]: t["level"] for t in client.get("/tracks").json()}
+    target = next(k for k, v in first.items() if v is not None)
+    with stores.open() as (runs, _):
+        latest = briefs["img_000860"]
+        lowered = latest.model_copy(
+            update={
+                "contacts": [
+                    c.model_copy(update={"final_level": "low"}) if c.track_id == target else c
+                    for c in latest.contacts
+                ]
+            }
+        )
+        runs.finish(runs.start("img_000860", "test", CURRENT_RULES), lowered)
+
+    second = {t["track_id"]: t["level"] for t in client.get("/tracks").json()}
+    assert second[target] == "low"

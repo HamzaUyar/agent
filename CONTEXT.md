@@ -39,7 +39,11 @@ _Avoid_: iz, rota, hareket kaydı
 
 **Temas**:
 Değerlendirilen tek varlık: bir Tespit ile onu çekim anında karşılayan Track'in eşleşmesi, ya da eşi bulunamamış tek bir Tespit veya Track.
-_Avoid_: araç, hedef, nesne
+_Avoid_: araç, hedef, nesne (kodda ve alan dilinde). _Arayüzde_ operatöre "araç" olarak gösterilir ("Risk & Araçlar", "7 araç"); tür adları ("Eşleşmiş temas" vb.) alan dilinde kalır.
+
+**İz analizi**:
+Günün bütün Track'lerinin seviyeye göre süzülüp zaman içinde oynatılması. Her Track bir Görüntü'nün çekim anında o Görüntü'nün karesinde biter; Track'in seviyesi ve sınıfı o Görüntü'nün son değerlendirmesindeki Temas'tan okunur, değerlendirme yoksa "değerlendirilmedi". Bir Görüntü'nün değerlendirmesi olmadığı için ADR-0001 (çekim anından sonrasını görme) İz analizine uygulanmaz; seçili Görüntü'nün panelleri bu kurala uymaya devam eder.
+_Avoid_: tracking simülasyonu, rota animasyonu
 
 **Kayıt dışı temas**:
 Track'i bulunmayan bir Tespit'ten oluşan Temas; hareket geçmişi bilinmez. Park halindeki araçların track'i olmayabileceği için kendi başına risk sayılmaz (ADR-0003).

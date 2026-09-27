@@ -25,15 +25,17 @@ export function UstCubuk() {
 
   return (
     <header className="flex h-[var(--ust-cubuk-yukseklik)] items-center gap-4 border-b border-cizgi bg-[var(--ust-cubuk-zemin)] px-4 text-sm">
-      <span className="text-xs font-bold tracking-wider text-metin uppercase">
+      <span className="flex shrink-0 items-center gap-2 text-xs font-bold tracking-wider whitespace-nowrap text-metin uppercase">
+        <span aria-hidden className="harita-lejant__us size-3! border-2!" />
         {zones.status === "ready" ? zones.data.base.name : "Üs"}
       </span>
+      <span aria-hidden className="h-5 w-px bg-cizgi" />
 
       {!selectedImageId ? (
         <p className="text-metin-soluk">Zaman akışından bir kare seçin</p>
       ) : (
         <p className="font-mono text-metin-ikincil" aria-label="Seçili kare">
-          {selectedImageId}
+          <span className="font-bold text-metin">{selectedImageId}</span>
           {summary && ` · ${summary.zone} · ${summary.capture_time}`}
         </p>
       )}
@@ -41,7 +43,7 @@ export function UstCubuk() {
       {brief && (
         <div className="flex items-center gap-2" aria-label="Görüntü risk seviyesi">
           <SeviyeRozeti level={brief.risk_level} className="text-sm" />
-          <span className="text-metin">→ {brief.recommended_action}</span>
+          <span className="text-metin-ikincil">→ {brief.recommended_action}</span>
         </div>
       )}
 

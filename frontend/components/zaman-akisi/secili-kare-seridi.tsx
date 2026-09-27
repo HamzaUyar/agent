@@ -1,7 +1,8 @@
 "use client"
 
 import type { Brief, ContactFinding } from "@/lib/api/types"
-import { reportSource, VERDICT } from "@/lib/labels"
+import { reportSource, VERDICT, vehicleTone } from "@/lib/labels"
+import { cn } from "@/lib/utils"
 import { contactName, keyedContacts } from "@/lib/temas"
 import { useOperasyon } from "@/store/operasyon"
 
@@ -46,20 +47,22 @@ export function SeciliKareSeridi() {
           Seçili kare · son 2 saat ({toHhmm(start)}–{summary.capture_time})
         </h2>
         <span className="text-metin-soluk">
-          {contact ? `${contactName(contact)} için` : brief ? "Ayrıntı için bir temas seçin" : ""}
+          {contact ? `${contactName(contact)} için` : brief ? "Ayrıntı için bir araç seçin" : ""}
         </span>
       </div>
       <div className="relative mx-2 h-12">
-        <div aria-hidden className="absolute top-4 right-0 left-0 border-t border-cizgi" />
-        {/* Çekim anından sonrası: gri ve kapalı. */}
+        <div aria-hidden className="absolute top-4 right-0 left-0 border-t border-cizgi-guclu/70" />
+        {/* Çekim anından sonrası: taralı ve kapalı (ADR-0001). */}
         <div
-          className="absolute inset-y-0 right-0 flex items-center justify-center rounded-sm bg-cizgi/40 text-[11px] text-metin-soluk"
+          className="absolute inset-y-0 right-0 flex items-center justify-center overflow-hidden rounded-sm border border-dashed border-cizgi bg-[repeating-linear-gradient(135deg,var(--kart-vurgu)_0_4px,transparent_4px_8px)] text-[10px] leading-3 text-metin-soluk"
           style={{ left: pos(capture) }}
+          title="Çekim anından sonrası gösterilmez"
         >
-          çekim anından sonrası yok
+          <span className="rounded-sm bg-yuzey px-0.5 text-center">çekim anından sonrası yok</span>
         </div>
+        {/* Çekim anı: seçili karenin "şimdi"si; mürekkep çizgi ve üstte işaret (mavi seçim değil). */}
         <span
-          className="absolute top-1 h-6 w-0.5 -translate-x-1/2 bg-secim"
+          className="absolute top-0 h-7 w-0.5 -translate-x-1/2 bg-metin before:absolute before:-top-0.5 before:left-1/2 before:size-2 before:-translate-x-1/2 before:rotate-45 before:bg-metin"
           style={{ left: pos(capture) }}
           aria-label={`Çekim anı ${summary.capture_time}`}
           role="img"
@@ -97,17 +100,18 @@ function TemasOlaylari({
   const clamp = (t: number) => Math.min(capture, Math.max(start, t))
   const route = (contact.motion?.route ?? []).filter((p) => p.time && inWindow(toMin(p.time)))
   const stops = (contact.motion?.stops ?? []).filter((s) => toMin(s.start) <= capture && toMin(s.end) >= start)
+  const tone = contact.kind === "missed" ? "diger" : vehicleTone(contact.effective_label ?? contact.label)
   const reports = contact.track_id
     ? (brief.report_findings ?? []).filter((r) => r.track_id === contact.track_id && inWindow(toMin(r.report_time)))
     : []
 
   return (
-    <ul aria-label="Olaylar" className="absolute inset-x-0 top-0 h-8">
+    <ul aria-label="Olaylar" className={cn("absolute inset-x-0 top-0 h-8", `sinif--${tone}`)}>
       {route.map((p) => (
         <li
           key={`r-${p.time}`}
           aria-label={`Rota noktası ${p.time}`}
-          className="absolute top-3.5 size-1.5 -translate-x-1/2 rounded-full bg-metin-ikincil"
+          className="absolute top-3.5 size-1.5 -translate-x-1/2 rounded-full bg-[var(--sinif)]"
           style={{ left: pos(toMin(p.time!)) }}
         />
       ))}
@@ -115,7 +119,7 @@ function TemasOlaylari({
         <li
           key={`d-${s.start}`}
           aria-label={`Duraklama ${s.start} · ${s.minutes} dk`}
-          className="absolute top-2.5 h-3.5 rounded-sm border border-metin bg-metin/25"
+          className="absolute top-2.5 h-3.5 rounded-sm border border-[color:var(--sinif)] bg-[color-mix(in_srgb,var(--sinif)_18%,transparent)]"
           style={{ left: pos(clamp(toMin(s.start))), width: `calc(${pos(clamp(toMin(s.end)))} - ${pos(clamp(toMin(s.start)))})` }}
         >
           <span className="absolute -top-3 left-0 font-mono text-[10px] whitespace-nowrap text-metin-ikincil">
@@ -127,10 +131,10 @@ function TemasOlaylari({
         <li
           key={`p-${r.claim_id}`}
           aria-label={`Rapor ${r.report_time} · ${reportSource(r.source)} · ${VERDICT[r.verdict]}`}
-          className="absolute top-2 size-3 -translate-x-1/2 rotate-45 border-2 border-metin bg-zemin"
+          className="absolute top-2 size-3 -translate-x-1/2 rounded-[2px] border-2 border-metin bg-yuzey"
           style={{ left: pos(toMin(r.report_time)) }}
         >
-          <span className="absolute top-3 left-3 -rotate-45 font-mono text-[10px] whitespace-nowrap text-metin">
+          <span className="absolute top-3 left-3 font-mono text-[10px] whitespace-nowrap text-metin">
             rapor {r.report_time}
           </span>
         </li>
