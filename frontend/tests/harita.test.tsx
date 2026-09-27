@@ -37,7 +37,8 @@ describe("Açılış haritası: Üs, halkalar ve yaklaşık bölge alanları", (
     expect(map.markers.get("bolgeler")!.map((m) => m.lngLat)).toEqual(centers)
 
     expect(screen.getByText("Zaman akışından bir kare seçin")).toBeInTheDocument()
-    expect(screen.getByText("Merkez Us")).toBeInTheDocument()
+    // Üst çubukta Üs adı yerine logo (açık ve koyu tema sürümleri).
+    expect(screen.getAllByRole("img", { name: "BORA" })).toHaveLength(2)
   })
 
   it("her Bölge'nin yaklaşık alanı Üs merkezli bir pasta dilimi: merkezi yalnızca kendi diliminde, Üs'ün 1 km dairesi boş", async () => {
