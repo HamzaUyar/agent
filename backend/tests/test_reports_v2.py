@@ -386,3 +386,17 @@ def test_supabase_store_reads_once_asks_the_llm_only_on_a_miss_and_writes_change
     assert len(asked) == 1  # ikinci istek önbellekten
     assert log == ["select", "insert", "update"]  # değişmeyen sonuç yeniden yazılmaz
     assert store.size() == 1
+
+
+def test_llm_flags_are_reduced_to_the_fixed_list() -> None:
+    from app.reports_v2.verdict import normalize_flags
+
+    written = [
+        "gece ihbarı bölgesinden kalkış riski: doğrulanamayan ihbar + ağır araç hareketi",
+        "ihbar 7/8 bölge için gelmiş, jenerik ihbar",
+        "olası örtü hikâyesi",
+        "Olası örtü hikâyesi",
+    ]
+
+    assert normalize_flags(written) == ["gece ihbarı bölgesinden kalkış", "olası örtü hikâyesi"]
+    assert normalize_flags(None) == []

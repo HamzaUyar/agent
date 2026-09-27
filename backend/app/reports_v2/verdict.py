@@ -1,12 +1,30 @@
 """Bütün yaklaşımların ortak çıktısı: bir raporun doğrulama kararı."""
 
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel, Field
 
 VerdictLabel = Literal["consistent", "partial", "contradicts", "unverifiable", "irrelevant"]
 Harm = Literal["lowers_risk", "raises_risk", "none"]
 CheckStatus = Literal["match", "mismatch", "unverified", "not_claimed"]
+ContextFlag = Literal[
+    "olası örtü hikâyesi",
+    "telsiz kopukluğu + ağır araç hareketi",
+    "gece ihbarı bölgesinden kalkış",
+]
+CONTEXT_FLAGS: tuple[str, ...] = get_args(ContextFlag)
+
+
+def normalize_flags(flags: object) -> list[str]:
+    """LLM'in yazdığı bayrakları sabit listeye indirger: geçerli bayrağı içeren metin o bayrak
+    sayılır, diğerleri atılır (açıklama gerekçede kalır). Önbellekteki eski cevaplar için de."""
+    out: list[str] = []
+    for flag in flags if isinstance(flags, list) else []:
+        text = str(flag).strip().lower()
+        match = next((f for f in CONTEXT_FLAGS if f in text or text.startswith(f)), None)
+        if match and match not in out:
+            out.append(match)
+    return out
 
 
 class Check(BaseModel):
@@ -29,7 +47,7 @@ class ReportVerdict(BaseModel):
         "yaklaşan araca 'olağan' demek)"
     )
     checks: list[Check]
-    context_flags: list[str] = Field(
+    context_flags: list[ContextFlag] = Field(
         default_factory=list,
         description="Bağlam bayrakları: 'olası örtü hikâyesi', 'telsiz kopukluğu + ağır araç "
         "hareketi', 'gece ihbarı bölgesinden kalkış'; yoksa boş",

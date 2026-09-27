@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from app.llm.client import LLMRouter
 from app.reports_v2 import evidence as ev
-from app.reports_v2.verdict import ReportVerdict, VerdictLabel
+from app.reports_v2.verdict import ReportVerdict, VerdictLabel, normalize_flags
 
 PROMPTS = Path(__file__).parent / "prompts"
 POLICY = (PROMPTS / "policy.md").read_text(encoding="utf-8")
@@ -131,7 +131,8 @@ def single_llm(
     """Yaklaşım C: tek çağrı. Dönen üçüncü değer önbellek anahtarıdır."""
     user = "KANIT DOSYASI:\n" + _json(dossier) + "\n\nBu raporu doğrula."
     r = _complete(router, cache, "report_verify", POLICY, user, ReportVerdict, "C")
-    return ReportVerdict.model_validate(r["out"]), [r["model"]], r["key"]
+    out = {**r["out"], "context_flags": normalize_flags(r["out"].get("context_flags"))}
+    return ReportVerdict.model_validate(out), [r["model"]], r["key"]
 
 
 def visual_check(
