@@ -6,7 +6,9 @@ import type { TrackOverview } from "@/lib/api/types"
 import { dakika } from "@/lib/iz"
 import { useOperasyon } from "@/store/operasyon"
 
-import { fixtures } from "./msw/handlers"
+import { http, HttpResponse } from "msw"
+
+import { API, fixtures } from "./msw/handlers"
 import { server } from "./msw/server"
 import { renderEkran } from "./render"
 import type { FakeMap } from "./sahte-harita"
@@ -69,6 +71,18 @@ describe("İz analizi: açma ve süzgeç", () => {
       "Değerlendirilmedi",
     ])
     expect(count(null)).toBeGreaterThan(0)
+  })
+
+  it("değerlendirilmemiş track yoksa 'Değerlendirilmedi' anahtarı gösterilmez", async () => {
+    server.use(
+      http.get(`${API}/tracks`, () =>
+        HttpResponse.json(tracks.map((t) => ({ ...t, level: t.level ?? "low" }))),
+      ),
+    )
+    const { card } = await opened()
+    const filter = within(card).getByRole("group", { name: "Risk seviyesi süzgeci" })
+    expect(within(filter).queryByRole("button", { name: "Değerlendirilmedi" })).not.toBeInTheDocument()
+    expect(within(filter).getByRole("button", { name: "Hepsi" })).toHaveAttribute("aria-pressed", "true")
   })
 
   it("kapatınca iz katmanı boşalır", async () => {

@@ -798,25 +798,8 @@
   .sinif--diger { --sinif: var(--sinif-diger); }
 }
 
-/* İz analizi: ipucu, zaman çizgisi. */
+/* İz analizi: zaman çizgisi. */
 @layer components {
-  /* İz ipucu bütün DOM işaretlerinin (seçili temas 20) üstünde ve fareyi engellemez. */
-  .harita-ipucu {
-    z-index: 40;
-    pointer-events: none;
-  }
-  .harita-ipucu .maplibregl-popup-content {
-    padding: 4px 8px;
-    border-radius: var(--radius-md);
-    background: var(--birincil);
-    color: var(--birincil-uzeri);
-    font-size: 12px;
-    font-family: var(--font-mono);
-    box-shadow: var(--golge-yuksek);
-  }
-  .harita-ipucu .maplibregl-popup-tip {
-    display: none;
-  }
   /* Zaman çizgisi: ince iz, belirgin tutamaç (mürekkep; mavi seçime ayrılmış). */
   .iz-zaman {
     appearance: none;

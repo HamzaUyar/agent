@@ -13,7 +13,7 @@ import type { Feature, FeatureCollection } from "geojson"
 
 import type { RiskLevel, TrackOverview } from "@/lib/api/types"
 import { boundsOf, toLngLat, type Bounds, type LngLat } from "@/lib/geo"
-import { RISK, vehicleClass, vehicleTone } from "@/lib/labels"
+import { vehicleTone } from "@/lib/labels"
 
 /** Süzgeç seviyesi: risk seviyesi ya da "yok" (bittiği görüntü değerlendirilmemiş). */
 export type IzSeviyesi = RiskLevel | "yok"
@@ -127,11 +127,7 @@ export type IzOzellik = {
   level: IzSeviyesi
   highlighted: boolean
   dimmed: boolean
-  description: string
 }
-
-const tanim = (t: IzTrack) =>
-  `${t.id} · ${vehicleClass(t.source.label)} · ${t.level === "yok" ? "değerlendirilmedi" : RISK[t.level].label} · kayıt ${t.source.start}–${t.source.end}`
 
 /**
  * Harita katmanı. `time` yoksa hazır hâli (tam yollar); varsa o anın baş noktaları ve kuyrukları.
@@ -153,7 +149,6 @@ export function izKatmani(
     level: t.level,
     highlighted: t.id === highlight,
     dimmed: geriPlan || (highlight !== null && t.id !== highlight),
-    description: tanim(t),
   })
   for (const t of tracks) {
     if (time === null) {

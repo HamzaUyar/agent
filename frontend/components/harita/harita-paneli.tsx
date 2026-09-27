@@ -119,7 +119,7 @@ export function HaritaPaneli() {
           (selectedImageId ? (footprint?.bounds ?? null) : (izBounds ?? scene?.bounds ?? null))
         }
         // İz analizi kartı sağ üstte haritanın üstünde (w-80 + kenar payı).
-        fitInsetRight={izOpen ? 344 : 0}
+        fitInsetRight={izOpen ? 336 : 0}
         onBasemapError={basemapError}
         onMarkerClick={onMarkerClick}
         onAreaClick={onAreaClick}

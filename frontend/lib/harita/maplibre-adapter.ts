@@ -13,7 +13,6 @@ import {
   Map as MapLibreMap,
   Marker,
   NavigationControl,
-  Popup,
   ScaleControl,
   setWorkerUrl,
   type GeoJSONSource,
@@ -522,26 +521,31 @@ export function createMapLibreAdapter(container: HTMLElement, events: MapEvents)
     }
   }
 
-  // İz analizi: üzerine gelince ipucu (kimlik, sınıf, seviye, kayıt aralığı), tıklayınca vurgula.
+  // İz analizi: izler ince çizilir ama tıklama/üzerine gelme imlecin çevresinde bir kutuda aranır;
+  // çizgi kalınlaşmadan tıklanabilir alan büyür. Ayrıntı ipucu yok: tıklanınca kartta gösterilir.
   const IZ_ETKILESIM = [`${PREFIX}izler-cizgi`, `${PREFIX}izler-seviye`]
-  const tip = new Popup({ closeButton: false, closeOnClick: false, className: "harita-ipucu", offset: 10 })
-  map.on("mousemove", (event) => {
+  const IZ_TOLERANS_PX = 7
+  const izAt = (point: { x: number; y: number }) => {
     const layers = IZ_ETKILESIM.filter((id) => map.getLayer(id))
-    const hit = layers.length ? map.queryRenderedFeatures(event.point, { layers })[0] : undefined
-    map.getCanvas().style.cursor = hit ? "pointer" : ""
-    if (hit) tip.setLngLat(event.lngLat).setText(String(hit.properties.description ?? "")).addTo(map)
-    else tip.remove()
+    if (!layers.length) return undefined
+    const box: [[number, number], [number, number]] = [
+      [point.x - IZ_TOLERANS_PX, point.y - IZ_TOLERANS_PX],
+      [point.x + IZ_TOLERANS_PX, point.y + IZ_TOLERANS_PX],
+    ]
+    // Soluk (vurgunun dışındaki) izler yerine önce görünür olanlar.
+    const hits = map.queryRenderedFeatures(box, { layers })
+    return hits.find((f) => !f.properties.dimmed) ?? hits[0]
+  }
+  map.on("mousemove", (event) => {
+    map.getCanvas().style.cursor = izAt(event.point) ? "pointer" : ""
   })
-  // Fare haritadan çıkınca ipucu asılı kalmasın.
   map.on("mouseout", () => {
     map.getCanvas().style.cursor = ""
-    tip.remove()
   })
 
   // DOM işaretlerinin tıklaması haritaya yayılmaz; buraya gelen tıklama ya bir ize ya boşluğa.
   map.on("click", (event) => {
-    const layers = IZ_ETKILESIM.filter((id) => map.getLayer(id))
-    const hit = layers.length ? map.queryRenderedFeatures(event.point, { layers })[0] : undefined
+    const hit = izAt(event.point)
     if (hit) events.onAreaClick?.("izler", String(hit.properties.id))
     else events.onMapClick?.()
   })

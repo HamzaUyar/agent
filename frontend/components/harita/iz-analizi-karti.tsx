@@ -36,7 +36,7 @@ export function IzAnaliziKarti() {
   return (
     <section
       aria-label="İz analizi"
-      className="absolute top-3 right-3 z-20 flex max-h-[min(60%,34rem)] w-80 max-w-[45%] min-w-72 flex-col overflow-hidden rounded-lg border border-cizgi bg-yuzey text-xs text-metin-ikincil shadow-golge-yuksek"
+      className="absolute top-2 right-2 z-20 flex max-h-[min(60%,34rem)] w-80 max-w-[45%] min-w-72 flex-col overflow-hidden rounded-lg border border-cizgi bg-yuzey text-xs text-metin-ikincil shadow-golge-yuksek"
     >
       <Baslik />
       <div className="flex min-h-0 flex-col gap-3 overflow-y-auto p-3">
