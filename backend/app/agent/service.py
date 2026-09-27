@@ -65,6 +65,10 @@ class EvaluationService:
     def repository(self) -> DataRepository:
         return self._repo
 
+    @property
+    def report_verifier(self) -> ReportVerifier:
+        return self._report_verifier
+
     def run(self, image_id: str) -> Brief:
         """Bütün adımları çalıştırıp Brief'i döndürür."""
         for event in self.evaluate(image_id):
