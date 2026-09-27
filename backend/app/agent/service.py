@@ -77,6 +77,14 @@ class EvaluationService:
         return self._detector.version
 
     @property
+    def detector(self) -> Detector:
+        return self._detector
+
+    @property
+    def router(self) -> LLMRouter | None:
+        return self._router
+
+    @property
     def report_verifier(self) -> ReportVerifier:
         return self._report_verifier
 

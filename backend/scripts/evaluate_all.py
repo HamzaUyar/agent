@@ -4,10 +4,13 @@ Kurallar ya da risk motoru değiştiğinde çalıştırılır: önbellek yalnız
 sürümüyle (`rules_version`) yapılmış kayıtları oynattığı için, bu komuttan sonra arayüz ve
 harita yeni kayıtları kullanır. Tespitler `.env`'e göre (DEMO: Supabase `model_detections`),
 rapor doğrulamaları ortak önbellekten gelir. Görüntüler sırayla değerlendirilir.
+Ardından hiçbir görüntüde olmayan track'ler değerlendirilir (scripts.assess_tracks) ve her
+track'in bir değerlendirmede yer aldığı veritabanından kontrol edilir.
 
     python -m scripts.evaluate_all                 # hepsi
     python -m scripts.evaluate_all img_000860      # yalnızca verilenler
     python -m scripts.evaluate_all --missing       # güncel sürümde kaydı olmayanlar
+    python -m scripts.evaluate_all --skip-tracks   # görüntüsüz track'ler olmadan
 """
 
 import argparse
@@ -17,7 +20,10 @@ from collections import Counter
 from app.agent.runner import EvaluationRunner
 from app.api.stores import DatabaseStores
 from app.core.rules import rules_version
+from app.db.risk_store import track_coverage
+from app.db.session import connect
 from app.schemas.api import Brief
+from scripts.assess_tracks import assess_unframed
 from scripts.common import add_source_args, build_service
 
 
@@ -26,6 +32,9 @@ def main() -> None:
     parser.add_argument("images", nargs="*", help="Görüntü kimlikleri (varsayılan: hepsi)")
     parser.add_argument(
         "--missing", action="store_true", help="güncel kural sürümüyle kaydı olanları atla"
+    )
+    parser.add_argument(
+        "--skip-tracks", action="store_true", help="görüntüsüz track değerlendirmesini atla"
     )
     add_source_args(parser)
     args = parser.parse_args()
@@ -63,6 +72,15 @@ def main() -> None:
         print(f"[{i:2}/{len(ids)}] {image_id} {brief.risk_level} ({took:.0f} sn){note}")
 
     print(f"Seviyeler: {dict(levels)} · otomatik özet: {fallbacks} · başarısız: {failures}")
+
+    if not args.skip_tracks:
+        assess_unframed(service.repository, service.detector, service.rules, service.router)
+    with connect() as conn:
+        total, in_images, unframed, missing = track_coverage(conn, version)
+    print(
+        f"Kapsama: {total} track · görüntü değerlendirmesinde {in_images} · "
+        f"görüntüsüz değerlendirmede {unframed} · eksik {len(missing)} {missing or ''}"
+    )
 
 
 if __name__ == "__main__":

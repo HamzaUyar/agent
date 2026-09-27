@@ -162,3 +162,30 @@ def save_track_briefs(
                 for b, end in briefs
             ],
         )  # fmt: skip
+
+
+def track_coverage(conn: psycopg.Connection, rules_version: str) -> tuple[int, int, int, list[str]]:
+    """Her track bir değerlendirmede var mı: (toplam, görüntü değerlendirmesinde temas olan,
+    görüntüsüz değerlendirmesi olan, ikisinde de olmayanlar)."""
+    row = conn.execute(
+        """with runs as (
+             select distinct on (image_id) id from public.analysis_runs
+             where status = 'done' and models->>'rules_version' = %s
+             order by image_id, finished_at desc),
+           in_images as (
+             select distinct c->>'track_id' as track_id
+             from runs join public.analysis_runs r using (id),
+                  jsonb_array_elements(r.brief_json->'contacts') c
+             where c->>'track_id' is not null),
+           unframed as (
+             select track_id from public.unframed_tracks_latest where assessment is not null)
+           select (select count(*) from public.tracks),
+                  (select count(*) from in_images),
+                  (select count(*) from unframed),
+                  coalesce((select array_agg(id order by id) from public.tracks
+                            where id not in (select track_id from in_images)
+                              and id not in (select track_id from unframed)), '{}')""",
+        (rules_version,),
+    ).fetchone()
+    assert row is not None
+    return int(row[0]), int(row[1]), int(row[2]), list(row[3])
