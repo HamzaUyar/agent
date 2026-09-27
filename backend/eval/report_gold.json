@@ -1,0 +1,1256 @@
+{
+ "_aciklama": "137 saha raporunun elle doğrulanmış kararları (26-27 Eylül analizi). verdict: consistent/partial/contradicts/unverifiable/irrelevant. harm: rapor yanlışsa inanılması riski düşürür mü (lowers_risk) yükseltir mi (raises_risk). Koordinatlı raporlar tek tek incelendi, bölge raporları raporun saatindeki bölge hareketliliğiyle kural bazlı karşılaştırıldı. 27 Eylül: konvoy planı, tatbikat ve dün gece ihbarları \"irrelevant\" yerine \"unverifiable\" (bağlam raporu); beklenen bağlam bayrakları \"flags\" alanında.",
+ "reports": [
+  {
+   "id": 0,
+   "time": "13:05",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "partial",
+   "harm": "none",
+   "note": "Noktada panelvan (2 m); 1 kamyon 32 m ötede, T0182 otomobil."
+  },
+  {
+   "id": 1,
+   "time": "10:05",
+   "source": "resmi",
+   "category": "Trafik normal",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "\"Olağan\" denmiş ama o saatte bölgede 6 araç üsse yaklaşıyor, ağır araç hareketli: T0147."
+  },
+  {
+   "id": 2,
+   "time": "11:55",
+   "source": "3. taraf",
+   "category": "Tatbikat duyurusu",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir.",
+   "flags": [
+    "olası örtü hikâyesi"
+   ]
+  },
+  {
+   "id": 3,
+   "time": "14:45",
+   "source": "resmi",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 4,
+   "time": "09:50",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Noktanın 30–46 m çevresinde 3 kamyon + 1 otobüs."
+  },
+  {
+   "id": 5,
+   "time": "10:20",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse yaklaşıyor (1,8 km). Tip ve hareket tutuyor, kimlik doğrulanamaz."
+  },
+  {
+   "id": 6,
+   "time": "14:15",
+   "source": "resmi",
+   "category": "Bize bağlı unsur (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse yaklaşıyor. Tip ve hareket tutuyor."
+  },
+  {
+   "id": 7,
+   "time": "10:30",
+   "source": "3. taraf",
+   "category": "Sabah devriyesi olağan",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "\"Olağan\" denmiş ama o saatte bölgede 5 araç üsse yaklaşıyor, ağır araç hareketli: T0174."
+  },
+  {
+   "id": 8,
+   "time": "10:00",
+   "source": "3. taraf",
+   "category": "Transit / konvoy",
+   "verdict": "partial",
+   "harm": "lowers_risk",
+   "note": "Mavi yüklü kamyon var (renk doğru). \"Transit\" yanıltıcı: 10:00'da T0147 üsse doğru hızla ilerliyordu ve çekime kadar 3 km yaklaştı."
+  },
+  {
+   "id": 9,
+   "time": "09:45",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"5 kamyon durdu\": 75 m içinde 1 kamyon ve 5 otomobil var."
+  },
+  {
+   "id": 10,
+   "time": "14:40",
+   "source": "resmi",
+   "category": "Dün gece ihbarı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 11,
+   "time": "10:35",
+   "source": "resmi",
+   "category": "Ağır araç yok (bölge)",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "O saatte bölgede ağır araç hareketli: T0174."
+  },
+  {
+   "id": 12,
+   "time": "09:50",
+   "source": "resmi",
+   "category": "Dün gece ihbarı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 13,
+   "time": "08:55",
+   "source": "3. taraf",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 14,
+   "time": "14:15",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 15,
+   "time": "14:20",
+   "source": "resmi",
+   "category": "Ağır araç yok (bölge)",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "O saatte bölgede hareketli ağır araç yok."
+  },
+  {
+   "id": 16,
+   "time": "10:20",
+   "source": "resmi",
+   "category": "Ağır araç yok (bölge)",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "O saatte bölgede ağır araç hareketli: T0174."
+  },
+  {
+   "id": 17,
+   "time": "11:05",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"5 kamyon durdu\": 75 m içinde 1 kamyon, 6 otomobil; noktada otomobiller."
+  },
+  {
+   "id": 18,
+   "time": "13:20",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 19,
+   "time": "08:40",
+   "source": "resmi",
+   "category": "Yoğunluk",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Noktanın çevresinde 16 araç (olağan 4)."
+  },
+  {
+   "id": 20,
+   "time": "11:00",
+   "source": "3. taraf",
+   "category": "İhbar doğrulanamadı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "\"İncelendi, doğrulanamadı\": içerik yok."
+  },
+  {
+   "id": 21,
+   "time": "13:50",
+   "source": "3. taraf",
+   "category": "Uzaklaşıyor",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "BAYAT GÜVENCE. Renk ve tip doğru; 13:55'te kamyon gerçekten 8 km'ye açıldı. Çekim anında (15:20) T0078 30 dk'da 2,8 km yaklaşıp 3,5 km'de."
+  },
+  {
+   "id": 22,
+   "time": "12:50",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 23,
+   "time": "09:55",
+   "source": "resmi",
+   "category": "Dün gece ihbarı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 24,
+   "time": "13:30",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"2 kamyon\": görüntüde hiç ağır araç yok (4 otomobil). T0005 park etmiş otomobil."
+  },
+  {
+   "id": 25,
+   "time": "13:50",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"2 kamyon\": 75 m içinde kamyon yok; 2 panelvan ve otomobiller."
+  },
+  {
+   "id": 26,
+   "time": "14:30",
+   "source": "resmi",
+   "category": "Lojistik konvoy planı",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 27,
+   "time": "11:05",
+   "source": "resmi",
+   "category": "Lojistik konvoy planı",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 28,
+   "time": "14:10",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"1 kamyon\": noktada panelvan (4 m)."
+  },
+  {
+   "id": 29,
+   "time": "13:25",
+   "source": "resmi",
+   "category": "Lojistik konvoy planı",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 30,
+   "time": "11:55",
+   "source": "3. taraf",
+   "category": "Sabah devriyesi olağan",
+   "verdict": "partial",
+   "harm": "lowers_risk",
+   "note": "3 araç üsse yaklaşıyor; \"olağan\" tartışmalı."
+  },
+  {
+   "id": 31,
+   "time": "11:00",
+   "source": "3. taraf",
+   "category": "Sabah devriyesi olağan",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "O saatte bölgede 1 yaklaşan araç, olağandışı bir şey yok."
+  },
+  {
+   "id": 32,
+   "time": "09:50",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "partial",
+   "harm": "none",
+   "note": "T0223 park hâlinde (doğru); araç uzak ve küçük, tipi doğrulanamadı."
+  },
+  {
+   "id": 33,
+   "time": "13:05",
+   "source": "3. taraf",
+   "category": "Lojistik konvoy planı",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 34,
+   "time": "14:30",
+   "source": "resmi",
+   "category": "Tatbikat duyurusu",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 35,
+   "time": "14:50",
+   "source": "resmi",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 36,
+   "time": "11:25",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"1 kamyon\": noktada küçük otomobil (5 m)."
+  },
+  {
+   "id": 37,
+   "time": "12:25",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "partial",
+   "harm": "none",
+   "note": "\"2 kamyon\": 1 kamyon + 1 panelvan."
+  },
+  {
+   "id": 38,
+   "time": "12:25",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"Yüklü kamyon park hâlinde\": noktada boş yol, araç yok."
+  },
+  {
+   "id": 39,
+   "time": "14:25",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 40,
+   "time": "10:30",
+   "source": "resmi",
+   "category": "Lojistik konvoy planı",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 41,
+   "time": "15:00",
+   "source": "resmi",
+   "category": "Hareket yok (bölge)",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "\"Kayda değer hareketlilik yok\": 7 araç üsse yaklaşıyor; 14:20–14:40'ta T0034 üssün 500 m yakınında tur attı."
+  },
+  {
+   "id": 42,
+   "time": "13:40",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"Yüklü kamyon park hâlinde\": noktada boş yol, araç yok."
+  },
+  {
+   "id": 43,
+   "time": "13:55",
+   "source": "resmi",
+   "category": "Bize bağlı unsur (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse yaklaşıyor. Tip ve hareket tutuyor."
+  },
+  {
+   "id": 44,
+   "time": "09:30",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "partial",
+   "harm": "none",
+   "note": "T0026 park hâlinde (doğru); tespit otomobil, rapor kamyon diyor."
+  },
+  {
+   "id": 45,
+   "time": "11:40",
+   "source": "resmi",
+   "category": "Dost devriye",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Mavi-beyaz otomobil var, renk doğru. Dost kimliği doğrulanamaz."
+  },
+  {
+   "id": 46,
+   "time": "14:45",
+   "source": "resmi",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 47,
+   "time": "13:00",
+   "source": "resmi",
+   "category": "Dün gece ihbarı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 48,
+   "time": "09:45",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse yaklaşıyor (1,7 km). Tip ve hareket tutuyor."
+  },
+  {
+   "id": 49,
+   "time": "10:20",
+   "source": "resmi",
+   "category": "Bize bağlı unsur (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil (iki kamyonun yanında), yaklaşıyor. Tip ve hareket tutuyor."
+  },
+  {
+   "id": 50,
+   "time": "10:40",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"2 kamyon\": kamyon yok, 2 panelvan."
+  },
+  {
+   "id": 51,
+   "time": "11:00",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 52,
+   "time": "08:50",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 53,
+   "time": "09:30",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 54,
+   "time": "14:25",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Noktada kamyon (6 m). Rapor saatinde T0029 49 m ötede duruyordu."
+  },
+  {
+   "id": 55,
+   "time": "14:45",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 56,
+   "time": "12:40",
+   "source": "resmi",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 57,
+   "time": "12:30",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "4 kamyon tespit edildi (10–35 m)."
+  },
+  {
+   "id": 58,
+   "time": "11:50",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse yaklaşıyor. Tip ve hareket tutuyor."
+  },
+  {
+   "id": 59,
+   "time": "12:15",
+   "source": "3. taraf",
+   "category": "Lojistik konvoy planı",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir.",
+   "flags": [
+    "olası örtü hikâyesi"
+   ]
+  },
+  {
+   "id": 60,
+   "time": "14:50",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil. T0075 dışarı açılıp geri dönüyor: son 10 dk'da 7,7 → 5,3 km yaklaşıyor. Tip ve hareket tutuyor, kimlik doğrulanamaz."
+  },
+  {
+   "id": 61,
+   "time": "13:10",
+   "source": "resmi",
+   "category": "İhbar doğrulanamadı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "\"İncelendi, doğrulanamadı\": içerik yok."
+  },
+  {
+   "id": 62,
+   "time": "14:30",
+   "source": "resmi",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 63,
+   "time": "14:50",
+   "source": "resmi",
+   "category": "Lojistik konvoy planı",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 64,
+   "time": "12:20",
+   "source": "resmi",
+   "category": "Telsiz kopukluğu",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Doğrulanamaz. Aynı saatte Kuzey Yolu'nda 5 kamyon hareketli (T0001, T0010, T0028, T0068, T0135); telsiz kopukluğu ile çakışıyor.",
+   "flags": [
+    "telsiz kopukluğu + ağır araç hareketi"
+   ]
+  },
+  {
+   "id": 65,
+   "time": "09:05",
+   "source": "resmi",
+   "category": "İhbar doğrulanamadı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "\"İncelendi, doğrulanamadı\": içerik yok."
+  },
+  {
+   "id": 66,
+   "time": "12:40",
+   "source": "3. taraf",
+   "category": "Telsiz kopukluğu",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Doğrulanamaz bağlam. O saatte bölgede 4 araç hareketli, 2 yaklaşan."
+  },
+  {
+   "id": 67,
+   "time": "12:15",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"Ağır araç beklemede\": noktada kaldırım ve ağaç, araç yok."
+  },
+  {
+   "id": 68,
+   "time": "13:15",
+   "source": "resmi",
+   "category": "Dün gece ihbarı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 69,
+   "time": "10:15",
+   "source": "resmi",
+   "category": "İhbar doğrulanamadı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "\"İncelendi, doğrulanamadı\": içerik yok."
+  },
+  {
+   "id": 70,
+   "time": "12:50",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"Üzeri örtülü ağır araç bekliyor\": nokta bir bina cephesine düşüyor."
+  },
+  {
+   "id": 71,
+   "time": "11:30",
+   "source": "resmi",
+   "category": "İhbar doğrulanamadı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "\"İncelendi, doğrulanamadı\": içerik yok."
+  },
+  {
+   "id": 72,
+   "time": "12:45",
+   "source": "resmi",
+   "category": "Sabah devriyesi olağan",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "O saatte bölgede 2 yaklaşan araç, olağandışı bir şey yok."
+  },
+  {
+   "id": 73,
+   "time": "14:35",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "partial",
+   "harm": "none",
+   "note": "\"4 kamyon\": 2 kamyon + 1 panelvan."
+  },
+  {
+   "id": 74,
+   "time": "09:30",
+   "source": "resmi",
+   "category": "Lojistik konvoy planı",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 75,
+   "time": "09:35",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"3 kamyon\": 1 kamyon (düşük güven 0,38)."
+  },
+  {
+   "id": 76,
+   "time": "12:40",
+   "source": "3. taraf",
+   "category": "Telsiz kopukluğu",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Doğrulanamaz bağlam. O saatte bölgede 8 araç hareketli, 3 yaklaşan, 1 ağır araç hareketli (T0010).",
+   "flags": [
+    "telsiz kopukluğu + ağır araç hareketi"
+   ]
+  },
+  {
+   "id": 77,
+   "time": "10:40",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Araç kare kenarında, tespit yok. İz T0168 hızla yaklaşıyor (1,7 km, ~8 dk)."
+  },
+  {
+   "id": 78,
+   "time": "13:35",
+   "source": "3. taraf",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 79,
+   "time": "12:35",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"1 kamyon\": noktada panelvan (2 m)."
+  },
+  {
+   "id": 80,
+   "time": "08:40",
+   "source": "resmi",
+   "category": "Sabah devriyesi olağan",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "\"Olağan\" denmiş ama o saatte bölgede 1 araç üsse yaklaşıyor, ağır araç hareketli: T0035."
+  },
+  {
+   "id": 81,
+   "time": "09:45",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 82,
+   "time": "08:50",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse yaklaşıyor. Tip ve hareket tutuyor."
+  },
+  {
+   "id": 83,
+   "time": "15:05",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Noktada otobüs (1 m), T0157 park hâlinde: \"olağan\" doğru."
+  },
+  {
+   "id": 84,
+   "time": "12:35",
+   "source": "resmi",
+   "category": "İhbar doğrulanamadı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "\"İncelendi, doğrulanamadı\": içerik yok."
+  },
+  {
+   "id": 85,
+   "time": "13:40",
+   "source": "resmi",
+   "category": "Sabah devriyesi olağan",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "\"Olağan\" denmiş ama o saatte bölgede 6 araç üsse yaklaşıyor."
+  },
+  {
+   "id": 86,
+   "time": "14:15",
+   "source": "3. taraf",
+   "category": "Transit / konvoy",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"3 araçlık kamyon konvoyu\": görüntüde hiç kamyon yok."
+  },
+  {
+   "id": 87,
+   "time": "09:35",
+   "source": "resmi",
+   "category": "Dün gece ihbarı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 88,
+   "time": "12:40",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 89,
+   "time": "11:55",
+   "source": "resmi",
+   "category": "İhbar doğrulanamadı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "\"İncelendi, doğrulanamadı\": içerik yok."
+  },
+  {
+   "id": 90,
+   "time": "13:30",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 91,
+   "time": "09:35",
+   "source": "resmi",
+   "category": "Ağır araç yok (bölge)",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "O saatte bölgede ağır araç hareketli: T0035."
+  },
+  {
+   "id": 92,
+   "time": "09:30",
+   "source": "3. taraf",
+   "category": "Dün gece ihbarı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 93,
+   "time": "08:45",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "partial",
+   "harm": "none",
+   "note": "\"2 kamyon durdu\": 1 kamyon (T0045 park) + 1 panelvan."
+  },
+  {
+   "id": 94,
+   "time": "09:00",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 95,
+   "time": "13:35",
+   "source": "3. taraf",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 96,
+   "time": "10:55",
+   "source": "resmi",
+   "category": "Trafik normal",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "O saatte bölgede 2 yaklaşan araç, olağandışı bir şey yok."
+  },
+  {
+   "id": 97,
+   "time": "13:30",
+   "source": "resmi",
+   "category": "Trafik normal",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "\"Olağan\" denmiş ama o saatte bölgede 6 araç üsse yaklaşıyor, ağır araç hareketli: T0002,T0213."
+  },
+  {
+   "id": 98,
+   "time": "11:30",
+   "source": "resmi",
+   "category": "Trafik normal",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "O saatte bölgede 2 yaklaşan araç, olağandışı bir şey yok."
+  },
+  {
+   "id": 99,
+   "time": "11:40",
+   "source": "resmi",
+   "category": "Ağır araç yok (bölge)",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "O saatte bölgede hareketli ağır araç yok."
+  },
+  {
+   "id": 100,
+   "time": "11:40",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"7 kamyon durdu\": görüntüde 5 kamyon, üçü (T0001, T0028, T0135) üsse yaklaşıyor, durmuyor."
+  },
+  {
+   "id": 101,
+   "time": "15:15",
+   "source": "resmi",
+   "category": "Bize bağlı unsur (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, yaklaşıyor. Tip ve hareket tutuyor."
+  },
+  {
+   "id": 102,
+   "time": "13:10",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 103,
+   "time": "12:15",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"2 kamyon\": görüntüde ağır araç yok."
+  },
+  {
+   "id": 104,
+   "time": "13:55",
+   "source": "resmi",
+   "category": "Trafik normal",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "\"Olağan\" denmiş ama o saatte bölgede 6 araç üsse yaklaşıyor, ağır araç hareketli: T0002,T0081."
+  },
+  {
+   "id": 105,
+   "time": "12:25",
+   "source": "3. taraf",
+   "category": "Uzaklaşıyor",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "Renk doğru. 12:25'te T0018 7 km'de duruyordu, uzaklaşmıyordu. Çekim anında (14:25) son 15 dk'da 7,0 → 4,3 km yaklaşıyor."
+  },
+  {
+   "id": 106,
+   "time": "12:30",
+   "source": "resmi",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 107,
+   "time": "08:35",
+   "source": "resmi",
+   "category": "Telsiz kopukluğu",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Doğrulanamaz bağlam. O saatte bölgede 1 araç hareketli, 0 yaklaşan."
+  },
+  {
+   "id": 108,
+   "time": "12:35",
+   "source": "3. taraf",
+   "category": "Trafik normal",
+   "verdict": "partial",
+   "harm": "lowers_risk",
+   "note": "3 araç üsse yaklaşıyor; \"olağan\" tartışmalı."
+  },
+  {
+   "id": 109,
+   "time": "11:00",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"Kırmızı kamyon\": noktadaki araç kırmızı/pembe küçük otomobil. Renk doğru, tip yanlış."
+  },
+  {
+   "id": 110,
+   "time": "10:30",
+   "source": "resmi",
+   "category": "Telsiz kopukluğu",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Doğrulanamaz bağlam. O saatte bölgede 6 araç hareketli, 5 yaklaşan.",
+   "flags": [
+    "telsiz kopukluğu + ağır araç hareketi"
+   ]
+  },
+  {
+   "id": 111,
+   "time": "14:10",
+   "source": "resmi",
+   "category": "Tatbikat duyurusu",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 112,
+   "time": "12:15",
+   "source": "resmi",
+   "category": "Bize bağlı unsur (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil. T0124 12:15'te 3,4 km'ye gelmiş, 7,9 km'ye açılıp son 15 dk'da 3,5 km'ye dönmüş. Tip ve hareket tutuyor, kimlik doğrulanamaz."
+  },
+  {
+   "id": 113,
+   "time": "10:10",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"1 kamyon\": noktadaki araç beyaz panelvan (T0191)."
+  },
+  {
+   "id": 114,
+   "time": "09:35",
+   "source": "resmi",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 115,
+   "time": "14:00",
+   "source": "resmi",
+   "category": "Sabah devriyesi olağan",
+   "verdict": "partial",
+   "harm": "lowers_risk",
+   "note": "3 araç üsse yaklaşıyor; \"olağan\" tartışmalı."
+  },
+  {
+   "id": 116,
+   "time": "13:15",
+   "source": "resmi",
+   "category": "Yoğunluk",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "9 araç (olağan 4)."
+  },
+  {
+   "id": 117,
+   "time": "09:50",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "BAYAT GÜVENCE. 09:50'de kamyon 5 km'de duruyordu, \"olağan\" o an doğruydu. Çekim anında (10:30) kamyon T0095 30 dk'da 6,1 km yol alıp üssün 1,8 km'sine yaklaşıyor: KRİTİK."
+  },
+  {
+   "id": 118,
+   "time": "13:50",
+   "source": "3. taraf",
+   "category": "Dün gece ihbarı",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 119,
+   "time": "12:25",
+   "source": "resmi",
+   "category": "Bize bağlı unsur (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse hızla yaklaşıyor (1,6 km). Tip ve hareket tutuyor."
+  },
+  {
+   "id": 120,
+   "time": "13:00",
+   "source": "3. taraf",
+   "category": "Sabah devriyesi olağan",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "\"Olağan\" denmiş ama o saatte bölgede 6 araç üsse yaklaşıyor."
+  },
+  {
+   "id": 121,
+   "time": "11:35",
+   "source": "resmi",
+   "category": "Tatbikat duyurusu",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Bağlam raporu: doğrulanamaz, riski düşüremez; gün düzeyindeki sinyallerle birlikte değerlendirilir."
+  },
+  {
+   "id": 122,
+   "time": "10:10",
+   "source": "resmi",
+   "category": "Dost devriye",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Açık mavi otomobil var, renk doğru. Dost kimliği doğrulanamaz."
+  },
+  {
+   "id": 123,
+   "time": "14:40",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse yaklaşıyor. Tip ve hareket tutuyor."
+  },
+  {
+   "id": 124,
+   "time": "10:15",
+   "source": "resmi",
+   "category": "Dost devriye",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Çevrede sarı araçlar var; noktada araç yok (4 ondalık). Kimlik doğrulanamaz."
+  },
+  {
+   "id": 125,
+   "time": "12:35",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "lowers_risk",
+   "note": "BAYAT GÜVENCE. 12:35'te T0122 6 km'de duruyordu. Çekim anında (14:10) 30 dk'da 3,8 km yaklaşıp 1,6 km'de: KRİTİK. Görüntüde ağır araç da görülmüyor."
+  },
+  {
+   "id": 126,
+   "time": "14:50",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"3 kamyon\": 1 kamyon."
+  },
+  {
+   "id": 127,
+   "time": "13:40",
+   "source": "resmi",
+   "category": "Telsiz kopukluğu",
+   "verdict": "unverifiable",
+   "harm": "none",
+   "note": "Doğrulanamaz bağlam. O saatte bölgede 7 araç hareketli, 4 yaklaşan, 1 ağır araç hareketli (T0212).",
+   "flags": [
+    "telsiz kopukluğu + ağır araç hareketi"
+   ]
+  },
+  {
+   "id": 128,
+   "time": "13:55",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "partial",
+   "harm": "lowers_risk",
+   "note": "\"Panelvan\" dendi, tespit otomobil (0,64). Yaklaşma var."
+  },
+  {
+   "id": 129,
+   "time": "13:15",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Otobüs + kamyon (3 m)."
+  },
+  {
+   "id": 130,
+   "time": "08:45",
+   "source": "resmi",
+   "category": "Hava durumu",
+   "verdict": "irrelevant",
+   "harm": "none",
+   "note": "Hava durumu; tespitle ilişkisi yok."
+  },
+  {
+   "id": 131,
+   "time": "10:15",
+   "source": "resmi",
+   "category": "Planlı ikmal (dost)",
+   "verdict": "unverifiable",
+   "harm": "lowers_risk",
+   "note": "Otomobil, üsse yaklaşıyor. Tip ve hareket tutuyor."
+  },
+  {
+   "id": 132,
+   "time": "14:40",
+   "source": "3. taraf",
+   "category": "Sayı / tip",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Noktada kamyon (6 m)."
+  },
+  {
+   "id": 133,
+   "time": "09:15",
+   "source": "resmi",
+   "category": "Sayı / tip",
+   "verdict": "contradicts",
+   "harm": "raises_risk",
+   "note": "\"1 kamyon\": noktadaki araç panelvan (T0016). Aynı araç için #94 doğru olarak \"panelvan\" diyor."
+  },
+  {
+   "id": 134,
+   "time": "09:35",
+   "source": "3. taraf",
+   "category": "Hareketsiz / park",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "Park hâlinde iz ve tespit noktada; süre iddiası veriyle tutarlı."
+  },
+  {
+   "id": 135,
+   "time": "09:50",
+   "source": "resmi",
+   "category": "Trafik normal",
+   "verdict": "partial",
+   "harm": "lowers_risk",
+   "note": "4 araç üsse yaklaşıyor; \"olağan\" tartışmalı."
+  },
+  {
+   "id": 136,
+   "time": "11:10",
+   "source": "resmi",
+   "category": "Ağır araç yok (bölge)",
+   "verdict": "consistent",
+   "harm": "none",
+   "note": "O saatte bölgede hareketli ağır araç yok."
+  }
+ ]
+}

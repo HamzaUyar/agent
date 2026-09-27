@@ -472,10 +472,12 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
 
     coord = {"lat": here.lat, "lon": here.lon}
     if kind == "consistent":
+        # Hareket iddiası yok: odak araç yaklaşıyor olabilir; "olağan" demek tehlikeli
+        # güvence olurdu.
         return plan(
-            f"{_coord_text(here)} cevresinde 1 {tr_name} bulunuyor, hareketleri olagan.",
+            f"{_coord_text(here)} cevresinde 1 {tr_name} goruldu.",
             ReportSource.OFFICIAL,
-            _claim(**coord, vehicle_type=_claim_type_of(label), behavior="normal_traffic"),
+            _claim(**coord, vehicle_type=_claim_type_of(label)),
             "consistent",
         )
     if kind == "threat":
@@ -483,11 +485,10 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
             f"{_coord_text(here)} civarinda supheli bir {tr_name} goruldu, dikkatli olunmali.",
             ReportSource.OFFICIAL,
             _claim(**coord, vehicle_type=_claim_type_of(label), claim_type="threat_warning"),
-            "consistent",
-            "raises_one",
+            "consistent",  # rapor seviyeyi değiştirmez (reports_v2)
         )
     if kind in ("friendly_official", "friendly_third_party"):
-        # Rapor çekim anında: saat de tutar, resmi olan riski düşürür.
+        # Kimlik hiçbir veriyle doğrulanamaz: resmi olsa da "doğrulanamaz", seviye değişmez.
         official = kind == "friendly_official"
         text = (
             f"{_coord_text(here)} civarindaki {tr_name} dost birliklere aittir, "
@@ -499,8 +500,7 @@ def _plan_report(scene: Scene, kind: ReportKind, rng: random.Random) -> ReportPl
             text,
             ReportSource.OFFICIAL if official else ReportSource.THIRD_PARTY,
             _claim(**coord, vehicle_type=_claim_type_of(label), claim_type="friendly_claim"),
-            "consistent",
-            "lowers" if official else "none",
+            "unverifiable",
             at=now,
         )
     if kind == "type_contradiction":
@@ -596,14 +596,8 @@ def expected_level(scene: Scene, rules: RiskRules) -> RiskLevel:
     for v in scene.vehicles:
         if not v.detected and v.behavior is None:
             continue
-        level = contact_level(v, rules)
-        if v.focus and scene.report is not None:
-            effect = scene.report.effect
-            if effect == "raises_one":
-                level = LEVELS[min(LEVELS.index(level) + 1, len(LEVELS) - 1)]
-            elif effect == "lowers":
-                level = "low"
-        levels.append(level)
+        # Raporlar seviyeyi değiştirmez (reports_v2): beklenen seviye kural tablosundan.
+        levels.append(contact_level(v, rules))
     return max(levels, key=LEVELS.index, default="low")
 
 

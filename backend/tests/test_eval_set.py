@@ -32,8 +32,9 @@ TRUCK = Detection(label=VehicleClass.TRUCK, confidence=0.91, x=727, y=284, w=58,
 T0122_AT_1410 = next(
     p.location for p in PACKAGE.track_points if p.track_id == "T0122" and p.time == time(14, 10)
 )
-T0032_AT_1235 = next(
-    p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(12, 35)
+# Rapor koordinatı aracın çekim anındaki konumudur (organizatör verisi; yönetim kararı).
+T0032_AT_1410 = next(
+    p.location for p in PACKAGE.track_points if p.track_id == "T0032" and p.time == time(14, 10)
 )
 
 
@@ -66,7 +67,7 @@ CLAIMS = [
     ClaimRecord(
         1,
         FieldReport(time(12, 35), ReportSource.OFFICIAL, "1 agir arac"),
-        claim_at(T0032_AT_1235.lat, T0032_AT_1235.lon, vehicle_type="heavy"),
+        claim_at(T0032_AT_1410.lat, T0032_AT_1410.lon, vehicle_type="heavy"),
     ),
     # 14:10 üçüncü taraf: "binek araç" diyor, T0122 truck → çelişkili.
     ClaimRecord(
