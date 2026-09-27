@@ -12,6 +12,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from app.agent.risk_day import DayRisk
+from app.agent.track_brief import TrackBrief
 from app.data_package import from_minutes
 from app.risk_engine import LEVEL_NAMES, EngineConfig
 from app.risk_engine.summary import events
@@ -133,3 +134,31 @@ def save_day(
             ],
         )  # fmt: skip
     return run_id
+
+
+def latest_run_id(conn: psycopg.Connection) -> UUID | None:
+    row = conn.execute("select id from public.risk_latest_run").fetchone()
+    return None if row is None else UUID(str(row[0]))
+
+
+def save_track_briefs(
+    conn: psycopg.Connection,
+    run_id: UUID,
+    rules_version: str,
+    briefs: list[tuple[TrackBrief, float]],
+) -> None:
+    """Görüntüsüz track değerlendirmeleri; `briefs`: (değerlendirme, kaydın son anı dk)."""
+    with conn.transaction(), conn.cursor() as cur:
+        cur.executemany(
+            """insert into public.track_assessments
+                 (risk_run_id, track_id, rules_version, end_time, level, code, priority_score,
+                  facts, assessment, is_fallback, rejected, model)
+               values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            [
+                (
+                    run_id, b.track_id, rules_version, _time(end), b.level, b.code,
+                    b.priority_score, b.facts, b.text, b.is_fallback, b.rejected, b.model,
+                )
+                for b, end in briefs
+            ],
+        )  # fmt: skip

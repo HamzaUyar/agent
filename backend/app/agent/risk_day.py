@@ -4,10 +4,9 @@ Agent'ın aşama fonksiyonlarını (aday track'ler, tespit-track eşleşmesi) ku
 buradaki seviyeler canlı değerlendirmedeki temel seviyelerle aynıdır. Tip, yalnızca o
 görüntüdeki tespitten alınır (önceki karelerle tip çelişkisi burada aranmaz).
 
-Canlı değerlendirme yalnızca kareye eşleşme eşiği kadar yakın track'leri temas sayar. Gün
-tablosu, çekim anında kareye `FRAME_MARGIN_M` içinde olan track'leri de kapsar: görev tanımı
-(s3) kaydı olan aracın çekim anında kadraj dışında kalabileceğini söylüyor; gerçek veride
-20 track karenin 7-26 m dışında.
+Hiçbir görüntünün adayı olmayan track'ler (kaydı var ama çekim anında kadraj dışında kaldı,
+görev tanımı s3) görüntüsüz olarak, kaydının son anına kadar değerlendirilir; görüntü
+özetlerine katılmaz. Gerçek veride 20 track böyle.
 Sonuç `scripts.compute_risk` ile Supabase'e yazılır.
 """
 
@@ -16,37 +15,39 @@ from dataclasses import dataclass
 
 from app.agent import stages
 from app.core.rules import RiskRules
-from app.data_package import to_minutes
+from app.data_package import from_minutes, to_minutes
 from app.db.repositories import DataRepository
 from app.pipelines.detection import Detector, ImageFileMissingError
-from app.pipelines.geo import distance_m, distance_to_footprint_m
-from app.pipelines.motion import positions_at
+from app.pipelines.geo import distance_m
 from app.risk_engine import TrackRisk, run_track, unregistered_level
 from app.risk_engine.summary import ImageRisk, image_summary
 
 logger = logging.getLogger(__name__)
-
-FRAME_MARGIN_M = 30.0
 
 
 @dataclass(frozen=True)
 class DayRisk:
     tracks: dict[str, TrackRisk]
     """Track başına motor sonucu (track'in en son çekim anına kadar)."""
-    image_of: dict[str, str]
-    """Track -> sonucun ait olduğu görüntü."""
+    image_of: dict[str, str | None]
+    """Track -> sonucun ait olduğu görüntü; görüntüsüz track için None."""
     images: list[ImageRisk]
 
     @property
     def step_count(self) -> int:
         return sum(len(r.steps) for r in self.tracks.values())
 
+    @property
+    def unframed(self) -> list[str]:
+        """Hiçbir görüntünün adayı olmayan track'ler."""
+        return sorted(t for t, img in self.image_of.items() if img is None)
+
 
 def compute_day(repo: DataRepository, detector: Detector, rules: RiskRules) -> DayRisk:
     cfg = rules.engine
     base = repo.base().location
     tracks: dict[str, TrackRisk] = {}
-    image_of: dict[str, str] = {}
+    image_of: dict[str, str | None] = {}
     summaries: list[ImageRisk] = []
     for image in sorted(repo.list_images(), key=lambda m: m.capture_time):
         branch = stages.track_branch(repo, image, rules)
@@ -67,16 +68,8 @@ def compute_day(repo: DataRepository, detector: Detector, rules: RiskRules) -> D
             ),
             default=0,
         )
-        now = image.capture_time
-        histories = dict(branch.histories)
-        for p in positions_at(repo.track_points_between(now, now), now):
-            if p.track_id in histories:
-                continue
-            if distance_to_footprint_m(image, p.location) <= FRAME_MARGIN_M:
-                history = repo.track_history(p.track_id, until=now)
-                histories[p.track_id] = stages.engine_points(history, base, now, cfg)
         risks: list[TrackRisk] = []
-        for track_id, points in histories.items():
+        for track_id, points in branch.histories.items():
             if not points:
                 continue
             det = detection_of.get(track_id)
@@ -96,4 +89,27 @@ def compute_day(repo: DataRepository, detector: Detector, rules: RiskRules) -> D
         summaries.append(
             image_summary(image.image_id, to_minutes(image.capture_time), risks, unregistered)
         )
+    for track_id, risk in unframed_tracks(repo, set(tracks), rules).items():
+        tracks[track_id] = risk
+        image_of[track_id] = None
     return DayRisk(tracks, image_of, summaries)
+
+
+def unframed_tracks(
+    repo: DataRepository, framed: set[str], rules: RiskRules
+) -> dict[str, TrackRisk]:
+    """Görüntüsüz track'ler: kaydının son anına kadar, tipi bilinmeden değerlendirilir."""
+    base = repo.base().location
+    last: dict[str, int] = {}
+    for p in repo.track_points_between(from_minutes(0), from_minutes(24 * 60 - 1)):
+        if p.track_id not in framed:
+            last[p.track_id] = max(last.get(p.track_id, 0), to_minutes(p.time))
+    out: dict[str, TrackRisk] = {}
+    for track_id, end in sorted(last.items()):
+        now = from_minutes(end)
+        points = stages.engine_points(
+            repo.track_history(track_id, until=now), base, now, rules.engine
+        )
+        if points:
+            out[track_id] = run_track(track_id, points, None, None, rules.engine)
+    return out

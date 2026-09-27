@@ -39,5 +39,6 @@ Sebep: görev tanımında riskin yalnızca çekim anında ölçüleceğine dair 
 - Park eden araç üssün 1 km içinde olsa da kritik değil yüksektir. Gerekçede "üs yakınında X dk bekledi" yazar.
 - İniş beklemesi, hızla uzaklaşan aracı 15 dk kritik tutabilir (ör. T0002, 6,7 km). Hızlı çıkış kuralı seviye salınımını 12'den 30'a çıkardığı için eklenmedi. Bunun yerine öncelik skoru tutulan seviyeyi bandın altına iter.
 - `risk_rules.toml [levels]` yalnızca karar LLM'inin dikkat nedenlerini doğrulamak için kalır. LLM'in ±1 ayarı (ADR-0002) değişmedi.
+- Hiçbir görüntünün adayı olmayan track'ler (kaydı var, çekim anında kadraj dışında) görüntüsüz olarak değerlendirilir: seviyeyi motor verir, görüntü özetlerine katılmaz; LLM operatör için kısa bir metin yazar (`track_assessments`, migration 13).
 - Günün tamamı `scripts.compute_risk` ile Supabase'e yazılır (migration 12: `risk_timeline`, `risk_events`, `risk_notices`, `image_risk`, en son koşu `*_latest` görünümleri).
 - Referans uygulamayla birebir eşleşme `tests/test_risk_engine.py` içindeki 5.650 adımlık altın dosyayla korunur.

@@ -57,3 +57,5 @@ reasoning = ["glm_org", "glm53", "deepseek", "opus"]
 # Rapor doğrulama (app/reports_v2): rapor başına tek çağrı, kanıt dosyasıyla karar.
 report_verify = ["glm_org", "glm53", "deepseek", "opus"]
 chat = ["glm_org", "glm53", "deepseek", "sonnet"]
+# Görüntüsüz track değerlendirmesi (app/agent/track_brief): track başına kısa metin; seviyeyi motor verir.
+track_brief = ["glm_org", "glm53", "deepseek", "opus"]
