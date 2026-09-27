@@ -53,6 +53,32 @@
         }
       }
     },
+    "/tracks": {
+      "get": {
+        "tags": [
+          "data"
+        ],
+        "summary": "List Tracks",
+        "description": "Bütün track'ler, kayıtları olduğu gibi. Her track'in bittiği görüntü, o görüntünün son\ntamamlanmış değerlendirmesindeki temasın seviyesi ve sınıfıyla. Hesap yapılmaz, LLM ya da\ntespit çağrılmaz; değerlendirmesi olmayan track'in seviyesi `None` kalır.",
+        "operationId": "list_tracks_tracks_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TrackOverview"
+                  },
+                  "type": "array",
+                  "title": "Response List Tracks Tracks Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/images/{image_id}": {
       "get": {
         "tags": [
@@ -105,7 +131,7 @@
           "data"
         ],
         "summary": "Get Image File",
-        "description": "Görüntü dosyası. Ad veri setindeki kimlikten kurulur, istekten gelen yol kullanılmaz.",
+        "description": "Görüntü dosyası: Supabase modunda `images.file_path` ile bucket'tan, ağsız demoda\nyerel klasörden. Yol veri setindeki kayıttan kurulur, istekten gelen yol kullanılmaz.",
         "operationId": "get_image_file_images__image_id__file_get",
         "parameters": [
           {
@@ -128,6 +154,9 @@
           },
           "404": {
             "description": "Görüntü veri setinde yok ya da dosyası bulunamadı"
+          },
+          "502": {
+            "description": "Storage'a ulaşılamadı"
           },
           "422": {
             "description": "Validation Error",
@@ -284,6 +313,117 @@
   },
   "components": {
     "schemas": {
+      "AttentionFinding": {
+        "properties": {
+          "contact": {
+            "type": "string",
+            "title": "Contact"
+          },
+          "track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Track Id"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "yaklasma",
+              "dolasma",
+              "uzun_duraklama",
+              "tehdit_uyarisi",
+              "rapor_celiskisi",
+              "kacirilmis_temas",
+              "kayit_disi",
+              "dikkat_gerekmiyor"
+            ],
+            "title": "Reason"
+          },
+          "basis": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Basis"
+          },
+          "level_proposal": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Proposal"
+          },
+          "accepted": {
+            "type": "boolean",
+            "title": "Accepted"
+          },
+          "level_accepted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level Accepted"
+          },
+          "rejection": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "contact",
+          "track_id",
+          "reason",
+          "basis",
+          "accepted"
+        ],
+        "title": "AttentionFinding",
+        "description": "Karar LLM'inin bir dikkat maddesi ve kodun onu veriyle doğrulamasının sonucu."
+      },
       "BaseInfo": {
         "properties": {
           "name": {
@@ -385,6 +525,35 @@
             },
             "type": "array",
             "title": "Sources"
+          },
+          "attention": {
+            "items": {
+              "$ref": "#/components/schemas/AttentionFinding"
+            },
+            "type": "array",
+            "title": "Attention"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "summary_rejected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Rejected"
           }
         },
         "type": "object",
@@ -604,6 +773,23 @@
             },
             "type": "array",
             "title": "Level Reasons"
+          },
+          "level_basis": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "yaklasma",
+                "dolasma",
+                "uzun_duraklama",
+                "tehdit_uyarisi",
+                "rapor_celiskisi",
+                "kacirilmis_temas",
+                "kayit_disi",
+                "dikkat_gerekmiyor"
+              ]
+            },
+            "type": "array",
+            "title": "Level Basis"
           },
           "adjustment_reason": {
             "anyOf": [
@@ -959,6 +1145,17 @@
             ],
             "title": "Distance To Base 30Min Ago M"
           },
+          "distance_to_base_60min_ago_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance To Base 60Min Ago M"
+          },
           "trend": {
             "type": "string",
             "enum": [
@@ -1013,17 +1210,50 @@
             },
             "type": "array",
             "title": "Zones Passed"
+          },
+          "current_stop_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Stop Minutes"
+          },
+          "stop_open_ended": {
+            "type": "boolean",
+            "title": "Stop Open Ended"
+          },
+          "base_distance_min_m": {
+            "type": "number",
+            "title": "Base Distance Min M"
+          },
+          "base_distance_max_m": {
+            "type": "number",
+            "title": "Base Distance Max M"
+          },
+          "extent_m": {
+            "type": "number",
+            "title": "Extent M"
           }
         },
         "type": "object",
         "required": [
           "distance_to_base_m",
           "distance_to_base_30min_ago_m",
+          "distance_to_base_60min_ago_m",
           "trend",
           "total_distance_m",
           "avg_speed_mps",
           "recent_speed_mps",
-          "heading_deg"
+          "heading_deg",
+          "current_stop_minutes",
+          "stop_open_ended",
+          "base_distance_min_m",
+          "base_distance_max_m",
+          "extent_m"
         ],
         "title": "MotionFinding"
       },
@@ -1092,6 +1322,45 @@
           "reasoning": {
             "type": "string",
             "title": "Reasoning"
+          },
+          "detail_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Verdict"
+          },
+          "dangerous_reassurance": {
+            "type": "boolean",
+            "title": "Dangerous Reassurance",
+            "default": false
+          },
+          "context_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Context Flags"
+          },
+          "needs_review": {
+            "type": "boolean",
+            "title": "Needs Review",
+            "default": false
+          },
+          "rule_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Verdict"
           }
         },
         "type": "object",
@@ -1108,7 +1377,7 @@
           "reasoning"
         ],
         "title": "ReportFinding",
-        "description": "Rapor kararı: bir iddianın bu değerlendirmedeki sonucu ve riske etkisi."
+        "description": "Rapor kararı: bir iddianın bu değerlendirmedeki sonucu (app/reports_v2).\n\nRapor risk seviyesini değiştirmez; `effect` her zaman \"none\"dır (ön yüzle uyum için duruyor)."
       },
       "RoutePoint": {
         "properties": {
@@ -1223,6 +1492,93 @@
           "distance_m"
         ],
         "title": "TrackCandidate"
+      },
+      "TrackOverview": {
+        "properties": {
+          "track_id": {
+            "type": "string",
+            "title": "Track Id"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/RoutePoint"
+            },
+            "type": "array",
+            "title": "Points"
+          },
+          "image_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Id"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "matched",
+                  "unregistered",
+                  "missed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "track_id",
+          "start",
+          "end",
+          "points"
+        ],
+        "title": "TrackOverview",
+        "description": "Bir track'in bütün kaydı ve bittiği görüntünün son değerlendirmesindeki yeri.\n\nHer track bir görüntünün çekim anında o görüntünün karesinde biter (kaydı o görüntünün\nson iki saatidir). Seviye ve sınıf o görüntünün son tamamlanmış değerlendirmesindeki\ntemastan okunur; yeniden hesaplanmaz. Değerlendirme yoksa `None`."
       },
       "ValidationError": {
         "properties": {

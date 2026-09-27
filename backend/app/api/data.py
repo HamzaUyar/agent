@@ -1,5 +1,7 @@
 """Arayüz için veri listeleri."""
 
+from collections import defaultdict
+from datetime import time
 from pathlib import Path
 from typing import Annotated
 
@@ -11,17 +13,19 @@ from app.api.stores import Stores
 from app.core.config import get_settings
 from app.data_package import IMAGES_DIR, find_image_file, format_hhmm
 from app.db.repositories import DataRepository
-from app.pipelines.geo import nearest_zone
+from app.pipelines.geo import distance_to_footprint_m, nearest_zone
 from app.schemas.api import (
     BaseInfo,
     CornerCoordinates,
     ImageDetail,
     ImageSummary,
     Pair,
+    RoutePoint,
+    TrackOverview,
     ZoneInfo,
     ZonesResponse,
 )
-from app.schemas.domain import GeoPoint, ImageMeta, RiskLevel
+from app.schemas.domain import GeoPoint, ImageMeta, RiskLevel, TrackPoint
 from app.storage import StorageError, SupabaseStorage
 
 router = APIRouter(tags=["data"])
@@ -53,6 +57,13 @@ ImageStorageDep = Annotated[SupabaseStorage | None, Depends(get_image_storage)]
 def get_stores(request: Request) -> Stores:
     stores: Stores = request.app.state.stores
     return stores
+
+
+StoresDep = Annotated[Stores, Depends(get_stores)]
+
+TRACK_IMAGE_REACH_M = 50.0
+"""Track'in bittiği görüntü: son konumu karesine en fazla bu kadar uzak. Değerlendirme
+yalnızca 6 m'ye kadarkileri temas sayar; daha uzakta bitenin görüntüsü bilinir, seviyesi yok."""
 
 
 def _latest_levels(stores: Stores) -> dict[str, RiskLevel]:
@@ -95,6 +106,52 @@ def list_images(repo: RepoDep, request: Request) -> list[ImageSummary]:
         )
         for m in repo.list_images()
     ]
+
+
+@router.get("/tracks", response_model=list[TrackOverview])
+def list_tracks(repo: RepoDep, stores: StoresDep) -> list[TrackOverview]:
+    """Bütün track'ler, kayıtları olduğu gibi. Her track'in bittiği görüntü, o görüntünün son
+    tamamlanmış değerlendirmesindeki temasın seviyesi ve sınıfıyla. Hesap yapılmaz, LLM ya da
+    tespit çağrılmaz; değerlendirmesi olmayan track'in seviyesi `None` kalır."""
+    by_track: dict[str, list[TrackPoint]] = defaultdict(list)
+    for point in repo.track_points_between(time(0, 0), time(23, 59)):
+        by_track[point.track_id].append(point)
+    with stores.open() as (runs, _):
+        contacts_of = runs.latest_contacts()
+    images_at: dict[time, list[ImageMeta]] = defaultdict(list)
+    for meta in repo.list_images():
+        images_at[meta.capture_time].append(meta)
+
+    overviews: list[TrackOverview] = []
+    for track_id in sorted(by_track):
+        points = by_track[track_id]
+        last = points[-1]
+        near = [
+            (distance_to_footprint_m(meta, last.location), meta)
+            for meta in images_at.get(last.time, [])
+        ]
+        # Track'in bittiği görüntü: son kaydın saatinde çekilmiş, son konumu karesinde olan.
+        distance, ending = min(near, key=lambda d: d[0]) if near else (0.0, None)
+        if distance > TRACK_IMAGE_REACH_M:
+            ending = None
+        contacts = contacts_of.get(ending.image_id, []) if ending is not None else []
+        contact = next((c for c in contacts if c.track_id == track_id), None)
+        overviews.append(
+            TrackOverview(
+                track_id=track_id,
+                start=format_hhmm(points[0].time),
+                end=format_hhmm(last.time),
+                points=[
+                    RoutePoint(lat=p.location.lat, lon=p.location.lon, time=format_hhmm(p.time))
+                    for p in points
+                ],
+                image_id=ending.image_id if ending is not None else None,
+                level=contact.final_level if contact else None,
+                label=(contact.effective_label or contact.label) if contact else None,
+                kind=contact.kind if contact else None,
+            )
+        )
+    return overviews
 
 
 @router.get(

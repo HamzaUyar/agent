@@ -44,6 +44,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tracks
+         * @description Bütün track'ler, kayıtları olduğu gibi. Her track'in bittiği görüntü, o görüntünün son
+         *     tamamlanmış değerlendirmesindeki temasın seviyesi ve sınıfıyla. Hesap yapılmaz, LLM ya da
+         *     tespit çağrılmaz; değerlendirmesi olmayan track'in seviyesi `None` kalır.
+         */
+        get: operations["list_tracks_tracks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/images/{image_id}": {
         parameters: {
             query?: never;
@@ -73,7 +95,8 @@ export interface paths {
         };
         /**
          * Get Image File
-         * @description Görüntü dosyası. Ad veri setindeki kimlikten kurulur, istekten gelen yol kullanılmaz.
+         * @description Görüntü dosyası: Supabase modunda `images.file_path` ile bucket'tan, ağsız demoda
+         *     yerel klasörden. Yol veri setindeki kayıttan kurulur, istekten gelen yol kullanılmaz.
          */
         get: operations["get_image_file_images__image_id__file_get"];
         put?: never;
@@ -151,6 +174,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AttentionFinding
+         * @description Karar LLM'inin bir dikkat maddesi ve kodun onu veriyle doğrulamasının sonucu.
+         */
+        AttentionFinding: {
+            /** Contact */
+            contact: string;
+            /** Track Id */
+            track_id: string | null;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "yaklasma" | "dolasma" | "uzun_duraklama" | "tehdit_uyarisi" | "rapor_celiskisi" | "kacirilmis_temas" | "kayit_disi" | "dikkat_gerekmiyor";
+            /** Basis */
+            basis: (number | string)[];
+            /** Level Proposal */
+            level_proposal?: ("low" | "medium" | "high" | "critical") | null;
+            /** Accepted */
+            accepted: boolean;
+            /** Level Accepted */
+            level_accepted?: boolean | null;
+            /** Rejection */
+            rejection?: string | null;
+            /** Text */
+            text?: string | null;
+        };
         /** BaseInfo */
         BaseInfo: {
             /** Name */
@@ -189,6 +239,12 @@ export interface components {
             text: string;
             /** Sources */
             sources: string[];
+            /** Attention */
+            attention?: components["schemas"]["AttentionFinding"][];
+            /** Summary */
+            summary?: string | null;
+            /** Summary Rejected */
+            summary_rejected?: string | null;
         };
         /** ChatRequest */
         ChatRequest: {
@@ -267,6 +323,8 @@ export interface components {
             final_level: "low" | "medium" | "high" | "critical";
             /** Level Reasons */
             level_reasons?: string[];
+            /** Level Basis */
+            level_basis?: ("yaklasma" | "dolasma" | "uzun_duraklama" | "tehdit_uyarisi" | "rapor_celiskisi" | "kacirilmis_temas" | "kayit_disi" | "dikkat_gerekmiyor")[];
             /** Adjustment Reason */
             adjustment_reason?: string | null;
             /** Adjustment Rejected */
@@ -388,6 +446,8 @@ export interface components {
             distance_to_base_m: number;
             /** Distance To Base 30Min Ago M */
             distance_to_base_30min_ago_m: number | null;
+            /** Distance To Base 60Min Ago M */
+            distance_to_base_60min_ago_m: number | null;
             /**
              * Trend
              * @enum {string}
@@ -407,10 +467,22 @@ export interface components {
             stops?: components["schemas"]["StopFinding"][];
             /** Zones Passed */
             zones_passed?: string[];
+            /** Current Stop Minutes */
+            current_stop_minutes: number | null;
+            /** Stop Open Ended */
+            stop_open_ended: boolean;
+            /** Base Distance Min M */
+            base_distance_min_m: number;
+            /** Base Distance Max M */
+            base_distance_max_m: number;
+            /** Extent M */
+            extent_m: number;
         };
         /**
          * ReportFinding
-         * @description Rapor kararı: bir iddianın bu değerlendirmedeki sonucu ve riske etkisi.
+         * @description Rapor kararı: bir iddianın bu değerlendirmedeki sonucu (app/reports_v2).
+         *
+         *     Rapor risk seviyesini değiştirmez; `effect` her zaman "none"dır (ön yüzle uyum için duruyor).
          */
         ReportFinding: {
             /** Claim Id */
@@ -442,6 +514,22 @@ export interface components {
             effect: "raises" | "lowers" | "none";
             /** Reasoning */
             reasoning: string;
+            /** Detail Verdict */
+            detail_verdict?: string | null;
+            /**
+             * Dangerous Reassurance
+             * @default false
+             */
+            dangerous_reassurance: boolean;
+            /** Context Flags */
+            context_flags?: string[];
+            /**
+             * Needs Review
+             * @default false
+             */
+            needs_review: boolean;
+            /** Rule Verdict */
+            rule_verdict?: string | null;
         };
         /** RoutePoint */
         RoutePoint: {
@@ -491,6 +579,32 @@ export interface components {
             track_id: string;
             /** Distance M */
             distance_m: number;
+        };
+        /**
+         * TrackOverview
+         * @description Bir track'in bütün kaydı ve bittiği görüntünün son değerlendirmesindeki yeri.
+         *
+         *     Her track bir görüntünün çekim anında o görüntünün karesinde biter (kaydı o görüntünün
+         *     son iki saatidir). Seviye ve sınıf o görüntünün son tamamlanmış değerlendirmesindeki
+         *     temastan okunur; yeniden hesaplanmaz. Değerlendirme yoksa `None`.
+         */
+        TrackOverview: {
+            /** Track Id */
+            track_id: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /** Points */
+            points: components["schemas"]["RoutePoint"][];
+            /** Image Id */
+            image_id?: string | null;
+            /** Level */
+            level?: ("low" | "medium" | "high" | "critical") | null;
+            /** Label */
+            label?: string | null;
+            /** Kind */
+            kind?: ("matched" | "unregistered" | "missed") | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -587,6 +701,26 @@ export interface operations {
             };
         };
     };
+    list_tracks_tracks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackOverview"][];
+                };
+            };
+        };
+    };
     get_image_images__image_id__get: {
         parameters: {
             query?: never;
@@ -661,6 +795,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Storage'a ulaşılamadı */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

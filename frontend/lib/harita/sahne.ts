@@ -23,6 +23,8 @@ import {
 import type { AreaLayer, MapMarker, MarkerGroup } from "./types"
 
 export const BASE_RINGS_M = [1000, 3000] as const
+/** Kapsanması istenen noktanın dilim kenarına olan en az payı. */
+const COVER_MARGIN_M = 150
 
 export type Scene = {
   areas: Record<Extract<AreaLayer, "bolge-alanlari" | "us-halkalari">, FeatureCollection>
@@ -47,14 +49,27 @@ function zoneSectors(base: LngLat, centers: LngLat[]) {
   return sectors
 }
 
-/** `selectedZone`: seçili karenin Bölge'si; dilimi seçim rengiyle vurgulanır. */
-export function buildScene({ base, zones }: ZonesResponse, selectedZone: string | null = null): Scene {
+/**
+ * `selectedZone`: seçili karenin Bölge'si; dilimi vurgulanır.
+ * `cover`: dilimlerin mutlaka kapsaması gereken noktalar (seçili karenin köşeleri).
+ */
+export function buildScene(
+  { base, zones }: ZonesResponse,
+  selectedZone: string | null = null,
+  cover: LngLat[] = [],
+): Scene {
   const baseLngLat = toLngLat(base)
   const centers = zones.map((z) => toLngLat(z.center))
   const radii = approxZoneRadiiM(centers)
   const sectors = zoneSectors(baseLngLat, centers)
-  // Bütün dilimler aynı dış yarıçapta: en uzak Bölge merkezi ve onun yaklaşık yarıçapı kadar ötesi.
-  const outerM = Math.max(BASE_RINGS_M[1], ...centers.map((c, i) => haversineM(baseLngLat, c) + radii[i]))
+  // Bütün dilimler aynı dış yarıçapta. Backend kareyi en yakın Bölge merkezine atar, yani Bölge dışa
+  // doğru sınırsızdır; kareler merkezden komşu merkez aralığı kadar (yaklaşık yarıçapın iki katı) uzağa
+  // düşebilir. Dilim bu kadar uzanır; ayrıca verilen noktaları (seçili kare) her durumda kapsar.
+  const outerM = Math.max(
+    BASE_RINGS_M[1],
+    ...centers.map((c, i) => haversineM(baseLngLat, c) + 2 * radii[i]),
+    ...cover.map((p) => haversineM(baseLngLat, p) + COVER_MARGIN_M),
+  )
   const innerM = BASE_RINGS_M[0]
 
   const zoneAreas: FeatureCollection = {
@@ -96,6 +111,7 @@ export function buildScene({ base, zones }: ZonesResponse, selectedZone: string 
       us: [{ id: "us", lngLat: baseLngLat, label: base.name, description: `Üs: ${base.name}` }],
       bolgeler: zones.map((zone, i) => ({
         id: zone.name,
+        ...(zone.name === selectedZone ? { variant: ["secili"] } : {}),
         lngLat: centers[i],
         label: zone.name,
         description: `Bölge: ${zone.name} · yaklaşık alan (Üs'ten yön dilimi), kesin sınır değil`,

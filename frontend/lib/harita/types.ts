@@ -12,7 +12,7 @@ import type { Tema } from "@/lib/tema"
 export type Basemap = "uydu" | "sokak" | "duz"
 
 /** GeoJSON alan/çizgi katmanları; çizim sırası bu listenin sırasıdır. */
-export const AREA_LAYERS = ["bolge-alanlari", "ayak-izi", "us-halkalari", "rotalar"] as const
+export const AREA_LAYERS = ["bolge-alanlari", "ayak-izi", "us-halkalari", "izler", "rotalar"] as const
 export type AreaLayer = (typeof AREA_LAYERS)[number]
 
 /** Etiketli nokta işaretleri (erişilebilir düğmeler); gruplar üst üste bu sırayla çizilir. */
@@ -35,6 +35,8 @@ export type MapMarker = {
   description?: string
   /** Görünüm değişkenleri (ör. Temas türü ve seviyesi); `harita-isaret--<değişken>` sınıfı olur. */
   variant?: string[]
+  /** Renk tonu (araç sınıfı: car/van/truck/bus/diger); `harita-isaret--sinif-<ton>` sınıfı olur. */
+  tone?: string
   /** Varsa işaretin yanında bu yöne dönük ok (derece, kuzeyden saat yönünde). */
   headingDeg?: number
 }
@@ -43,6 +45,10 @@ export type MapEvents = {
   /** Zemin yüklenemedi (ör. internet yok); harita düz zemine geçti. */
   onBasemapError: () => void
   onMarkerClick?: (group: MarkerGroup, id: string) => void
+  /** Etkileşimli bir alan katmanındaki (şimdilik `izler`) özelliğe tıklandı; boşluğa tıklamada `null`. */
+  onAreaClick?: (layer: AreaLayer, id: string | null) => void
+  /** Haritada hiçbir işarete ya da etkileşimli katmana denk gelmeyen tıklama. */
+  onMapClick?: () => void
 }
 
 export interface MapAdapter {
@@ -51,7 +57,8 @@ export interface MapAdapter {
   setTheme(theme: Tema): void
   setArea(layer: AreaLayer, data: FeatureCollection): void
   setMarkers(group: MarkerGroup, markers: MapMarker[]): void
-  fitBounds(bounds: Bounds, paddingPx: number): void
+  /** `insetRight`: sağda haritanın üstünde duran bir kartın payı (px); dar haritada küçültülür. */
+  fitBounds(bounds: Bounds, paddingPx: number, insetRight?: number): void
   destroy(): void
 }
 

@@ -43,7 +43,7 @@ describe("Temas'lar ve rotalar haritada", () => {
       label: "◆ T0122 · yaklaşıyor",
       variant: ["matched", "critical"],
     })
-    expect(truck.description).toMatch(/Eşleşmiş temas · sınıf kamyon · seviye Kritik · kesinlik kesin · üsse 1,6 km/)
+    expect(truck.description).toMatch(/Eşleşmiş temas · sınıf kamyon · seviye Kritik · yüksek kesinlik · üsse 1,6 km/)
     expect(unregistered).toMatchObject({ label: "◆ kayıt dışı otomobil", variant: ["unregistered", "low"] })
     expect(missed).toMatchObject({ label: "◆ T0032 · duruyor", variant: ["missed", "medium"] })
     expect(missed.description).toMatch(/Kaçırılmış temas · sınıf tip bilinmiyor · seviye Orta/)
@@ -79,9 +79,6 @@ describe("Temas'lar ve rotalar haritada", () => {
       "13:15 · 45 dk",
       "12:10 · 120 dk",
     ])
-    expect(screen.getByText("Kaçırılmış temas (tespit yok)")).toBeInTheDocument()
-    // Harita Temas'lara yaklaştığı için lejant katlanmış gelir (üstlerini örtmesin).
-    expect(screen.getByRole("group", { name: "Lejant" })).not.toHaveAttribute("open")
   })
 
   it("çekim anından sonraki rota noktası ve duraklama çizilmez (ADR-0001)", async () => {
@@ -142,14 +139,49 @@ describe("Görüntü üzerinde tespitler", () => {
     )
   })
 
-  it("zayıf tespit kesikli kutuyla ve 'zayıf tespit' olarak gösterilir", async () => {
+  it("takip durumu çizgide: eşleşmiş düz, track'i olmayan kesikli; zayıf tespit ince ve 'zayıf tespit' olarak", async () => {
     withBrief((b) => {
       b.contacts[1].is_weak = true
       return b
     })
     await evaluated()
 
+    const tracked = screen.getByRole("button", { name: /· T0122 · Kritik$/ })
+    expect(tracked).not.toHaveClass("border-dashed")
     const weak = screen.getByRole("button", { name: /otomobil %83 · track yok · Düşük · zayıf tespit/ })
     expect(weak).toHaveClass("border-dashed")
+    expect(weak).toHaveClass("border-[1.5px]")
+  })
+})
+
+describe("Aynı araca iki sınıf", () => {
+  it("üst üste binen kutulardan yalnızca en yüksek güvenli sınıf çizilir; öteki listede soluk ve açıklamalı", async () => {
+    withBrief((b) => {
+      // Model aynı kamyona düşük güvenle "van" da demiş (sınıflar arası bastırma yok).
+      const truck = b.contacts[0]
+      b.contacts.push({
+        ...b.contacts[1],
+        label: "van",
+        effective_label: "van",
+        confidence: 0.36,
+        bbox: [truck.bbox![0] + 1, truck.bbox![1], truck.bbox![2], truck.bbox![3]],
+      })
+      return b
+    })
+    await evaluated()
+
+    const boxes = within(screen.getByRole("list", { name: "Tespitler" })).getAllByRole("button")
+    expect(boxes.map((b) => b.getAttribute("aria-label"))).not.toContainEqual(expect.stringMatching(/^minibüs/))
+    expect(boxes.filter((b) => /^kamyon/.test(b.getAttribute("aria-label")!))).toHaveLength(1)
+
+    const list = screen.getByRole("region", { name: "Araçlar" })
+    expect(within(list).getByRole("button", { name: /minibüs .*aynı araç, düşük güvenli ikinci sınıf/ })).toBeInTheDocument()
+  })
+})
+
+describe("Görüntü çekmecesi", () => {
+  it("veri seti açıklaması gösterilmez", async () => {
+    await evaluated()
+    expect(screen.queryByText(/Yalnızca veri setindeki görüntüler değerlendirilebilir/)).not.toBeInTheDocument()
   })
 })

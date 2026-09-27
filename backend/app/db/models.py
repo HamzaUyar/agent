@@ -9,7 +9,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
-from app.schemas.api import Brief, StepEvent
+from app.schemas.api import Brief, ContactLevel, StepEvent
 from app.schemas.chat import ChatMessage, Role
 from app.schemas.claims import ClaimRecord, ReportClaim
 from app.schemas.domain import (
@@ -226,6 +226,22 @@ class RunRecorder:
                order by image_id, finished_at desc"""
         ).fetchall()
         return {image_id: cast(RiskLevel, level) for image_id, level in rows}
+
+    def latest_contacts(self) -> dict[str, list[ContactLevel]]:
+        """Her görüntünün tamamlanmış son değerlendirmesindeki temasların seviye özeti.
+        Brief'in tamamı değil, yalnızca temas alanları okunur: eski kayıtlar da uyar."""
+        rows = self._conn.execute(
+            """select distinct on (image_id) image_id, brief_json -> 'contacts'
+               from public.analysis_runs where status = 'done' and brief_json is not null
+               order by image_id, finished_at desc"""
+        ).fetchall()
+        contacts: dict[str, list[ContactLevel]] = {}
+        for image_id, payload in rows:
+            try:
+                contacts[image_id] = [ContactLevel.model_validate(c) for c in payload or []]
+            except ValidationError:
+                logger.info("Temaslar okunamadı, şema eski: %s", image_id)
+        return contacts
 
 
 def reports_to_parse(conn: psycopg.Connection, *, force: bool) -> list[tuple[int, FieldReport]]:

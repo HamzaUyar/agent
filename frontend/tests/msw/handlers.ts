@@ -7,6 +7,7 @@ import { delay, http, HttpResponse } from "msw"
 import imageDetails from "../fixtures/image_details.json"
 import images from "../fixtures/images.json"
 import evaluationEvents from "../fixtures/img_000860.events.json"
+import tracks from "../fixtures/tracks.json"
 import zones from "../fixtures/zones.json"
 
 export const API = "http://localhost:3000/api"
@@ -33,11 +34,13 @@ export const fixtures = {
   images,
   imageDetails: imageDetails as Record<string, unknown>,
   evaluationEvents: evaluationEvents as SseEvent[],
+  tracks,
 }
 
 export const handlers = [
   http.get(`${API}/zones`, () => HttpResponse.json(fixtures.zones)),
   http.get(`${API}/images`, () => HttpResponse.json(fixtures.images)),
+  http.get(`${API}/tracks`, () => HttpResponse.json(fixtures.tracks)),
   http.get(`${API}/images/:imageId`, ({ params }) => {
     const detail = fixtures.imageDetails[params.imageId as string]
     return detail

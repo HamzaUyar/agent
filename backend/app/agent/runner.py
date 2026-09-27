@@ -13,7 +13,7 @@ from typing import Any, Literal, Protocol
 from uuid import uuid4
 
 from app.agent.service import BRIEF_STEP, EvaluationService
-from app.schemas.api import Brief, StepEvent
+from app.schemas.api import Brief, ContactLevel, StepEvent
 from app.schemas.domain import RiskLevel
 from app.schemas.runs import StoredRun
 
@@ -41,6 +41,10 @@ class RunStore(Protocol):
 
     def latest_levels(self) -> dict[str, RiskLevel]:
         """Her görüntünün tamamlanmış son değerlendirmesinin seviyesi."""
+        ...
+
+    def latest_contacts(self) -> dict[str, list[ContactLevel]]:
+        """Her görüntünün tamamlanmış son değerlendirmesindeki temasların seviye özeti."""
         ...
 
 
@@ -97,6 +101,18 @@ class InMemoryRunStore:
                 key=lambda r: self._order[r.run_id],
             )
         return {r.image_id: r.brief.risk_level for r in done if r.brief is not None}
+
+    def latest_contacts(self) -> dict[str, list[ContactLevel]]:
+        with self._lock:
+            done = sorted(
+                (r for r in self._runs.values() if r.status == "done" and r.brief is not None),
+                key=lambda r: self._order[r.run_id],
+            )
+        return {
+            r.image_id: [ContactLevel.model_validate(c.model_dump()) for c in r.brief.contacts]
+            for r in done
+            if r.brief is not None
+        }
 
 
 def _payload(event: StepEvent) -> RunEvent:

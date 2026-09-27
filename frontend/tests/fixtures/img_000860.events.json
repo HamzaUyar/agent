@@ -109,11 +109,11 @@
               34
             ],
             "track_id": "T0122",
-            "distance_m": 0.4429998455680941,
+            "distance_m": 0.4434975207525672,
             "ambiguous": false,
             "second": {
               "track_id": "T0032",
-              "distance_m": 41.19503018186364
+              "distance_m": 41.2413089021925
             }
           },
           {
@@ -128,7 +128,7 @@
             "ambiguous": false,
             "second": {
               "track_id": "T0122",
-              "distance_m": 78.18263595687563
+              "distance_m": 78.27053413540818
             }
           }
         ],
@@ -136,7 +136,7 @@
           "T0032"
         ],
         "estimated_positions": [],
-        "visually_rejected": []
+        "visually_unconfirmed": []
       }
     }
   },
@@ -145,12 +145,13 @@
     "data": {
       "step_no": 5,
       "name": "hareket",
-      "summary": "T0122: üsse yaklaşıyor, üsse 1.6 km; T0032: yerinde duruyor, üsse 1.6 km",
+      "summary": "T0122: üsse yaklaşıyor, üsse 1,6 km; T0032: yerinde duruyor, üsse 1,6 km",
       "data": {
         "motions": {
           "T0122": {
             "distance_to_base_m": 1646.4732000684564,
             "distance_to_base_30min_ago_m": 5511.26122591517,
+            "distance_to_base_60min_ago_m": 5585.9258089174045,
             "trend": "approaching",
             "route": [
               {
@@ -281,7 +282,7 @@
             ],
             "total_distance_m": 7859.228778256789,
             "avg_speed_mps": 1.0915595525356652,
-            "recent_speed_mps": 6.446893751211701,
+            "recent_speed_mps": 2.1489645837372335,
             "heading_deg": 252.11730893434128,
             "stops": [
               {
@@ -321,11 +322,17 @@
             "zones_passed": [
               "Kuzeydogu Kavsagi",
               "Dogu Yolu"
-            ]
+            ],
+            "current_stop_minutes": null,
+            "stop_open_ended": false,
+            "base_distance_min_m": 1646.4732000684564,
+            "base_distance_max_m": 6685.053338363357,
+            "extent_m": 5519.11209063146
           },
           "T0032": {
             "distance_to_base_m": 1606.709376318354,
             "distance_to_base_30min_ago_m": 1606.709376318354,
+            "distance_to_base_60min_ago_m": 1606.709376318354,
             "trend": "stationary",
             "route": [
               {
@@ -473,7 +480,12 @@
             ],
             "zones_passed": [
               "Dogu Yolu"
-            ]
+            ],
+            "current_stop_minutes": 120,
+            "stop_open_ended": true,
+            "base_distance_min_m": 1606.709376318354,
+            "base_distance_max_m": 1606.709376318354,
+            "extent_m": 0.0
           }
         },
         "contacts": [
@@ -485,7 +497,7 @@
             "trend": "approaching",
             "base_level": "critical",
             "reasons": [
-              "ağır araç (truck) üsse yaklaşıyor, 1.6 km"
+              "ağır araç (truck) üsse yaklaşıyor, 1,6 km"
             ],
             "certainty": "certain"
           },
@@ -497,7 +509,7 @@
             "trend": null,
             "base_level": "low",
             "reasons": [
-              "kayıt dışı temas: hareket kaydı yok, park halinde olabilir, 1.6 km"
+              "kayıt dışı temas: hareket kaydı yok, park halinde olabilir, 1,6 km"
             ],
             "certainty": "likely"
           },
@@ -510,7 +522,7 @@
             "base_level": "medium",
             "reasons": [
               "kaçırılmış temas: karede ama tespit edilmedi",
-              "üsse yakın 120 dk duraklama, 1.6 km"
+              "üsse yakın 120 dk duraklama, 1,6 km"
             ],
             "certainty": "likely"
           }
@@ -545,7 +557,7 @@
             "base_level": "critical",
             "final_level": "critical",
             "reasons": [
-              "ağır araç (truck) üsse yaklaşıyor, 1.6 km"
+              "ağır araç (truck) üsse yaklaşıyor, 1,6 km"
             ]
           },
           {
@@ -554,7 +566,7 @@
             "base_level": "low",
             "final_level": "low",
             "reasons": [
-              "kayıt dışı temas: hareket kaydı yok, park halinde olabilir, 1.6 km"
+              "kayıt dışı temas: hareket kaydı yok, park halinde olabilir, 1,6 km"
             ]
           },
           {
@@ -564,7 +576,7 @@
             "final_level": "medium",
             "reasons": [
               "kaçırılmış temas: karede ama tespit edilmedi",
-              "üsse yakın 120 dk duraklama, 1.6 km"
+              "üsse yakın 120 dk duraklama, 1,6 km"
             ]
           }
         ]
@@ -643,14 +655,15 @@
           ],
           "distance_to_base_m": 1646.811784858284,
           "track_id": "T0122",
-          "match_distance_m": 0.4429998455680941,
+          "match_distance_m": 0.4434975207525672,
           "second_candidate": {
             "track_id": "T0032",
-            "distance_m": 41.19503018186364
+            "distance_m": 41.2413089021925
           },
           "motion": {
             "distance_to_base_m": 1646.4732000684564,
             "distance_to_base_30min_ago_m": 5511.26122591517,
+            "distance_to_base_60min_ago_m": 5585.9258089174045,
             "trend": "approaching",
             "route": [
               {
@@ -781,7 +794,7 @@
             ],
             "total_distance_m": 7859.228778256789,
             "avg_speed_mps": 1.0915595525356652,
-            "recent_speed_mps": 6.446893751211701,
+            "recent_speed_mps": 2.1489645837372335,
             "heading_deg": 252.11730893434128,
             "stops": [
               {
@@ -821,13 +834,21 @@
             "zones_passed": [
               "Kuzeydogu Kavsagi",
               "Dogu Yolu"
-            ]
+            ],
+            "current_stop_minutes": null,
+            "stop_open_ended": false,
+            "base_distance_min_m": 1646.4732000684564,
+            "base_distance_max_m": 6685.053338363357,
+            "extent_m": 5519.11209063146
           },
           "visual": null,
           "base_level": "critical",
           "final_level": "critical",
           "level_reasons": [
-            "ağır araç (truck) üsse yaklaşıyor, 1.6 km"
+            "ağır araç (truck) üsse yaklaşıyor, 1,6 km"
+          ],
+          "level_basis": [
+            "yaklasma"
           ],
           "adjustment_reason": null,
           "adjustment_rejected": null,
@@ -859,14 +880,17 @@
           "match_distance_m": null,
           "second_candidate": {
             "track_id": "T0122",
-            "distance_m": 78.18263595687563
+            "distance_m": 78.27053413540818
           },
           "motion": null,
           "visual": null,
           "base_level": "low",
           "final_level": "low",
           "level_reasons": [
-            "kayıt dışı temas: hareket kaydı yok, park halinde olabilir, 1.6 km"
+            "kayıt dışı temas: hareket kaydı yok, park halinde olabilir, 1,6 km"
+          ],
+          "level_basis": [
+            "kayit_disi"
           ],
           "adjustment_reason": null,
           "adjustment_rejected": null,
@@ -895,6 +919,7 @@
           "motion": {
             "distance_to_base_m": 1606.709376318354,
             "distance_to_base_30min_ago_m": 1606.709376318354,
+            "distance_to_base_60min_ago_m": 1606.709376318354,
             "trend": "stationary",
             "route": [
               {
@@ -1042,14 +1067,22 @@
             ],
             "zones_passed": [
               "Dogu Yolu"
-            ]
+            ],
+            "current_stop_minutes": 120,
+            "stop_open_ended": true,
+            "base_distance_min_m": 1606.709376318354,
+            "base_distance_max_m": 1606.709376318354,
+            "extent_m": 0.0
           },
           "visual": null,
           "base_level": "medium",
           "final_level": "medium",
           "level_reasons": [
             "kaçırılmış temas: karede ama tespit edilmedi",
-            "üsse yakın 120 dk duraklama, 1.6 km"
+            "üsse yakın 120 dk duraklama, 1,6 km"
+          ],
+          "level_basis": [
+            "uzun_duraklama"
           ],
           "adjustment_reason": null,
           "adjustment_rejected": null,
@@ -1057,13 +1090,16 @@
         }
       ],
       "report_findings": [],
-      "text": "img_000860 · Dogu Yolu · 14:10 · Risk: KRİTİK (otomatik özet)\n- T0122 (truck): üsse 1.6 km, üsse yaklaşıyor, son dönem 6.4 m/s, yön 252°, duraklamalar: 12:10 (40 dk), 12:55 (10 dk), 13:15 (45 dk); seviye KRİTİK (ağır araç (truck) üsse yaklaşıyor, 1.6 km).\n- kayıt dışı temas (car): üsse 1.6 km, hareket geçmişi yok; seviye DÜŞÜK (kayıt dışı temas: hareket kaydı yok, park halinde olabilir, 1.6 km).\n- T0032 (tipi bilinmiyor): üsse 1.6 km, yerinde duruyor, son dönem 0.0 m/s, duraklamalar: 12:10 (120 dk); seviye ORTA (kaçırılmış temas: karede ama tespit edilmedi; üsse yakın 120 dk duraklama, 1.6 km).\nÖnerilen eylem: Üs alarm durumuna geç, T0122 temasını durdur.",
+      "text": "img_000860 · Dogu Yolu · 14:10 · Risk: KRİTİK (otomatik özet)\n- T0122 (truck): üsse 1,6 km, üsse yaklaşıyor, üsse uzaklık 1 saat önce 5,6 km, 30 dk önce 5,5 km, şimdi 1,6 km, son 30 dk 2,1 m/s, 2 saatlik ortalama 1,1 m/s, yön 252°, duraklamalar: 12:10 (40 dk), 12:55 (10 dk), 13:15 (45 dk); seviye KRİTİK (ağır araç (truck) üsse yaklaşıyor, 1,6 km).\n- kayıt dışı temas (car): üsse 1,6 km, hareket geçmişi yok; seviye DÜŞÜK (kayıt dışı temas: hareket kaydı yok, park halinde olabilir, 1,6 km).\n- T0032 (tipi bilinmiyor): üsse 1,6 km, yerinde duruyor, üsse uzaklık 1 saat önce 1,6 km, 30 dk önce 1,6 km, şimdi 1,6 km, son 30 dk 0,0 m/s, 2 saatlik ortalama 0,0 m/s, duraklamalar: 12:10 (120 dk); seviye ORTA (kaçırılmış temas: karede ama tespit edilmedi; üsse yakın 120 dk duraklama, 1,6 km).\nÖnerilen eylem: Üs alarm durumuna geç, T0122 temasını durdur.",
       "sources": [
-        "tespit: tespit modeli",
+        "tespit: fixture",
         "konum: köşe koordinatları",
         "hareket: T0122",
         "hareket: T0032"
-      ]
+      ],
+      "attention": [],
+      "summary": null,
+      "summary_rejected": null
     }
   }
 ]

@@ -4,25 +4,53 @@
  */
 import { create } from "zustand"
 
-import { ApiError, getImage, getImages, getZones, streamEvaluation } from "@/lib/api/client"
+import { ApiError, getImage, getImages, getTracks, getZones, streamEvaluation } from "@/lib/api/client"
 import type {
   Brief,
+  Certainty,
   ImageDetail,
   ImageSummary,
   StepEvent,
+  TrackOverview,
   ZonesResponse,
 } from "@/lib/api/types"
+import { IZ_SEVIYELERI, type IzHizi, type IzSeviyesi } from "@/lib/iz"
 import type { Basemap } from "@/lib/harita/types"
 import { uygulaTema, type Tema } from "@/lib/tema"
 
 export type Side = "left" | "right"
-/** Kapalı: yalnız sekme · göz atma: dar şerit · yarım: liste · tam: ayrıntı. */
-export type DrawerState = "closed" | "peek" | "half" | "full"
+/**
+ * Kapalı: yalnız ray ikonu · yarım: kullanıcının ayarladığı (saklanan) genişlikte açık ·
+ * tam: geniş görünüm. Genişlik ayrı tutulur (`drawerWidth`).
+ */
+export type DrawerState = "closed" | "half" | "full"
 export type LeftPanel = "goruntu"
 export type RightPanel = "risk"
 export type RiskTab = "temaslar" | "brief"
 
 export type Drawer<P extends string> = { panel: P | null; state: DrawerState }
+
+/** İz analizi oynatması: hiç başlamadı (bütün yollar statik) · oynuyor · duraklatıldı. */
+export type IzDurumu = "hazir" | "oynuyor" | "duraklatildi"
+
+const GENISLIK_ANAHTARI = "operasyon-cekmece-genislik"
+const ZAMAN_AKISI_ANAHTARI = "operasyon-zaman-akisi-acik"
+
+function oku<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw === null ? fallback : (JSON.parse(raw) as T)
+  } catch {
+    return fallback
+  }
+}
+function yaz(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // Depolama kapalı: ayar bu oturumda geçerli.
+  }
+}
 
 export type Load<T> =
   | { status: "idle" | "loading" }
@@ -62,6 +90,8 @@ type OperasyonState = {
   imageDetail: Load<ImageDetail>
   /** Kare seçer; aktif değerlendirme iptal edilir ve temizlenir. */
   selectImage: (imageId: string) => void
+  /** Seçili kareyi bırakır (Görüntü çekmecesi kapanınca); süren analiz varsa bırakmaz. */
+  clearImage: () => void
   /** Çekim anına göre önceki/sonraki kare. */
   stepImage: (delta: 1 | -1) => void
 
@@ -75,6 +105,51 @@ type OperasyonState = {
 
   left: Drawer<LeftPanel>
   right: Drawer<RightPanel>
+  /** Taraf başına kullanıcının ayarladığı genişlik (px); `null`: varsayılan. Tarayıcıda saklanır. */
+  drawerWidth: Record<Side, number | null>
+  setDrawerWidth: (side: Side, px: number) => void
+
+  /**
+   * Tarayıcıda saklanan tercihleri (çekmece genişliği, alt panel) uygular. Sayfa ilk çizimi sunucu
+   * çıktısıyla aynı varsayılanlarla yapar (hidrasyon uyuşsun); tercihler bağlandıktan sonra gelir.
+   */
+  loadPreferences: () => void
+
+  /** "Günün görüntüleri" alt paneli açık mı (varsayılan kapalı; saklanır). */
+  timelineOpen: boolean
+  setTimelineOpen: (open: boolean) => void
+
+  /** Araçlar listesinin kesinlik süzgeci; `null`: hepsi. */
+  certaintyFilter: Certainty | null
+  setCertaintyFilter: (certainty: Certainty | null) => void
+
+  /** İz analizi: günün bütün track'leri, seviye süzgeci ve zaman oynatması. */
+  izOpen: boolean
+  toggleIz: (open?: boolean) => void
+  tracks: Load<TrackOverview[]>
+  loadTracks: () => Promise<void>
+  izLevels: IzSeviyesi[]
+  setIzLevels: (levels: IzSeviyesi[]) => void
+  izStatus: IzDurumu
+  /** Simülasyon zamanı (dakika). Oynarken her karede değil, dakika değiştikçe yazılır. */
+  izTime: number | null
+  setIzTime: (minutes: number) => void
+  izSpeed: IzHizi
+  setIzSpeed: (speed: IzHizi) => void
+  play: () => void
+  pause: () => void
+  resetIz: () => void
+  izHighlight: string | null
+  setIzHighlight: (trackId: string | null) => void
+  /**
+   * Bir track'in bittiği kareye geçer: kareyi seçer ve Görüntü çekmecesini açar; analizi başlatmaz
+   * (operatör "Risk analizini başlat"a basar). Analiz bitince o track'in aracı seçili gelir.
+   */
+  gotoTrackImage: (imageId: string, trackId: string) => void
+  /** Analiz bitince seçilecek araç (track kimliği); başka kare seçilince unutulur. */
+  pendingContactKey: string | null
+  /** Haritada boş bir yere tıklandı: araç seçimi ve iz vurgusu kalkar. */
+  clearMapSelection: () => void
   riskTab: RiskTab
   /** En son açılan kenar; Esc önce onu kapatır. */
   lastSide: Side | null
@@ -149,6 +224,8 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
         imageDetail: { status: "loading" },
         evaluation: null,
         selectedContactKey: null,
+        pendingContactKey: null,
+        certaintyFilter: null,
       })
       getImage(imageId).then(
         (data) => get().selectedImageId === imageId && set({ imageDetail: { status: "ready", data } }),
@@ -156,6 +233,17 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
           get().selectedImageId === imageId &&
           set({ imageDetail: { status: "error", message: errorMessage(e) } }),
       )
+    },
+    clearImage: () => {
+      if (get().evaluation?.status === "streaming") return
+      stopStream()
+      set({
+        selectedImageId: null,
+        imageDetail: { status: "idle" },
+        evaluation: null,
+        selectedContactKey: null,
+        pendingContactKey: null,
+      })
     },
     stepImage: (delta) => {
       const { images, selectedImageId, selectImage } = get()
@@ -229,8 +317,14 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
                       }
                     : {},
                 )
-              // Brief gelince sağ çekmece kendiliğinden göz atma hâlinde belirir (açıksa dokunulmaz).
-              if (!signal.aborted && get().right.panel === null) set({ right: { panel: "risk", state: "peek" } })
+              // "Görüntüye git" ile gelinen track'in aracı seçili gelir.
+              const pending = get().pendingContactKey
+              if (!signal.aborted && pending) {
+                set({ pendingContactKey: null })
+                if (event.data.contacts.some((c) => c.track_id === pending)) get().selectContact(pending)
+              }
+              // İz analizi açıksa track seviyeleri bu değerlendirmeyle yenilenir.
+              if (!signal.aborted && get().izOpen) void get().loadTracks()
               break
             }
             case "error":
@@ -292,8 +386,77 @@ export const useOperasyon = create<OperasyonState>()((set, get) => {
             ? { [side]: { ...s[side], state } }
             : {},
       ),
-    close: (side) => set((s) => ({ [side]: closed, lastSide: s.lastSide === side ? null : s.lastSide })),
+    close: (side) => {
+      set((s) => ({ [side]: closed, lastSide: s.lastSide === side ? null : s.lastSide }))
+      // Görüntü çekmecesi kapanınca seçili kare (ve haritadaki ayak izi) bırakılır.
+      if (side === "left") get().clearImage()
+    },
     setRiskTab: (riskTab) => set({ riskTab }),
+    drawerWidth: { left: null, right: null },
+    loadPreferences: () =>
+      set((s) => ({
+        drawerWidth: oku(GENISLIK_ANAHTARI, s.drawerWidth),
+        timelineOpen: oku(ZAMAN_AKISI_ANAHTARI, s.timelineOpen),
+      })),
+    setDrawerWidth: (side, px) =>
+      set((s) => {
+        const drawerWidth = { ...s.drawerWidth, [side]: Math.round(px) }
+        yaz(GENISLIK_ANAHTARI, drawerWidth)
+        return { drawerWidth, [side]: { ...s[side], state: "half" } }
+      }),
+
+    timelineOpen: false,
+    setTimelineOpen: (timelineOpen) => {
+      yaz(ZAMAN_AKISI_ANAHTARI, timelineOpen)
+      set({ timelineOpen })
+    },
+
+    certaintyFilter: null,
+    setCertaintyFilter: (certaintyFilter) => set({ certaintyFilter }),
+
+    // Açılışta İz analizi açık: günün bütün track'leri, hazır hâlinde.
+    izOpen: true,
+    toggleIz: (open) => {
+      const next = open ?? !get().izOpen
+      set({ izOpen: next, ...(next ? {} : { izStatus: "hazir", izTime: null, izHighlight: null }) })
+      if (next && get().tracks.status !== "ready") void get().loadTracks()
+    },
+    tracks: { status: "idle" },
+    loadTracks: async () => {
+      if (get().tracks.status !== "ready") set({ tracks: { status: "loading" } })
+      try {
+        set({ tracks: { status: "ready", data: await getTracks() } })
+      } catch (e) {
+        // Yüklü veri varken arka plan yenilemesi başarısızsa eldeki track'ler kalır.
+        if (get().tracks.status !== "ready") set({ tracks: { status: "error", message: errorMessage(e) } })
+      }
+    },
+    izLevels: [...IZ_SEVIYELERI],
+    setIzLevels: (izLevels) => set({ izLevels }),
+    izStatus: "hazir",
+    izTime: null,
+    setIzTime: (izTime) =>
+      set((s) => ({ izTime, izStatus: s.izStatus === "hazir" ? "duraklatildi" : s.izStatus })),
+    izSpeed: 1,
+    setIzSpeed: (izSpeed) => set({ izSpeed }),
+    play: () => set({ izStatus: "oynuyor" }),
+    pause: () => set({ izStatus: "duraklatildi" }),
+    resetIz: () => set({ izStatus: "hazir", izTime: null }),
+    izHighlight: null,
+    setIzHighlight: (izHighlight) => set({ izHighlight }),
+    pendingContactKey: null,
+    gotoTrackImage: (imageId, trackId) => {
+      get().selectImage(imageId)
+      get().openLeft("goruntu")
+      // Vurgu kalkar; harita seçili kareye geçer.
+      set({ izHighlight: null })
+      // Kare zaten değerlendirilmişse araç hemen seçilir; değilse analiz bitince.
+      const brief = get().evaluation?.status === "done" ? get().evaluation?.brief : null
+      if (brief?.image_id === imageId) {
+        if (brief.contacts.some((c) => c.track_id === trackId)) get().selectContact(trackId)
+      } else set({ pendingContactKey: trackId })
+    },
+    clearMapSelection: () => set({ selectedContactKey: null, izHighlight: null }),
   }
 })
 

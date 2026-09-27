@@ -47,21 +47,27 @@ describe("40 Görüntü'den seçim", () => {
 
   it("Bölge'ye ve son seviyeye göre filtrelenir, çekim anına göre sıralanır", async () => {
     const { drawer, user } = await openGoruntu()
-    const zone = within(drawer).getByLabelText("Bölge")
-    const level = within(drawer).getByLabelText("Son seviye")
+    const zone = within(drawer).getByRole("combobox", { name: "Bölge" })
+    const level = within(drawer).getByRole("combobox", { name: "Son seviye" })
+    const choose = async (box: HTMLElement, option: string) => {
+      await user.click(box)
+      await user.click(await screen.findByRole("option", { name: option }))
+    }
 
-    await user.selectOptions(zone, "Dogu Yolu")
+    await choose(zone, "Dogu Yolu")
     expect(cards(drawer)).toHaveLength(5)
     expect(within(drawer).getByText("5 / 40 görüntü")).toBeInTheDocument()
 
-    await user.selectOptions(zone, "")
-    await user.selectOptions(level, "Değerlendirilmedi")
+    await choose(zone, "Tümü")
+    await choose(level, "değerlendirilmedi")
     expect(cards(drawer)).toHaveLength(37)
 
-    await user.selectOptions(level, "◆ Yüksek")
+    // Seçilen seviye kapalı kutuda da rozetle görünür.
+    await choose(level, "Yüksek")
+    expect(level).toHaveTextContent("Yüksek")
     expect(cards(drawer).map((c) => c.textContent)).toEqual([expect.stringContaining("img_000860")])
 
-    await user.selectOptions(level, "")
+    await choose(level, "Tümü")
     expect(cards(drawer)[0]).toHaveAccessibleName(/^img_008333 · .* · 10:10/)
     await user.click(within(drawer).getByRole("button", { name: /Çekim anı: eskiden yeniye/ }))
     expect(cards(drawer)[0]).toHaveAccessibleName(/^img_004423 · .* · 15:50/)
