@@ -54,4 +54,6 @@ model_id = "claude-opus-5-5"
 report_parse = ["glm_org", "glm53", "deepseek", "haiku"]
 vision = ["qwen_vl", "gemma", "deepseek", "sonnet"]
 reasoning = ["glm_org", "glm53", "deepseek", "opus"]
+# Rapor doğrulama (app/reports_v2): rapor başına tek çağrı, kanıt dosyasıyla karar.
+report_verify = ["glm_org", "glm53", "deepseek", "opus"]
 chat = ["glm_org", "glm53", "deepseek", "sonnet"]
