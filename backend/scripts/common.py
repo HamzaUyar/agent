@@ -19,6 +19,9 @@ from app.pipelines.detection import (
 from app.pipelines.vision import VlmVerifier
 from app.storage import build_storage
 
+REPORT_CACHE = "report_verdicts_cache.json"
+"""Rapor doğrulamanın LLM cevapları; veri klasörünün yanında, demo öncesi bir kez dolar."""
+
 
 def add_source_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
@@ -59,4 +62,12 @@ def build_service(args: argparse.Namespace) -> EvaluationService:
         if args.detections
         else build_detector(settings)
     )
-    return EvaluationService(repo, detector, router=router, verifier=verifier)
+    images = images_dir(args)
+    return EvaluationService(
+        repo,
+        detector,
+        router=router,
+        verifier=verifier,
+        images_dir=images,
+        report_cache=images.parent / REPORT_CACHE,
+    )

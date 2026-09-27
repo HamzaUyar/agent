@@ -9,15 +9,18 @@ okunmaz (ADR-0001).
 import itertools
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 from app.agent import events, stages
 from app.agent.events import Payload
 from app.agent.stages import TrackBranch
+from app.core.config import get_settings
 from app.core.rules import RiskRules, default_rules
 from app.db.repositories import DataRepository
 from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector
 from app.pipelines.vision import VisualVerifier
+from app.reports_v2.stage import ReportVerifier
 from app.schemas.api import Brief, StepEvent
 from app.schemas.domain import ImageMeta
 
@@ -40,10 +43,20 @@ class EvaluationService:
         router: LLMRouter | None = None,
         brief_timeout_s: float | None = None,
         verifier: VisualVerifier | None = None,
+        report_verifier: ReportVerifier | None = None,
+        images_dir: Path | None = None,
+        report_cache: Path | None = None,
     ) -> None:
         self._repo = repo
         self._detector = detector
         self._verifier = verifier
+        self._report_verifier = report_verifier or ReportVerifier(
+            repo,
+            detector,
+            router,
+            images_dir or get_settings().resolved_data_dir / "images",
+            report_cache,
+        )
         self._rules = rules or default_rules()
         self._router = router
         self._brief_timeout_s = brief_timeout_s or self._rules.brief.timeout_s
@@ -51,6 +64,10 @@ class EvaluationService:
     @property
     def repository(self) -> DataRepository:
         return self._repo
+
+    @property
+    def report_verifier(self) -> ReportVerifier:
+        return self._report_verifier
 
     def run(self, image_id: str) -> Brief:
         """Bütün adımları çalıştırıp Brief'i döndürür."""
@@ -94,7 +111,7 @@ class EvaluationService:
 
         matches = stages.match_contacts(image, located, branch, rules)
         claims = repo.claims_until(ctx.now)
-        visuals = stages.inspect_visuals(self._verifier, image, matches, claims, rules)
+        visuals = stages.inspect_visuals(self._verifier, image, matches, rules)
         unconfirmed = stages.visually_unconfirmed(matches, visuals, rules.detection)
         yield emit("eslesme", events.matches(matches, unconfirmed))
 
@@ -102,9 +119,7 @@ class EvaluationService:
         contacts = stages.build_contacts(ctx, matches, branch, history, visuals, rules)
         yield emit("hareket", events.motions(contacts))
 
-        reports = stages.evaluate_reports(
-            ctx, contacts, claims, visuals, repo=repo, verifier=self._verifier, rules=rules.reports
-        )
+        reports = stages.evaluate_reports(ctx, claims, visuals, self._report_verifier)
         contacts = stages.apply_reports(contacts, reports)
         yield emit("raporlar", events.reports(reports))
 

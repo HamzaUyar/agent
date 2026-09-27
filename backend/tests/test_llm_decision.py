@@ -82,7 +82,12 @@ ABOUT_T0122 = ClaimRecord(
     claim_id=3,
     report=FieldReport(time(14, 0), ReportSource.OFFICIAL, "tehdit uyarisi"),
     claim=CONSISTENT_CLAIM.claim.model_copy(
-        update={"lat": T0122_AT_1410.lat, "lon": T0122_AT_1410.lon, "claim_type": "threat_warning"}
+        update={
+            "lat": T0122_AT_1410.lat,
+            "lon": T0122_AT_1410.lon,
+            "claim_type": "threat_warning",
+            "behavior": None,
+        }
     ),
 )
 
@@ -434,19 +439,18 @@ def test_lowering_citing_a_claim_about_another_contact_is_rejected() -> None:
     assert level_of(brief, "T0122") == ("critical", "critical")
 
 
-def test_llm_cannot_lower_a_contact_that_a_report_has_raised() -> None:
-    brief = run(
-        FakeProvider(draft([item("T0032", "dikkat_gerekmiyor", [2], "medium")])),
-        claims=[CONSISTENT_CLAIM, THREAT_ABOUT_T0032],
-    )
+def test_a_threat_warning_does_not_raise_the_level_by_itself() -> None:
+    """Rapor seviyeyi değiştirmez (reports_v2); yükseltme yalnızca LLM'in kanıtlı önerisiyle."""
+    brief = run(FakeProvider(draft([])), claims=[CONSISTENT_CLAIM, THREAT_ABOUT_T0032])
 
-    assert level_of(brief, "T0032") == ("medium", "high")  # tehdit uyarısı +1; LLM düşüremedi
-    rejected = contact(brief, "T0032").adjustment_rejected
-    assert rejected is not None and "yükseltti" in rejected
+    assert level_of(brief, "T0032") == ("medium", "medium")
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama"]
 
 
-def test_lowering_citing_a_claim_whose_report_time_does_not_match_is_rejected() -> None:
-    """İddia T0122'nin çekim anındaki noktasını gösteriyor ama T0122 12:35'te orada değildi."""
+def test_lowering_citing_an_olagan_report_about_an_approaching_contact_is_rejected() -> None:
+    """Rapor 12:35'te yazılmış, T0122'nin çekim anındaki noktasını gösteriyor: saat farkı çelişki
+    değil. Ama "hareketleri olağan" üsse yaklaşan araç için tehlikeli güvencedir; tutarlı
+    sayılmaz ve düşürme kanıtı olamaz."""
     stale = ClaimRecord(
         claim_id=7,
         report=FieldReport(time(12, 35), ReportSource.OFFICIAL, "1 agir arac, hareketleri olagan"),
@@ -454,15 +458,15 @@ def test_lowering_citing_a_claim_whose_report_time_does_not_match_is_rejected() 
             update={"lat": T0122_AT_1410.lat, "lon": T0122_AT_1410.lon}
         ),
     )
-    # T0122 yaklaşıyor; önce yaklaşma olmayan bir temas gerekir: burada düşürme önerisinin
-    # kanıtı saat kontrolünden geçmediği için reddedilir.
     brief = run(
         FakeProvider(draft([item("T0122", "dikkat_gerekmiyor", [7], "high")])), claims=[stale]
     )
 
     assert level_of(brief, "T0122") == ("critical", "critical")
     rejected = contact(brief, "T0122").adjustment_rejected
-    assert rejected is not None and "saat" in rejected
+    assert rejected is not None and "tutarlı" in rejected
+    [f] = [f for f in brief.report_findings if f.claim_id == 7]
+    assert (f.verdict, f.dangerous_reassurance) == ("contradicts", True)
 
 
 def test_raise_citing_another_contacts_report_is_rejected() -> None:
@@ -655,17 +659,16 @@ def test_raise_with_the_reason_the_rules_already_counted_is_rejected() -> None:
     assert contact(brief, "T0032").adjustment_rejected == a.rejection
 
 
-def test_a_threat_warning_that_already_raised_the_level_cannot_raise_it_again() -> None:
+def test_a_consistent_threat_warning_lets_the_llm_raise_one_step() -> None:
     brief = run(
-        FakeProvider(draft([item("T0032", "tehdit_uyarisi", [9], "critical")])),
+        FakeProvider(draft([item("T0032", "tehdit_uyarisi", [9], "high")])),
         claims=[THREAT_ABOUT_T0032],
     )
 
-    assert contact(brief, "T0032").level_basis == ["uzun_duraklama", "tehdit_uyarisi"]
+    assert contact(brief, "T0032").level_basis == ["uzun_duraklama"]
     assert level_of(brief, "T0032") == ("medium", "high")
     [a] = attention(brief, "T0032")
-    assert a.level_accepted is False
-    assert a.rejection is not None and "zaten sayıldı" in a.rejection
+    assert (a.accepted, a.level_accepted) == (True, True)
 
 
 def test_the_rules_basis_is_given_to_the_llm() -> None:
@@ -765,10 +768,15 @@ ENGLISH_CODES = re.compile(
 DOTTED_DECIMAL = re.compile(r"\d\.\d")
 
 
+def decision_users(provider: FakeProvider) -> list[str]:
+    """Karar çağrılarının girdileri (rapor doğrulama çağrıları aynı sağlayıcıya düşebilir)."""
+    return [u for u in provider.users if u.startswith("Görüntü ")]
+
+
 def llm_input(**kwargs: Any) -> str:
     primary = FakeProvider(draft([]))
     run(primary, **kwargs)
-    [user] = primary.users
+    [user] = decision_users(primary)
     return user
 
 
@@ -808,11 +816,10 @@ def test_llm_input_writes_the_reference_contact_as_turkish_fact_lines() -> None:
         "13:15–14:00 (45 dk, üsse 5,5 km)",
         "  yakin_duraklama: yok",
         "  cevrede_dolasma: yok",
-        "  seviye: KRİTİK (kuralların saydığı neden: yaklasma, tehdit_uyarisi)",
+        "  seviye: KRİTİK (kuralların saydığı neden: yaklasma)",
         "  raporlar:",
-        "    [3] 14:00 resmi tehdit uyarısı — karar: tutarlı; saat kontrolü: araç rapor "
-        "saatinde başka yerdeydi; gerekçe: T0122 hakkında tehdit uyarısı; araç rapor saatinde "
-        "başka yerdeydi",
+        "    [3] 14:00 resmi tehdit uyarısı — karar: tutarlı; gerekçe: iddia tespit ve hareketle "
+        "uyuşuyor",
     ]
 
 
@@ -831,8 +838,7 @@ def test_llm_input_says_a_stop_is_ongoing_and_compares_it_with_the_threshold() -
         "  cevrede_dolasma: yok",
         "  seviye: ORTA (kuralların saydığı neden: uzun_duraklama)",
         "  raporlar:",
-        "    [2] 12:35 resmi gözlem — karar: tutarlı; saat kontrolü: tutuyor; gerekçe: T0032 "
-        "iddianın konumunda ve saat 12:35 itibarıyla uyuşuyor",
+        "    [2] 12:35 resmi gözlem — karar: tutarlı; gerekçe: iddia tespit ve hareketle uyuşuyor",
     ]
 
 

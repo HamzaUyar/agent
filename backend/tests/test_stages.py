@@ -13,8 +13,8 @@ from app.core.rules import default_rules
 from app.data_package import read_package
 from app.pipelines.geo import pixel_to_geo
 from app.pipelines.motion import Position
-from app.pipelines.reports import ClaimEvaluation
-from app.schemas.api import ContactFinding, Effect, LatLon, Verdict, VisualFinding
+from app.reports_v2.stage import ClaimEvaluation
+from app.schemas.api import ContactFinding, LatLon, Verdict, VisualFinding
 from app.schemas.claims import ClaimRecord, ReportClaim
 from app.schemas.domain import (
     Detection,
@@ -116,8 +116,8 @@ RECORD = ClaimRecord(
 )
 
 
-def evaluation(track_id: str | None, verdict: Verdict, effect: Effect) -> ClaimEvaluation:
-    return ClaimEvaluation(RECORD, track_id, verdict, "certain", effect, "gerekçe", "ok")
+def evaluation(track_id: str | None, verdict: Verdict) -> ClaimEvaluation:
+    return ClaimEvaluation(RECORD, track_id, verdict, "certain", "gerekçe")
 
 
 def reports(
@@ -131,41 +131,24 @@ def applied(c: ContactFinding, *evaluations: ClaimEvaluation) -> ContactFinding:
     return result
 
 
-def test_verified_friend_lowers_to_low() -> None:
-    result = applied(contact("T1", "high"), evaluation("T1", "consistent", "lowers"))
+def test_reports_never_change_the_level() -> None:
+    """Rapor seviyeyi değiştirmez: doğrulanamayan bilgi riski ne düşürür ne tek başına yükseltir."""
+    for verdict in ("consistent", "contradicts", "unverifiable", "irrelevant"):
+        result = applied(contact("T1", "high"), evaluation("T1", verdict))
+        assert (result.final_level, result.verified_friend) == ("high", False)
 
-    assert (result.final_level, result.verified_friend) == ("low", True)
-    assert result.base_level == "high"
 
+def test_contradicting_report_adds_a_note_to_the_linked_contact() -> None:
+    """Görev tanımı s2: çelişkide tespit esas alınır; çelişki gerekçede görünür."""
+    result = applied(contact("T1", "high"), evaluation("T1", "contradicts"))
 
-def test_contradicting_report_keeps_the_level_and_blocks_lowering() -> None:
-    """ADR-0002: çelişki seviyeyi değiştirmez, aynı temasın dostluk raporunu da geçersiz kılar."""
-    result = applied(
-        contact("T1", "high"),
-        evaluation("T1", "contradicts", "none"),
-        evaluation("T1", "consistent", "lowers"),
-    )
-
-    assert (result.final_level, result.verified_friend) == ("high", False)
     assert "rapor tespitle çelişiyor; tespit esas alındı" in result.level_reasons
 
 
-def test_threat_warning_raises_one_step_overrides_lowering_and_caps_at_critical() -> None:
-    raised = applied(
-        contact("T1", "medium"),
-        evaluation("T1", "consistent", "raises"),
-        evaluation("T1", "consistent", "lowers"),
-    )
-    capped = applied(contact("T1", "critical"), evaluation("T1", "consistent", "raises"))
-
-    assert (raised.final_level, raised.verified_friend) == ("high", False)
-    assert capped.final_level == "critical"
-
-
-def test_report_effects_apply_only_to_the_linked_track() -> None:
-    """Başka track'e ya da kayıt dışı temasa bağlı iddianın etkisi seviyeye işlenmez."""
-    other = applied(contact("T1"), evaluation("T2", "consistent", "raises"))
-    unregistered = applied(contact(None), evaluation(None, "consistent", "raises"))
+def test_report_notes_apply_only_to_the_linked_track() -> None:
+    """Başka track'e ya da kayıt dışı temasa bağlı iddianın notu bu temasa düşmez."""
+    other = applied(contact("T1"), evaluation("T2", "contradicts"))
+    unregistered = applied(contact(None), evaluation(None, "contradicts"))
 
     assert other.final_level == unregistered.final_level == "medium"
     assert other.level_reasons == unregistered.level_reasons == ["temel"]

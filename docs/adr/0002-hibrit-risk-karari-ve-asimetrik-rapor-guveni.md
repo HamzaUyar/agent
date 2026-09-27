@@ -29,3 +29,16 @@ Saat, tip ve renk gibi bir özelliktir (`time_check`: ok, mismatch, unknown): ba
 ## Not: çelişki seviyeyi değiştirmez (27 Eylül)
 
 Önceden tespitle çelişen bir rapor "olası yanıltma" sayılıp temasın seviyesini en az "yüksek"e çekiyordu ve LLM bunu düşüremiyordu. Görev tanımı s2 ("çelişki varsa raporu değil tespitinizi esas alın") ile çeliştiği için kaldırıldı. Gerçek verideki çelişkilerin çoğu, rapordaki "kamyon" ile modelin otomobil/minibüs dediği araç arasındaki tip uyuşmazlığıydı; bu kural büyük olasılıkla hatalı raporlar yüzünden park halindeki araçları "yüksek"e çıkarıyordu. Artık çelişen iddianın etkisi "none"; brief'te "rapor tespitle çelişiyor; tespit esas alındı" diye görünür ve aynı temasa ait bir dostluk iddiasının riski düşürmesini engeller.
+
+## Not: rapor doğrulama yeniden yazıldı; raporlar seviyeyi değiştirmez (27 Eylül)
+
+`pipelines/reports.py` (yalnızca kurallar) kaldırıldı; yerine `app/reports_v2` geldi. Yukarıdaki notların rapor etkisiyle ilgili kısımları (tehdit uyarısı +1, resmi dost raporu riski düşürür, saat kontrolü) artık geçerli değil.
+
+- **Raporlar risk seviyesini değiştirmez.** Doğrulanamayan bilgi riski ne düşürür ne de tek başına yükseltir; rapor yalnızca gerekçe ve bayrak üretir. Tutarlı bir tehdit uyarısını karar LLM'i kanıt göstererek +1 kademe önerebilir (kod doğrular).
+- **Kimlik iddiası hiçbir zaman "tutarlı" değildir.** "Dost", "ikmal", "bize bağlı", "devriye", "tatbikat" veriyle doğrulanamaz; en fazla "doğrulanamaz". Gerçek veride 18 dost iddiasının neredeyse hepsi üsse yaklaşan araçlara işaret ediyordu; konvoy ve tatbikat duyuruları günün tek koordineli ağır araç yaklaşmasıyla (Kuzey Yolu, 12:10–12:15) aynı saate denk geliyor.
+- **Zaman kayması çelişki değildir** (yönetim kararı). Rapor koordinatı aracın çekim anındaki konumunu gösterir; aracın rapor saatinde başka yerde olması güveni düşürmez. Hareket iddiası ("olağan", "duruyor", "uzaklaşıyor", "transit") çekim anındaki hareketle karşılaştırılır; yazıldığında doğru olup çekim anında yanlış olan rapor "bayat güvence"dir.
+- **Karar LLM'in, kurallar ikinci görüş.** Kod her rapor için kanıt dosyası ve bağlam sinyallerini hesaplar (noktadaki araç, tip, sayı, çekim anındaki hareket, bölge hareketliliği, birlikte hareket eden ağır araç grupları); LLM kararı verir; kurallar aynı kanıtla ayrıca karar verir. İkisi çelişki konusunda ayrışırsa rapor operatöre "incelenmeli" diye gösterilir.
+- **Tehlikeli güvence** (riski düşüren ama kanıtla çelişen rapor: yaklaşan araca "olağan", hareket eden kamyon varken "ağır araç yok") ayrıca işaretlenir.
+
+Neden: `eval/report_gold.json`'daki 137 gerçek raporla ölçüldü. Eski kurallar 35 yalanın 23'ünü, 15 tehlikeli güvencenin 3'ünü yakalıyordu. Yeni akış 34/35 ve 15/15 yakalıyor. Kurallar tek başına orijinal metinlerde benzer skor alıyor ama ifadesi değiştirilmiş raporlarda (genelleme testi) 23/35'e düşüyor, çünkü ayrıştırıcının etiketine bağımlı; LLM aynı testte 34/35'te kaldı. Ölçüm: `python -m scripts.eval_reports B C --package … --claims … --detections … --out …`.
+

@@ -36,17 +36,6 @@ class MotionRules:
 
 
 @dataclass(frozen=True)
-class ReportRules:
-    window_minutes: int
-    relevance_m: float
-    bind_now_m: float
-    match_m: float
-    long_stop_minutes: int
-    count_radius_m: float
-    count_ratio: float
-
-
-@dataclass(frozen=True)
 class BriefRules:
     timeout_s: float
     max_tokens: int
@@ -71,7 +60,6 @@ class RiskRules:
     matching: MatchingRules
     trend: TrendRules
     motion: MotionRules
-    reports: ReportRules
     brief: BriefRules
     levels: LevelRules
 
@@ -85,7 +73,6 @@ def load_rules(path: Path | None = None) -> RiskRules:
         matching=MatchingRules(**raw["matching"]),
         trend=TrendRules(**raw["trend"]),
         motion=MotionRules(**raw["motion"]),
-        reports=ReportRules(**raw["reports"]),
         brief=BriefRules(**raw["brief"]),
         levels=LevelRules(**raw["levels"]),
     )

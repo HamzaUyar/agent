@@ -23,16 +23,6 @@ VERDICT_TR = {
     "unverifiable": "doğrulanamaz",
     "irrelevant": "ilgisiz",
 }
-TIME_TR = {
-    "ok": "saat tutuyor",
-    "mismatch": "araç rapor saatinde başka yerdeydi",
-    "unknown": "saat bilinmiyor",
-}
-
-
-def time_tag(f: ReportFinding) -> str:
-    """Bir temasa bağlanmış iddianın rapor saatindeki konum kontrolü."""
-    return f", {TIME_TR[f.time_check]}" if f.track_id else ""
 
 
 def reports_summary(findings: list[ReportFinding]) -> str:
@@ -136,7 +126,7 @@ def brief_text(
         lines.append("Raporlar:")
         lines += [
             f"- {f.report_time} ({'resmi' if f.source == 'official' else 'üçüncü taraf'}): "
-            f"{VERDICT_TR[f.verdict]}{time_tag(f)}; {f.reasoning}."
+            f"{VERDICT_TR[f.verdict]}; {f.reasoning}."
             for f in findings
         ]
     lines.append(f"Önerilen eylem: {action}")

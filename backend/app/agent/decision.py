@@ -9,8 +9,9 @@ seviye önerisi seçer. Temas kimlikleri şemada o karenin temaslarından oluşa
 Kod her nedeni veriyle doğrular; doğrulanamayan madde reddedilir, sebebi brief'te kalır.
 Seviye en fazla bir kademe ve yalnızca doğrulanmış bir nedenle değişir: yükseltme için
 riski artıran ve kuralların seviyede zaten saymadığı (`level_basis`) bir neden, düşürme
-için "dikkat_gerekmiyor" ve o temasa bağlı, kararı "consistent", saati tutan (`time_check`
-ok) bir rapor iddiası gerekir. Raporun yükselttiği
+için "dikkat_gerekmiyor" ve o temasa bağlı, kararı "consistent" bir rapor iddiası gerekir
+(rapor doğrulama v2 kimlik iddialarını hiçbir zaman "consistent" saymaz; dost raporuyla
+seviye düşmez). Raporun yükselttiği
 temas düşürülemez; gösterilen rapor o temasa ait ve çelişkisiz olmalıdır (görev tanımı s2).
 
 "Değerlendirme" metnini kod yazar: kabul edilen her madde için sabit Türkçe şablon, sayılar
@@ -90,11 +91,6 @@ CLAIM_TYPE_TR = {
     "threat_warning": "tehdit uyarısı",
     "rumor": "söylenti",
     "irrelevant": "ilgisiz",
-}
-TIME_CHECK_TR = {
-    "ok": "tutuyor",
-    "mismatch": "araç rapor saatinde başka yerdeydi",
-    "unknown": "bilinmiyor",
 }
 COLOR_TR = {
     "beyaz": "beyaz",
@@ -333,8 +329,10 @@ def _level_line(c: ContactFinding) -> str:
 
 def _report_line(f: ReportFinding) -> str:
     parts = [f"karar: {VERDICT_TR[f.verdict]}"]
-    if f.track_id:
-        parts.append(f"saat kontrolü: {TIME_CHECK_TR[f.time_check]}")
+    if f.dangerous_reassurance:
+        parts.append("tehlikeli güvence")
+    if f.context_flags:
+        parts.append("bağlam: " + ", ".join(f.context_flags))
     # Gerekçe brief'te aynen kalır; LLM girdisinde tip adı İngilizce kalmasın.
     reasoning = _TYPE_WORD.sub(lambda m: TYPE_TR[m.group(0)], f.reasoning)
     parts.append(f"gerekçe: {reasoning}")
@@ -531,12 +529,9 @@ def _level_problem(
             return f"{now} → {level}: düşürme için kanıt gösterilmedi"
         if not set(evidence) <= about.keys():
             return f"{now} → {level}: gösterilen kanıt bu temasa bağlı tutarlı bir rapor değil"
-        if any(about[i].time_check != "ok" for i in evidence):
-            # Rapor saatinde araç orada değilse ya da bilinmiyorsa iddia bu araca ait olmayabilir.
-            return (
-                f"{now} → {level}: gösterilen raporun saati temasın o saatteki konumuyla "
-                "doğrulanamadı"
-            )
+        if any(about[i].needs_review for i in evidence):
+            # Kurallar ile LLM ayrıştı: operatör bakmadan düşürme kanıtı olamaz.
+            return f"{now} → {level}: gösterilen rapor operatör incelemesi bekliyor"
     return None
 
 

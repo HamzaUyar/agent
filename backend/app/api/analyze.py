@@ -14,9 +14,11 @@ from app.agent.service import EvaluationService, ImageNotFoundError
 from app.agent.tools import ChatTools
 from app.api.data import RepoDep, get_stores
 from app.api.stores import Stores
+from app.core.config import get_settings
 from app.db.repositories import DataRepository
 from app.llm.client import LLMRouter
 from app.pipelines.detection import Detector
+from app.reports_v2.stage import ReportVerifier
 from app.schemas.api import Brief, ChatRequest, EvaluationRecord, EvaluationRequest
 
 router = APIRouter(tags=["evaluations"])
@@ -33,9 +35,27 @@ def get_detector(request: Request) -> Detector:
 DetectorDep = Annotated[Detector, Depends(get_detector)]
 
 
+def _report_verifier(request: Request, repo: DataRepository, detector: Detector) -> ReportVerifier:
+    """Uygulama boyunca tek rapor doğrulayıcı: veri ve LLM önbelleği bir kez kurulur."""
+    state = request.app.state
+    current: ReportVerifier | None = getattr(state, "report_verifier", None)
+    if current is None or current.repo is not repo:
+        data_dir = get_settings().resolved_data_dir
+        cache = data_dir / "report_verdicts_cache.json"
+        current = ReportVerifier(repo, detector, state.router, data_dir / "images", cache)
+        state.report_verifier = current
+    return current
+
+
 def _service(request: Request, repo: DataRepository, detector: Detector) -> EvaluationService:
     state = request.app.state
-    return EvaluationService(repo, detector, router=state.router, verifier=state.verifier)
+    return EvaluationService(
+        repo,
+        detector,
+        router=state.router,
+        verifier=state.verifier,
+        report_verifier=_report_verifier(request, repo, detector),
+    )
 
 
 def _sse(event: str, payload: dict[str, object]) -> str:

@@ -7,7 +7,8 @@ sorguları çekim anıyla (ya da ondan önceki rapor saatiyle) sınırlıdır.
 
 Sıra: `image_context` → Kol A `detect` ∥ Kol B `track_branch` → `locate` →
 `match_contacts` → `inspect_visuals` → `label_history` → `build_contacts` →
-`evaluate_reports` → `apply_reports` → `assess_risk` → `decide_level` → `compose_brief`.
+`evaluate_reports` (reports_v2) →
+`apply_reports` → `assess_risk` → `decide_level` → `compose_brief`.
 """
 
 import logging
@@ -19,7 +20,7 @@ from datetime import time
 
 from app.agent.brief_text import brief_text, sources
 from app.agent.decision import DecisionUnavailableError, decide
-from app.core.rules import DetectionRules, LevelRules, MatchingRules, ReportRules, RiskRules
+from app.core.rules import DetectionRules, LevelRules, MatchingRules, RiskRules
 from app.data_package import TRACK_STEP_MINUTES, format_hhmm, from_minutes, to_minutes
 from app.db.repositories import DataRepository
 from app.llm.client import LLMRouter
@@ -33,7 +34,6 @@ from app.pipelines.geo import (
 )
 from app.pipelines.matching import LocatedDetection, MatchResult, match_detections
 from app.pipelines.motion import Position, analyze_motion, positions_at
-from app.pipelines.reports import ClaimEvaluation, ContactView, evaluate_claims, visual_track_ids
 from app.pipelines.risk import (
     LEVELS,
     base_level,
@@ -43,6 +43,7 @@ from app.pipelines.risk import (
     recommended_action,
 )
 from app.pipelines.vision import BBox, VisualVerifier
+from app.reports_v2.stage import ClaimEvaluation, ReportVerifier
 from app.schemas.api import (
     AttentionFinding,
     Brief,
@@ -55,6 +56,7 @@ from app.schemas.api import (
     RoutePoint,
     StopFinding,
     TrackCandidate,
+    Verdict,
     VisualFinding,
 )
 from app.schemas.claims import ClaimRecord
@@ -351,37 +353,22 @@ def inspect_visuals(
     verifier: VisualVerifier | None,
     image: ImageMeta,
     matches: Matches,
-    claims: list[ClaimRecord],
     rules: RiskRules,
 ) -> Visuals:
-    """VLM: bütün görsel doğrulama tek bir paralel dalgada; doğrulayıcı yoksa boş.
+    """VLM: track'le eşleşen zayıf tespitler tek bir paralel dalgada; doğrulayıcı yoksa boş.
 
-    - Track'le eşleşen zayıf tespit: araç derse kesinlik "olası"ya çıkar. "Araç değil"
-      cevabı kutuyu düşürmez: track orada bir araç olduğunu zaten gösteriyor.
-    - Renk ya da yük belirten iddianın bağlanacağı kutu: bağlama ucuz bir hesap, rapor
-      değerlendirmesiyle aynı kuralla önceden yapılır; değerlendirme yalnızca sonucu okur.
-    Her VLM çağrısı ~10 sn; sırayla sormak çağrı sayısıyla çarpılırdı.
+    Araç derse kesinlik "olası"ya çıkar. "Araç değil" cevabı kutuyu düşürmez: track orada bir
+    araç olduğunu zaten gösteriyor. Her VLM çağrısı ~10 sn; sırayla sormak çağrı sayısıyla
+    çarpılırdı. Rapor iddialarının rengi ve yükü rapor doğrulamasında (reports_v2) tartılır.
     """
     if verifier is None:
         return {}
-    tracked = [m for m in matches.matches if m.track]
-    weak = [
-        bbox(m.located.detection) for m in tracked if is_weak(m.located.detection, rules.detection)
-    ]
-    tracked_boxes = {m.track.track_id: bbox(m.located.detection) for m in tracked if m.track}
-    views = [
-        ContactView(m.track.track_id if m.track else None, None, m.located.location)
-        for m in matches.matches
-    ] + [ContactView(p.track_id, None, p.location) for p in matches.missed]
-    claimed = visual_track_ids(
-        claims,
-        views,
-        image_center=image.corners.center,
-        now=image.capture_time,
-        rules=rules.reports,
-    )
     boxes = list(
-        dict.fromkeys(weak + [tracked_boxes[t] for t in sorted(claimed) if t in tracked_boxes])
+        dict.fromkeys(
+            bbox(m.located.detection)
+            for m in matches.matches
+            if m.track and is_weak(m.located.detection, rules.detection)
+        )
     )
     if not boxes:
         return {}
@@ -556,77 +543,60 @@ def build_contacts(
 
 def evaluate_reports(
     ctx: ImageContext,
-    contacts: Contacts,
     claims: list[ClaimRecord],
     visuals: Visuals,
-    *,
-    repo: DataRepository,
-    verifier: VisualVerifier | None,
-    rules: ReportRules,
+    verifier: ReportVerifier,
 ) -> ClaimEvaluations:
-    """Depo ve VLM: iddialar çekim anındaki temaslara bağlanıp karşılaştırılır (ADR-0002).
-
-    Renk ya da yük için önceden bakılmamış bir kutu gerekirse burada, en fazla bir kez
-    sorulur. Rapor saatindeki track konumu yalnızca rapor saatine kadarki kayıttan okunur.
-    """
-    looked: dict[BBox, VisualFinding | None] = dict(visuals)
-
-    def look(box: BBox) -> VisualFinding | None:
-        if box not in looked:
-            looked[box] = verifier.inspect(ctx.image, box) if verifier else None
-        return looked[box]
-
-    def position_at(track_id: str, at: time) -> GeoPoint | None:
-        """Track'in `at` anındaki ya da en fazla bir adım önceki konumu."""
-        since = from_minutes(to_minutes(at) - TRACK_STEP_MINUTES)
-        history = repo.track_history(track_id, until=at, since=since)
-        return history[-1].location if history else None
-
-    # Kaçırılmış temasın kutusu yok: rengi ve yükü görsel olarak doğrulanamaz.
-    boxes = {c.track_id: c.bbox for c in contacts.contacts if c.track_id and c.bbox}
-    evaluations = evaluate_claims(
-        claims,
-        [
-            ContactView(
-                track_id=c.track_id,
-                label=VehicleClass(c.effective_label) if c.effective_label else None,
-                location=GeoPoint(c.location.lat, c.location.lon),
-                motion=c.motion,
+    """Rapor doğrulama (app/reports_v2): kanıt dosyası ve bağlam kodla, karar LLM'in, kurallar
+    ikinci görüş. Rapor seviyeyi değiştirmez; yalnızca gerekçe ve bayrak üretir."""
+    evaluations: list[ClaimEvaluation] = []
+    findings: list[ReportFinding] = []
+    for v in verifier.verify(ctx.image, ctx.zone, ctx.now, claims):
+        detail = v.final.verdict
+        # "Kısmen" (ör. araç var, tipi doğrulanamadı) yalan değildir: genel kararda "tutarlı"
+        # ve "olası" kesinlikte; ayrıntı `detail_verdict`'te kalır.
+        verdict: Verdict = "consistent" if detail == "partial" else detail
+        certainty: Certainty = "likely" if detail == "partial" or v.needs_review else "certain"
+        notes = []
+        if v.final.dangerous_reassurance:
+            notes.append("TEHLİKELİ GÜVENCE")
+        notes += v.final.context_flags
+        if v.needs_review:
+            notes.append(f"kurallar '{v.rule.verdict}' dedi, operatör incelemeli")
+        reasoning = v.final.reasoning + (f" [{'; '.join(notes)}]" if notes else "")
+        e = ClaimEvaluation(v.record, v.track_id, verdict, certainty, reasoning)
+        evaluations.append(e)
+        findings.append(
+            ReportFinding(
+                claim_id=v.record.claim_id,
+                report_time=format_hhmm(v.record.report.time),
+                source=v.record.report.source.value,
+                text=v.record.report.text,
+                claim_type=v.record.claim.claim_type,
+                track_id=v.track_id,
+                verdict=verdict,
+                certainty=certainty,
+                effect="none",
+                reasoning=reasoning,
+                detail_verdict=detail,
+                dangerous_reassurance=v.final.dangerous_reassurance,
+                context_flags=list(v.final.context_flags),
+                needs_review=v.needs_review,
+                rule_verdict=v.rule.verdict,
             )
-            for c in contacts.contacts
-        ],
-        image_center=ctx.image.corners.center,
-        image_zone=ctx.zone,
-        now=ctx.now,
-        rules=rules,
-        position_at=position_at,
-        observe=lambda track_id: look(boxes[track_id]) if track_id in boxes else None,
-        in_frame=lambda point: in_footprint(ctx.image, point),
-    )
-    return ClaimEvaluations(tuple(evaluations), tuple(_finding(e) for e in evaluations), looked)
-
-
-def _finding(e: ClaimEvaluation) -> ReportFinding:
-    return ReportFinding(
-        claim_id=e.record.claim_id,
-        report_time=format_hhmm(e.record.report.time),
-        source=e.record.report.source.value,
-        text=e.record.report.text,
-        claim_type=e.record.claim.claim_type,
-        track_id=e.track_id,
-        verdict=e.verdict,
-        certainty=e.certainty,
-        effect=e.effect,
-        time_check=e.time_check,
-        reasoning=e.reasoning,
-    )
+        )
+    return ClaimEvaluations(tuple(evaluations), tuple(findings), dict(visuals))
 
 
 def apply_reports(contacts: Contacts, reports: ClaimEvaluations) -> Contacts:
-    """Saf: görsel bulguları temaslara yazar ve rapor etkilerini seviyelerine uygular."""
+    """Saf: görsel bulguları temaslara yazar; çelişen rapor gerekçeye not düşer.
+
+    Rapor seviyeyi değiştirmez (görev tanımı s2: tespit esas alınır; doğrulanamayan bilgi
+    riski düşüremez). Kimlik iddiası "doğrulanmış dost" yapmaz.
+    """
     return Contacts(
         tuple(
-            _apply_report_effects(
+            _note_reports(
                 c.model_copy(update={"visual": reports.visuals.get(c.bbox)}) if c.bbox else c,
                 reports.evaluations,
             )
@@ -635,40 +605,14 @@ def apply_reports(contacts: Contacts, reports: ClaimEvaluations) -> Contacts:
     )
 
 
-def _apply_report_effects(
+def _note_reports(
     contact: ContactFinding, evaluations: tuple[ClaimEvaluation, ...]
 ) -> ContactFinding:
-    """Rapor etkilerini temasın seviyesine uygular; riski artıran etki düşüreni ezer.
-
-    Çelişen rapor seviyeyi değiştirmez (görev tanımı s2: tespit esas alınır), ama aynı temas
-    hakkındaki başka bir raporun riski düşürmesini engeller.
-    """
     linked = [e for e in evaluations if contact.track_id and e.track_id == contact.track_id]
-    if not linked:
+    if not any(e.verdict == "contradicts" for e in linked):
         return contact
-    level = contact.final_level
-    reasons = list(contact.level_reasons)
-    contradicted = any(e.verdict == "contradicts" for e in linked)
-    if contradicted:
-        reasons.append("rapor tespitle çelişiyor; tespit esas alındı")
-    basis = list(contact.level_basis)
-    raised = any(e.effect == "raises" for e in linked)
-    if raised:
-        level = LEVELS[min(LEVELS.index(level) + 1, len(LEVELS) - 1)]
-        reasons.append("tehdit uyarısı")
-        basis.append("tehdit_uyarisi")
-    verified_friend = False
-    if not raised and not contradicted and any(e.effect == "lowers" for e in linked):
-        level, verified_friend = "low", True
-        reasons.append("doğrulanmış dost (resmi rapor)")
-    return contact.model_copy(
-        update={
-            "final_level": level,
-            "level_reasons": reasons,
-            "level_basis": basis,
-            "verified_friend": verified_friend,
-        }
-    )
+    reasons = [*contact.level_reasons, "rapor tespitle çelişiyor; tespit esas alındı"]
+    return contact.model_copy(update={"level_reasons": reasons})
 
 
 # --- karar ve brief --------------------------------------------------------------------
