@@ -214,12 +214,13 @@ const VERDICT_TONE: Record<ReportFinding["verdict"], string> = {
   irrelevant: "border-dashed border-cizgi-guclu text-metin-soluk",
 }
 
-function RaporKarari({ report }: { report: ReportFinding }) {
+export function RaporKarari({ report, about }: { report: ReportFinding; about?: string }) {
   const effect = EFFECT[report.effect]
   return (
     <li className="flex flex-col gap-1 rounded border border-cizgi bg-yuzey p-2 text-xs">
       <span className="flex flex-wrap items-center gap-2">
         <span className="font-mono">{report.report_time}</span>
+        {about && <span className="font-mono font-bold">{about}</span>}
         <span className="text-metin-soluk">{reportSource(report.source)}</span>
         <Badge variant="outline" className={cn("rounded", VERDICT_TONE[report.verdict])}>
           {report.verdict === "contradicts" && <TriangleAlert aria-hidden />}

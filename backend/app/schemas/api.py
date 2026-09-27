@@ -175,6 +175,11 @@ class AttentionFinding(BaseModel):
     """Nedenin ya da seviye önerisinin reddedilme sebebi."""
     text: str | None = None
     """Doğrulanmış nedenin kodla yazılmış açıklaması (sayılar bulgu alanlarından)."""
+    comment: str | None = None
+    """LLM'in maddeye tek cümlelik analizi (davranış ve anlamı); yalnızca doğrulanmış maddede,
+    sayı, kimlik, bölge adı, yön ya da İngilizce terim içermiyorsa."""
+    comment_rejected: str | None = None
+    """Yorum atıldıysa sebebi."""
 
 
 class Brief(BaseModel):

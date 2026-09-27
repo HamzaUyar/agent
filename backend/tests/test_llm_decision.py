@@ -136,13 +136,18 @@ class FakeProvider:
 
 
 def item(
-    track_id: str, neden: str, dayanak: list[Any] | None = None, seviye: str | None = None
+    track_id: str,
+    neden: str,
+    dayanak: list[Any] | None = None,
+    seviye: str | None = None,
+    yorum: str = "",
 ) -> dict[str, Any]:
     return {
         "track_id": track_id,
         "neden": neden,
         "dayanak": dayanak or [],
         "seviye_onerisi": seviye,
+        "yorum": yorum,
     }
 
 
@@ -528,6 +533,42 @@ def test_clean_summary_is_kept(ozet: str) -> None:
 
     assert (brief.summary, brief.summary_rejected) == (ozet, None)
     assert f"Değerlendirme: {ozet}" in brief.text
+
+
+COMMENT = "Ağır araç olması bu teması karenin önceliği yapıyor."
+
+
+def test_clean_comment_on_a_verified_item_is_kept() -> None:
+    brief = run(FakeProvider(draft([item("T0122", "yaklasma", ["hareket"], yorum=COMMENT)])))
+
+    [a] = attention(brief, "T0122")
+    assert (a.accepted, a.comment, a.comment_rejected) == (True, COMMENT, None)
+
+
+@pytest.mark.parametrize(
+    "yorum",
+    [
+        "Araç üsse iki kilometre kala yaklaşıyor.",
+        "T0122 önceliklidir.",
+        "Doğu Yolu üzerindeki kamyon öncelikli.",
+        "Ağır araç yaklaşıyor. Rapor da bunu doğruluyor.",
+        "...",
+    ],
+)
+def test_comment_outside_the_limits_is_dropped_but_the_item_stays(yorum: str) -> None:
+    brief = run(FakeProvider(draft([item("T0122", "yaklasma", ["hareket"], yorum=yorum)])))
+
+    [a] = attention(brief, "T0122")
+    assert a.accepted is True
+    assert a.comment is None
+    assert a.comment_rejected is not None
+
+
+def test_comment_on_a_rejected_item_is_not_shown() -> None:
+    brief = run(FakeProvider(draft([item("T0032", "yaklasma", ["hareket"], yorum=COMMENT)])))
+
+    [a] = attention(brief, "T0032")
+    assert (a.accepted, a.comment, a.comment_rejected) == (False, None, None)
 
 
 PLACEHOLDERS = ["", "   ", "...", "…", "-", "Değerlendirme:"]

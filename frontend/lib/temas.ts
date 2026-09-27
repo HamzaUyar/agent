@@ -19,6 +19,19 @@ export function keyedContacts(brief: Brief): KeyedContact[] {
   return brief.contacts.map((contact, index) => ({ key: contactKey(contact, index), index, contact }))
 }
 
+/**
+ * Karar LLM'inin temas etiketi (backend `contact_labels`): track kimliği; track'i olmayan temas
+ * için Brief'teki sırasıyla `kayit_disi_1`, `kayit_disi_2`…
+ */
+export function attentionLabels(brief: Brief): Map<string, KeyedContact> {
+  const labels = new Map<string, KeyedContact>()
+  let unregistered = 0
+  for (const k of keyedContacts(brief)) {
+    labels.set(k.contact.track_id ?? `kayit_disi_${++unregistered}`, k)
+  }
+  return labels
+}
+
 /** Seviyeye göre (yüksekten düşüğe), eşitse Üs'e yakın olan önce. */
 export function bySeverity(a: KeyedContact, b: KeyedContact): number {
   return (
